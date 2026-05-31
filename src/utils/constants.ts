@@ -256,6 +256,14 @@ export const AUDIO = {
   crashThumpHz: 55,
 } as const;
 
+/** Touch-control tuning. */
+export const TOUCH = {
+  /** Horizontal drag (px) from the touch origin that maps to full steer lock. */
+  maxDragPx: 140,
+  /** Drag deadzone (px) before steering registers. */
+  deadzonePx: 8,
+} as const;
+
 /** localStorage key for the persisted best run. */
 export const STORAGE_KEY = 'neon-drift.best';
 

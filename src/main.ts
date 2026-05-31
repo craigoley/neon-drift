@@ -34,9 +34,10 @@ const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart'
 // Pure game layer.
 const game = createGameState();
 
-// Device input.
+// Device input. Keyboard always; touch additionally on touch devices (parity).
 const controls = new Controls();
 controls.attachKeyboard(window);
+if (isTouch) controls.attachTouch(app, app);
 
 // Synthesized audio — resumed on the first user gesture (autoplay policy).
 const audio = new AudioEngine();

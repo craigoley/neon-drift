@@ -1151,6 +1151,70 @@ export const CARS: readonly CarDef[] = [
 /** Default selected car — the first in the list. */
 export const DEFAULT_CAR_ID = CARS[0].id;
 
+/** The starter car: always unlocked, can never be gated. */
+export const STARTER_CAR_ID = CARS[0].id;
+
+/** localStorage key for cross-run progression (lifetime stats + unlocked cars). */
+export const PROGRESS_STORAGE_KEY = 'neon-drift.progress';
+
+/**
+ * Lifetime (cross-run) stats that drive unlocks. Accumulated at the end of each
+ * run and persisted; the unlock evaluation is a pure function of these.
+ */
+export interface LifetimeStats {
+  /** Cumulative distance driven across all runs (world units ≈ metres). */
+  totalDistance: number;
+  /** Highest combo multiplier ever reached. */
+  bestCombo: number;
+  /** Total powerups collected across all runs. */
+  powerupsCollected: number;
+  /** Most distinct biomes seen in a single run (1..BIOMES.length). */
+  biomesSeen: number;
+}
+export type LifetimeStatKey = keyof LifetimeStats;
+
+/** A fresh, zeroed lifetime-stats record (the "new player" baseline). */
+export const EMPTY_LIFETIME_STATS: LifetimeStats = {
+  totalDistance: 0,
+  bestCombo: 0,
+  powerupsCollected: 0,
+  biomesSeen: 0,
+};
+
+/** An unlock condition: a lifetime stat meeting a threshold, with a player-facing
+ *  label. `null` condition = always unlocked (the starter). */
+export interface UnlockCondition {
+  stat: LifetimeStatKey;
+  atLeast: number;
+  label: string;
+}
+export interface CarUnlock {
+  carId: string;
+  condition: UnlockCondition | null;
+}
+
+/**
+ * UNLOCK TABLE — the long-term progression hook. The starter is always free; the
+ * rest unlock from lifetime achievements spanning three different stats, so a
+ * player always has a next goal and no single play style gates everything.
+ * Thresholds are tuned to be reachable in a handful of runs (not grindy).
+ */
+export const CAR_UNLOCKS: readonly CarUnlock[] = [
+  { carId: 'pulse', condition: null }, // starter — balanced all-rounder
+  {
+    carId: 'vapor',
+    condition: { stat: 'totalDistance', atLeast: 2500, label: 'Drive 2,500m total' },
+  },
+  {
+    carId: 'ember',
+    condition: { stat: 'powerupsCollected', atLeast: 30, label: 'Collect 30 powerups' },
+  },
+  {
+    carId: 'ghost',
+    condition: { stat: 'bestCombo', atLeast: 6, label: 'Hit an ×6 combo' },
+  },
+] as const;
+
 /** Resolve a car by id, falling back to the default if the id is unknown. */
 export function carById(id: string): CarDef {
   return CARS.find((c) => c.id === id) ?? CARS[0];

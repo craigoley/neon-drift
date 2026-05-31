@@ -31,6 +31,18 @@ export function biomeCount(): number {
 }
 
 /**
+ * How many DISTINCT biomes a run of the given distance has revealed, in
+ * [1, BIOMES.length]. Each `span` of distance crosses into one more biome; the
+ * count saturates at the full set once a whole cycle has been seen. Pure — used
+ * by the progression layer's lifetime `biomesSeen` stat.
+ */
+export function biomesSeenForDistance(distance: number): number {
+  if (BIOME_CYCLE.span <= 0) return 1;
+  const crossed = Math.floor(Math.max(0, distance) / BIOME_CYCLE.span) + 1;
+  return Math.max(1, Math.min(BIOMES.length, crossed));
+}
+
+/**
  * Resolve the biome state for a given forward distance. Deterministic + pure;
  * mutates and returns `state` (no allocation). Within a span's leading portion
  * the biome holds (blend 0); within its trailing `transitionFraction` it blends

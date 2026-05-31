@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { biomeCount, createBiomeState, updateBiome } from '../Biome';
+import { biomeCount, biomesSeenForDistance, createBiomeState, updateBiome } from '../Biome';
 import { createGameState, Phase, startRun, update } from '../GameState';
 import { activeObstacleCount } from '../Traffic';
 import { activePickupCount } from '../Powerups';
@@ -76,6 +76,15 @@ describe('Biome — selection by distance is deterministic', () => {
   it('biomeCount matches the configured set', () => {
     expect(biomeCount()).toBe(N);
     expect(N).toBeGreaterThanOrEqual(3);
+  });
+
+  it('biomesSeenForDistance counts distinct biomes revealed, saturating at the full set', () => {
+    expect(biomesSeenForDistance(0)).toBe(1);
+    expect(biomesSeenForDistance(SPAN * 0.5)).toBe(1);
+    expect(biomesSeenForDistance(SPAN)).toBe(2);
+    expect(biomesSeenForDistance(SPAN * 2.1)).toBe(3);
+    expect(biomesSeenForDistance(SPAN * 100)).toBe(N); // capped at the roster size
+    expect(biomesSeenForDistance(-50)).toBe(1); // never below 1
   });
 });
 

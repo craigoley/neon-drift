@@ -147,6 +147,168 @@ export const SCORING = {
   nearMissLateral: 6.5,
 } as const;
 
+/**
+ * Collectible powerups. The four pickup kinds (erasable const-object, not a TS
+ * enum — same style as Phase). Each has a config entry in `POWERUP_DEFS` below.
+ */
+export const PowerupKind = {
+  Shield: 'shield',
+  SlowMo: 'slowmo',
+  ScoreBoost: 'scoreBoost',
+  Magnet: 'magnet',
+} as const;
+export type PowerupKind = (typeof PowerupKind)[keyof typeof PowerupKind];
+
+/** Renderer shape token for a pickup (maps to a geometry in PowerupRenderer). */
+export type PowerupShape = 'ring' | 'diamond' | 'chevron' | 'horseshoe';
+
+/**
+ * Signature pickup colours. CLAUDE.md's named palette carries only two neons
+ * (magenta + cyan); to keep four pickups instantly distinguishable we add two
+ * more BRIGHT NEON hues here. All four read as GOOD — and the orange accent
+ * (#ff6600) stays reserved for THREATS, never used on a pickup.
+ */
+export const POWERUP_COLORS = {
+  shield: PALETTE.cyan, // 0x00ffff — cool/defensive
+  slowmo: 0xb46bff, // neon purple — "time" feel, distinct from the deep-purple bg
+  scoreBoost: PALETTE.magenta, // 0xff00ff — reward
+  magnet: 0x39ff14, // neon green — clearly not a threat
+} as const;
+
+export interface PowerupDef {
+  id: PowerupKind;
+  displayName: string;
+  /** Neon pickup colour (0xRRGGBB) — never the orange threat hue. */
+  color: number;
+  /** Renderer geometry token. */
+  shape: PowerupShape;
+  /** Single-character HUD glyph. */
+  glyph: string;
+  /** Active duration in seconds. 0 = a one-shot held CHARGE (SHIELD). */
+  duration: number;
+  /** Relative spawn weight (SHIELD is rarest → smallest weight). */
+  spawnWeight: number;
+  /** SCORE-BOOST: multiplier applied to score GAIN while active (1 otherwise). */
+  scoreMultiplier: number;
+  /** SLOW-MO: simulation time scale while active (1 otherwise). */
+  timeScale: number;
+}
+
+/** Per-kind powerup configuration (the single source of truth for behaviour). */
+export const POWERUP_DEFS: Readonly<Record<PowerupKind, PowerupDef>> = {
+  shield: {
+    id: PowerupKind.Shield,
+    displayName: 'Shield',
+    color: POWERUP_COLORS.shield,
+    shape: 'ring',
+    glyph: '⛨',
+    duration: 0, // one-shot charge: held until a crash consumes it
+    spawnWeight: 1, // rarest / most valuable
+    scoreMultiplier: 1,
+    timeScale: 1,
+  },
+  slowmo: {
+    id: PowerupKind.SlowMo,
+    displayName: 'Slow-Mo',
+    color: POWERUP_COLORS.slowmo,
+    shape: 'diamond',
+    glyph: '◇',
+    duration: 3.5,
+    spawnWeight: 2,
+    scoreMultiplier: 1,
+    timeScale: 0.5, // half-speed sim to thread tight gaps
+  },
+  scoreBoost: {
+    id: PowerupKind.ScoreBoost,
+    displayName: 'Score x2',
+    color: POWERUP_COLORS.scoreBoost,
+    shape: 'chevron',
+    glyph: '×2',
+    duration: 8.0,
+    spawnWeight: 3,
+    scoreMultiplier: 2, // stacks MULTIPLICATIVELY on top of the combo
+    timeScale: 1,
+  },
+  magnet: {
+    id: PowerupKind.Magnet,
+    displayName: 'Magnet',
+    color: POWERUP_COLORS.magnet,
+    shape: 'horseshoe',
+    glyph: '∪',
+    duration: 6.0,
+    spawnWeight: 3,
+    scoreMultiplier: 1,
+    timeScale: 1,
+  },
+} as const;
+
+/** Stable kind ordering (HUD chip order + weighted-pick iteration). */
+export const POWERUP_ORDER: readonly PowerupKind[] = [
+  PowerupKind.Shield,
+  PowerupKind.SlowMo,
+  PowerupKind.ScoreBoost,
+  PowerupKind.Magnet,
+] as const;
+
+/** Powerup spawning + recycled-pickup-pool tuning (mirrors TRAFFIC's pattern). */
+export const POWERUPS = {
+  /** Maximum simultaneous pickups (fixed pool size — never grows). */
+  poolSize: 8,
+  /** Distance ahead of the player at which pickups spawn. */
+  spawnAhead: 420,
+  /** Distance behind the player at which uncollected pickups are culled. */
+  cullBehind: 30,
+  /** Seconds between spawns at the start of a run (much rarer than traffic). */
+  baseSpawnInterval: 5.5,
+  /** Lowest spawn interval as difficulty ramps. */
+  minSpawnInterval: 3.0,
+  /** Grace distance before the cadence tightens (shared feel with traffic). */
+  rampStartDistance: 850,
+  /** How much the interval shrinks per world-unit travelled past the grace. */
+  spawnRampPerUnit: 0.0002,
+  /** Fraction of the road half-width a pickup may sit from centre. */
+  lateralSpread: 0.8,
+  /** Pickup collection box half-extents — generous so pickups are inviting. */
+  halfWidth: 1.6,
+  halfLength: 1.8,
+  /** SHIELD: invulnerability window (s) after a shield absorbs a crash, so the
+   *  car can clear the very obstacle it just survived instead of re-colliding. */
+  shieldInvuln: 1.2,
+  /** MAGNET: forward range (world units) within which pickups are pulled in. */
+  magnetRange: 80,
+  /** MAGNET: per-second easing factor pulling a pickup toward the player. */
+  magnetPull: 4.0,
+  /** Salt XORed into the run seed for the pickups' OWN rng stream, so adding
+   *  powerups never perturbs the (shared-seed) traffic sequence. */
+  rngSalt: 0x5bf03635,
+} as const;
+
+/** Powerup visual tuning (rendering only). */
+export const POWERUP_VIS = {
+  /** Pickup centre height above the road. */
+  meshY: 1.5,
+  /** Base size (world units) of a pickup glyph. */
+  size: 1.1,
+  /** Idle spin rate (radians/second). */
+  spinRate: 1.6,
+  /** Vertical bob amplitude (world units) and rate (radians/second). */
+  bobAmplitude: 0.28,
+  bobRate: 2.2,
+  /** Chevron (cone) height as a multiple of `size`. */
+  chevronAspect: 1.7,
+  /** Torus tube radius as a fraction of `size` (ring + horseshoe thickness). */
+  tubeFraction: 0.3,
+  /** Shield protection ring around the car: radius, tube, height above road. */
+  shieldRingRadius: 2.4,
+  shieldRingTube: 0.16,
+  shieldRingY: 0.5,
+  /** Shield ring opacity while held vs while flashing during i-frames. */
+  shieldRingOpacity: 0.55,
+  shieldRingInvulnOpacity: 0.95,
+  /** I-frame ring flash rate (radians/second). */
+  shieldRingFlashRate: 22,
+} as const;
+
 /** Camera + chase-cam tuning (rendering layer). */
 export const CAMERA = {
   fov: 70,
@@ -380,6 +542,8 @@ export const JUICE = {
   shardSize: 0.5,
   /** Near-miss screen-edge glow pulse duration in seconds. */
   nearMissPulse: 0.35,
+  /** Powerup collection: brief screen glow flash (s) in the pickup's colour. */
+  pickupFlash: 0.3,
   /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
   nearMissSlowmo: 0.12,
   slowmoScale: 0.45,
@@ -446,6 +610,14 @@ export const AUDIO = {
   crashThumpGlide: 0.5,
   crashThumpDecay: 0.6,
   crashThumpStop: 0.62,
+  /** Powerup pickup: a bright two-note ascending arpeggio (good-news chime). */
+  pickupHzLow: 660,
+  pickupHzHigh: 990,
+  pickupGain: 0.14,
+  /** Pickup blip note decay (s), stop (s), and the gap (s) before the 2nd note. */
+  pickupDecay: 0.16,
+  pickupStop: 0.18,
+  pickupNoteGap: 0.07,
 } as const;
 
 /** Front-end shell / overlay UI tuning. */

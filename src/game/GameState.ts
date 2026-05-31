@@ -24,6 +24,17 @@ import {
   type ScoreState,
   type TrafficEvents,
 } from './Scoring';
+import {
+  collectPickups,
+  consumeShield,
+  createPowerupState,
+  powerupScoreMultiplier,
+  powerupTimeScale,
+  tickEffects,
+  updatePickups,
+  type PowerupState,
+} from './Powerups';
+import { POWERUPS } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -45,6 +56,7 @@ export interface GameState {
   vehicle: VehicleState;
   road: RoadState;
   traffic: TrafficState;
+  powerups: PowerupState;
   score: ScoreState;
   /** Active car handling profile for this run (resolved from the selected car
    *  by the composition root and passed in — the pure layer never reaches into
@@ -64,9 +76,10 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     vehicle: createVehicleState(),
     road: createRoadState(seed),
     traffic: createTrafficState(),
+    powerups: createPowerupState(seed),
     score: createScoreState(),
     handling: BASE_HANDLING,
-    lastEvents: { crashed: false, nearMisses: 0 },
+    lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false },
   };
 }
 
@@ -88,9 +101,10 @@ export function startRun(
   state.vehicle = createVehicleState();
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
+  state.powerups = createPowerupState(seed);
   state.score = createScoreState();
   state.handling = handling;
-  state.lastEvents = { crashed: false, nearMisses: 0 };
+  state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false };
   return state;
 }
 
@@ -108,9 +122,12 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.vehicle = createVehicleState();
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
+  state.powerups = createPowerupState(seed);
   state.score = createScoreState();
   state.lastEvents.crashed = false;
   state.lastEvents.nearMisses = 0;
+  state.lastEvents.collected = null;
+  state.lastEvents.shieldBlocked = false;
   return state;
 }
 
@@ -141,26 +158,56 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     // Mutate in place — no per-frame allocation while on menu / crash screen.
     state.lastEvents.crashed = false;
     state.lastEvents.nearMisses = 0;
+    state.lastEvents.collected = null;
+    state.lastEvents.shieldBlocked = false;
     return state;
   }
 
+  const effects = state.powerups.effects;
+
+  // SLOW-MO hook: the whole simulation advances on a scaled timestep, so the
+  // vehicle, distance, traffic, pickups and score all slow together and stay
+  // mutually consistent. Effect TIMERS still tick on real `dt` (below) so their
+  // durations are wall-clock.
+  const simDt = dt * powerupTimeScale(effects);
+
   // The drivable corridor follows the road's curve at the player's position.
   const roadCenter = roadCenterAt(state.seed, state.distance);
-  updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, dt);
-  state.distance += state.vehicle.speed * dt;
-  state.time += dt;
+  updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, simDt);
+  state.distance += state.vehicle.speed * simDt;
+  state.time += simDt;
 
   updateRoad(state.road, state.distance);
-  updateTraffic(state.traffic, state.rng, state.seed, state.distance, dt);
+  updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt);
+  updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
 
   // Writes into the pre-allocated lastEvents object (no per-frame allocation).
   resolveTraffic(state.lastEvents, state.score, state.vehicle.lateral, state.distance, state.traffic);
-  integrateScore(state.score, state.vehicle.speed, dt);
+  state.lastEvents.collected = null;
+  state.lastEvents.shieldBlocked = false;
+  collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);
+
+  // SCORE-BOOST hook: an external multiplier stacked on top of the combo.
+  integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));
+
+  // SHIELD hook: intercept the crash path. While i-frames are active (granted
+  // when a shield breaks), crashes are ignored so the car can clear the obstacle
+  // it just survived. Otherwise a held shield absorbs the crash, keeps the run
+  // going, preserves the combo, and starts the invulnerability window.
+  if (effects.invulnTimer > 0) state.lastEvents.crashed = false;
+  if (state.lastEvents.crashed && consumeShield(effects)) {
+    state.lastEvents.crashed = false;
+    state.lastEvents.shieldBlocked = true;
+    effects.invulnTimer = POWERUPS.shieldInvuln;
+  }
 
   if (state.lastEvents.crashed) {
     state.phase = Phase.Crashed;
     resetCombo(state.score);
   }
+
+  // Effect durations are wall-clock: tick on REAL dt, never the slowed simDt.
+  tickEffects(effects, dt);
 
   return state;
 }

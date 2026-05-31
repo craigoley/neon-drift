@@ -88,6 +88,42 @@ body,
   opacity: 0.9;
 }
 
+/* --- active-powerup chips ---------------------------------------------- */
+/* A row of chips just under the stats bar, one per active effect, each in its
+   pickup's signature neon colour with the remaining duration. */
+.hud-powerups {
+  position: absolute;
+  top: clamp(44px, 9vw, 64px);
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: clamp(6px, 2vw, 12px);
+  justify-content: center;
+  align-items: center;
+  pointer-events: none;
+}
+
+.hud-pup {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border: 1.5px solid var(--pup-color, #00ffff);
+  border-radius: 999px;
+  background: rgba(8, 0, 20, 0.55);
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+}
+
+.hud-pup-glyph {
+  font-size: clamp(13px, 3vw, 18px);
+  line-height: 1;
+}
+
+.hud-pup-timer {
+  font-size: clamp(11px, 2.4vw, 15px);
+}
+
 /* --- front-end shell (start / settings / car picker / crash) ----------- */
 /* Root never blocks input; only a visible screen captures taps. Sits above the
    HUD; built for mobile portrait first (flex column, clamp() sizing, safe-area
@@ -370,12 +406,20 @@ body,
 
 /* --- full-screen juice effects ----------------------------------------- */
 .fx-edge,
-.fx-flash {
+.fx-flash,
+.fx-pickup {
   position: absolute;
   inset: 0;
   pointer-events: none;
   opacity: 0;
   z-index: 40;
+}
+
+/* Powerup collected: a brief inset glow in the pickup's signature colour. */
+.fx-pickup {
+  --pickup-color: #00ffff;
+  box-shadow: inset 0 0 120px 30px var(--pickup-color);
+  transition: opacity 0.06s linear;
 }
 
 /* Near-miss: cyan glow hugging the screen edges. */

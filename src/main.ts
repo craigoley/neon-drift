@@ -18,6 +18,7 @@ import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
 import { CarPreview } from './rendering/CarPreview';
 import { TrafficRenderer } from './rendering/TrafficRenderer';
+import { PowerupRenderer } from './rendering/PowerupRenderer';
 import { PostProcessing } from './rendering/PostProcessing';
 import { SpeedLines } from './rendering/SpeedLines';
 import { CrashShards } from './rendering/CrashShards';
@@ -28,7 +29,17 @@ import { Shell } from './ui/Shell';
 import { BestStore } from './storage/BestStore';
 import { SettingsStore } from './state/Settings';
 import { Telemetry } from './utils/Telemetry';
-import { AUDIO, carById, handlingFor, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
+import {
+  AUDIO,
+  carById,
+  cssHex,
+  handlingFor,
+  JUICE,
+  MAX_FRAME_DT,
+  POWERUP_DEFS,
+  PowerupKind,
+  TIMESTEP,
+} from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -63,6 +74,7 @@ const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
 vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted cosmetic
 const traffic = new TrafficRenderer(scene.scene);
+const powerups = new PowerupRenderer(scene.scene);
 const speedLines = new SpeedLines(scene.scene);
 const shards = new CrashShards(scene.scene);
 const screenFx = new ScreenFx(app);
@@ -143,6 +155,8 @@ function frame(now: number): void {
   // screens, don't bank time in the accumulator (so resuming never fast-forwards
   // a backlog of steps).
   let nearMisses = 0;
+  let collectedKind: PowerupKind | null = null;
+  let shieldBlocked = false;
   if (playing) {
     // Optional micro slow-mo after a near-miss: feed the sim scaled time.
     const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
@@ -151,6 +165,8 @@ function frame(now: number): void {
     while (accumulator >= TIMESTEP) {
       update(game, controls.intent, TIMESTEP);
       nearMisses += game.lastEvents.nearMisses;
+      if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
+      if (game.lastEvents.shieldBlocked) shieldBlocked = true;
       accumulator -= TIMESTEP;
     }
   } else {
@@ -165,6 +181,10 @@ function frame(now: number): void {
     screenFx.pulseNearMiss();
     slowmo = JUICE.nearMissSlowmo;
   }
+  // Powerup collection juice: a screen glow in the pickup's colour. A shield
+  // absorbing a crash flashes the shield colour ("saved!").
+  if (collectedKind) screenFx.pulsePickup(cssHex(POWERUP_DEFS[collectedKind].color));
+  if (shieldBlocked) screenFx.pulsePickup(cssHex(POWERUP_DEFS[PowerupKind.Shield].color));
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
@@ -180,6 +200,7 @@ function frame(now: number): void {
         game.vehicle.speed > AUDIO.screechMinSpeed,
     );
     if (nearMisses > 0) audio.playNearMiss();
+    if (collectedKind || shieldBlocked) audio.playPickup();
     if (crashed) audio.playCrash();
   }
   prevPhase = game.phase;
@@ -190,6 +211,7 @@ function frame(now: number): void {
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
   traffic.sync(game.traffic, game.distance);
+  powerups.sync(game.powerups, game.distance, game.vehicle.lateral, realDt);
   // Speed lines only stream while actually playing — otherwise they keep
   // rushing on the frozen menu / pause / WIPEOUT screens (the cyan edge streak
   // seen on the crash screen). Feeding 0 fades them out.

@@ -196,6 +196,25 @@ export class AudioEngine {
     thump.stop(t + AUDIO.crashThumpStop);
   }
 
+  /** Powerup collected: a bright two-note ascending chime (reads as good news).
+   *  Respects the sound toggle automatically via the muted master bus. */
+  playPickup(): void {
+    if (!this.ctx || !this.master) return;
+    this.blip(AUDIO.pickupHzLow, AUDIO.pickupGain);
+    // Second, higher note a beat later for the ascending arpeggio.
+    const ctx = this.ctx;
+    const t = ctx.currentTime + AUDIO.pickupNoteGap;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = 'triangle';
+    osc.frequency.value = AUDIO.pickupHzHigh;
+    g.gain.setValueAtTime(AUDIO.pickupGain, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.pickupDecay);
+    osc.connect(g).connect(this.master);
+    osc.start(t);
+    osc.stop(t + AUDIO.pickupStop);
+  }
+
   private blip(hz: number, gain: number): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;

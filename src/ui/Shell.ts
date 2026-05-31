@@ -16,7 +16,7 @@
 import type { SettingsStore } from '../state/Settings';
 import type { BestStore, BestRun } from '../storage/BestStore';
 import type { AudioEngine } from '../audio/AudioEngine';
-import { CARS, cssHex, SCORING, UI } from '../utils/constants';
+import { CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
 type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | 'pause' | null;
@@ -35,6 +35,11 @@ export interface ShellOptions {
   onMenu: () => void;
   /** Apply the selected car's cosmetic to the rendered vehicle. */
   applyCar: (carId: string) => void;
+  /** Car-picker 3D preview lifecycle (rendering layer owns the actual mesh):
+   *  enter mounts a preview into `container`; car updates it; exit disposes it. */
+  onCarPickerEnter: (container: HTMLElement, carId: string) => void;
+  onCarPickerCar: (carId: string) => void;
+  onCarPickerExit: () => void;
 }
 
 export class Shell {
@@ -57,7 +62,8 @@ export class Shell {
   private readonly crashComboEl: HTMLElement;
   private readonly crashBestEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
-  private readonly carPreviewEl: HTMLElement;
+  private readonly carCanvasEl: HTMLElement;
+  private readonly carStatsEl: HTMLElement;
   private readonly carDotsEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
 
@@ -97,7 +103,8 @@ export class Shell {
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
-    this.carPreviewEl = this.carScreen.querySelector('.shell-car-preview')!;
+    this.carCanvasEl = this.carScreen.querySelector('.shell-car-canvas')!;
+    this.carStatsEl = this.carScreen.querySelector('.shell-car-stats')!;
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
 
@@ -162,6 +169,7 @@ export class Shell {
   // --- routing ------------------------------------------------------------
 
   private go(screen: Screen): void {
+    const prev = this.current;
     this.current = screen;
     this.startScreen.style.display = screen === 'start' ? 'flex' : 'none';
     this.settingsScreen.style.display = screen === 'settings' ? 'flex' : 'none';
@@ -170,6 +178,14 @@ export class Shell {
     this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
     // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
     document.body.classList.toggle('playing', screen === null);
+
+    // Spin up / tear down the 3D car preview with the picker (the rendering
+    // layer owns the mesh; it must never run behind the game).
+    if (screen === 'carpicker' && prev !== 'carpicker') {
+      this.opts.onCarPickerEnter(this.carCanvasEl, CARS[this.carIndex].id);
+    } else if (prev === 'carpicker' && screen !== 'carpicker') {
+      this.opts.onCarPickerExit();
+    }
   }
 
   private play(): void {
@@ -261,10 +277,15 @@ export class Shell {
       `<h2 class="shell-subtitle">SELECT CAR</h2>` +
       `<div class="shell-car-stage">` +
       `<button class="shell-btn shell-arrow shell-prev" type="button" aria-label="previous car">‹</button>` +
-      `<div class="shell-car-preview"></div>` +
+      `<div class="shell-car-canvas"></div>` +
       `<button class="shell-btn shell-arrow shell-next" type="button" aria-label="next car">›</button>` +
       `</div>` +
       `<p class="shell-car-name"></p>` +
+      `<div class="shell-car-stats">` +
+      this.statRow('SPEED', 'speed') +
+      this.statRow('GRIP', 'grip') +
+      this.statRow('DRIFT', 'drift') +
+      `</div>` +
       `<div class="shell-car-dots"></div>` +
       `<button class="shell-btn shell-close" type="button">DONE</button>`;
 
@@ -289,23 +310,45 @@ export class Shell {
     return s;
   }
 
+  /** One stat row markup; the fill width is set per car in renderCar(). */
+  private statRow(label: string, key: string): string {
+    return (
+      `<div class="shell-stat">` +
+      `<span class="shell-stat-label">${label}</span>` +
+      `<div class="shell-stat-track"><div class="shell-stat-fill" data-stat="${key}"></div></div>` +
+      `</div>`
+    );
+  }
+
   private cycleCar(dir: number): void {
     this.carIndex = (this.carIndex + dir + CARS.length) % CARS.length;
     const car = CARS[this.carIndex];
     this.settings.set('selectedCarId', car.id); // persist
     this.opts.applyCar(car.id); // live update the rendered car behind the menu
+    this.opts.onCarPickerCar(car.id); // update the 3D preview
     this.renderCar();
   }
 
   private renderCar(): void {
     const car = CARS[this.carIndex];
     this.carNameEl.textContent = car.displayName;
-    // CSS preview: body fill + glow border + accent headlights.
-    this.carPreviewEl.style.background = cssHex(car.cosmetic.body);
-    this.carPreviewEl.style.borderColor = cssHex(car.cosmetic.glow);
-    this.carPreviewEl.style.boxShadow = `0 0 18px ${cssHex(car.cosmetic.glow)}, inset 0 0 14px ${cssHex(car.cosmetic.glow)}`;
-    this.carPreviewEl.style.setProperty('--accent', cssHex(car.cosmetic.accent));
-    // Dots.
+
+    // Stat bars — DERIVED from the same handling multipliers the sim uses
+    // (carStats), tinted with the car's glow so they read with the preview.
+    const stats = carStats(handlingFor(car.id));
+    const glow = cssHex(car.cosmetic.glow);
+    const setBar = (key: keyof typeof stats) => {
+      const fill = this.carStatsEl.querySelector(`[data-stat="${key}"]`) as HTMLElement | null;
+      if (!fill) return;
+      fill.style.width = `${Math.round(stats[key] * 100)}%`;
+      fill.style.background = glow;
+      fill.style.boxShadow = `0 0 8px ${glow}`;
+    };
+    setBar('speed');
+    setBar('grip');
+    setBar('drift');
+
+    // Page dots.
     this.carDotsEl.innerHTML = CARS.map(
       (_, i) => `<span class="shell-dot${i === this.carIndex ? ' shell-dot--on' : ''}"></span>`,
     ).join('');

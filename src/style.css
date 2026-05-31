@@ -245,35 +245,64 @@ body,
   justify-content: center;
 }
 
-.shell-car-preview {
+/* 3D preview canvas host (the WebGL canvas is appended here and sized to it). */
+.shell-car-canvas {
   position: relative;
-  width: clamp(120px, 40vw, 180px);
-  height: clamp(72px, 24vw, 108px);
-  border: 3px solid #00ffff;
-  border-radius: 14px;
+  width: clamp(150px, 56vw, 240px);
+  height: clamp(110px, 40vw, 170px);
 }
 
-/* Accent "headlights" on the preview tile (colour set per car via --accent). */
-.shell-car-preview::before,
-.shell-car-preview::after {
-  content: '';
-  position: absolute;
-  bottom: 12px;
-  width: 16px;
-  height: 8px;
-  border-radius: 3px;
-  background: var(--accent, #ff6600);
-  box-shadow: 0 0 10px var(--accent, #ff6600);
+.shell-car-canvas canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
 }
-
-.shell-car-preview::before { left: 18%; }
-.shell-car-preview::after { right: 18%; }
 
 .shell-car-name {
   font-size: clamp(20px, 6vw, 32px);
   font-weight: 800;
   letter-spacing: 0.12em;
   text-shadow: 0 0 8px #00ffff;
+}
+
+/* Stat bars — Speed / Grip / Drift, filled from carStats() (single source). */
+.shell-car-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(320px, 80vw);
+}
+
+.shell-stat {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.shell-stat-label {
+  flex: 0 0 auto;
+  width: 4.2em;
+  text-align: left;
+  font-size: clamp(11px, 3vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: #00ffff;
+}
+
+.shell-stat-track {
+  flex: 1 1 auto;
+  height: 10px;
+  border-radius: 5px;
+  background: rgba(0, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.shell-stat-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 5px;
+  background: #00ffff;
+  transition: width 0.18s ease;
 }
 
 .shell-car-dots {

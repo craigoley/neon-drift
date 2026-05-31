@@ -230,6 +230,16 @@ export const TRAFFIC_VIS = {
   /** Obstacle mesh height and its y-centre above the ground. */
   meshHeight: 1.2,
   meshY: 0.6,
+  /** Obstacle body colour (orange threat). */
+  bodyColor: 0xff6600,
+  /**
+   * Bright highlight baked onto the obstacle's top + leading faces (vertex
+   * colours). Readability lever: a hot rim that separates an obstacle from the
+   * background it sits against — including the sun's orange/magenta bands at the
+   * horizon, where a flat-orange box would camouflage. Kept warm so threats stay
+   * "orange", just with a brighter edge that always reads as foreground.
+   */
+  edgeColor: 0xffe08a,
 } as const;
 
 /** Horizon backdrop placement + wireframe mountains (procedural, fog-excluded). */
@@ -264,10 +274,21 @@ export const ENV = {
  * see rendering/Environment.ts. Every value here is tunable.
  */
 export const SUN = {
-  /** Plane half-extent / disc radius (world units). */
-  radius: 220,
-  /** Vertical position of the sun centre (world units, above the horizon). */
-  y: 120,
+  /**
+   * Plane half-extent / disc radius (world units). Reduced (was 220) as part of
+   * the readability pass: a smaller disc, raised well above the horizon (see
+   * `y`), keeps the sun's bright banded body out of the road's vanishing point /
+   * obstacle spawn zone so the playfield wins the contrast war. Tune with `y`.
+   */
+  radius: 150,
+  /**
+   * Vertical position of the sun centre (world units). Raised (was 120) so the
+   * whole disc — including its bright lower bands — sits ABOVE the horizon line
+   * (~y 9.5 at the backdrop). At radius 150 / y 250 the disc's bottom edge lands
+   * roughly a sixth of the screen above the horizon, leaving dark sky at the
+   * vanishing point where obstacles first appear. Raise/lower to frame on device.
+   */
+  y: 250,
   /** Square CanvasTexture resolution in pixels. */
   textureSize: 384,
   /**
@@ -315,6 +336,33 @@ export const SUN = {
    * hard requirement). Ignored when scrollSpeed is 0.
    */
   scrollRepaintHz: 20,
+} as const;
+
+/**
+ * Horizon "scrim": a soft dark belt across the horizon / obstacle-spawn zone.
+ * A vertical alpha gradient (deep purple, transparent → peak at the horizon →
+ * transparent) on a wide backdrop quad. It seats the sun's lower rim and the
+ * waveform mountains back into the night so they recede, keeping the spawn zone
+ * clean. Depth-tested, drawn after the sun but before gameplay, so it only
+ * darkens the far sky/backdrop — nearer gameplay (road, obstacles, car) is
+ * never dimmed. Part of the readability pass; set `peakOpacity` to 0 to disable.
+ */
+export const HORIZON_SCRIM = {
+  /** World-y centre of the belt (≈ the horizon line at the backdrop). */
+  centerY: 10,
+  /** Half-height of the belt in world units (full vertical span = 2x). */
+  halfHeight: 110,
+  /** Quad width — wide enough to cover the screen at the backdrop distance. */
+  width: 3000,
+  /** Peak darkening at the horizon line (0..1). Subtle by design; tune on device. */
+  peakOpacity: 0.5,
+  /** Vertical resolution (px) of the 1-D gradient texture. */
+  textureSize: 128,
+  /**
+   * Render order: after the sun (SUN.renderOrder -1), before gameplay (0). Sits
+   * behind the road/obstacles but in front of the sun's lower edge.
+   */
+  renderOrder: -0.5,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */

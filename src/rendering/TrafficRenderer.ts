@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import type { TrafficState } from '../game/Traffic';
-import { TRAFFIC, TRAFFIC_VIS, PALETTE } from '../utils/constants';
+import { TRAFFIC, TRAFFIC_VIS } from '../utils/constants';
 
 export class TrafficRenderer {
   private readonly mesh: THREE.InstancedMesh;
@@ -16,7 +16,23 @@ export class TrafficRenderer {
 
   constructor(scene: THREE.Scene) {
     const geo = new THREE.BoxGeometry(TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
-    const mat = new THREE.MeshBasicMaterial({ color: PALETTE.accent });
+    // Readability: paint the top (+y) and leading (+z, camera-facing) faces with
+    // a bright edge colour and the rest with the orange body, via vertex colours.
+    // The hot rim separates an obstacle from whatever it sits against — including
+    // the sun's bands at the horizon — so a flat-orange box can't camouflage.
+    // BoxGeometry face order is +x,-x,+y,-y,+z,-z (4 verts each); +y = 8..11,
+    // +z = 16..19.
+    const body = new THREE.Color(TRAFFIC_VIS.bodyColor);
+    const edge = new THREE.Color(TRAFFIC_VIS.edgeColor);
+    const colors = new Float32Array(24 * 3);
+    for (let v = 0; v < 24; v++) {
+      const c = (v >= 8 && v <= 11) || (v >= 16 && v <= 19) ? edge : body;
+      colors[v * 3] = c.r;
+      colors[v * 3 + 1] = c.g;
+      colors[v * 3 + 2] = c.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
     this.mesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.mesh.frustumCulled = false;

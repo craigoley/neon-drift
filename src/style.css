@@ -88,52 +88,239 @@ body,
   opacity: 0.9;
 }
 
-/* --- full-screen menu / crash panels ----------------------------------- */
-.hud-screen {
+/* --- front-end shell (start / settings / car picker / crash) ----------- */
+/* Root never blocks input; only a visible screen captures taps. Sits above the
+   HUD; built for mobile portrait first (flex column, clamp() sizing, safe-area
+   insets). */
+.shell {
   position: absolute;
   inset: 0;
+  pointer-events: none;
+  z-index: 50;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #00ffff;
+  user-select: none;
+}
+
+.shell-screen {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 18px;
+  gap: clamp(14px, 3.5vh, 26px);
+  padding:
+    max(24px, env(safe-area-inset-top)) 20px
+    max(24px, env(safe-area-inset-bottom));
   text-align: center;
-  background: radial-gradient(circle at 50% 45%, rgba(26, 0, 51, 0.2), rgba(26, 0, 51, 0.85));
+  background: radial-gradient(circle at 50% 40%, rgba(26, 0, 51, 0.55), rgba(8, 0, 20, 0.93));
 }
 
-.hud-title {
-  font-size: clamp(40px, 12vw, 110px);
+.shell-title {
+  font-size: clamp(40px, 13vw, 104px);
   font-weight: 900;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: #00ffff;
   text-shadow:
     0 0 12px #00ffff,
-    0 0 32px #ff00ff;
+    0 0 34px #ff00ff;
 }
 
-.hud-wipeout {
+.shell-wipeout {
   color: #ff00ff;
   text-shadow:
     0 0 12px #ff00ff,
     0 0 36px #ff6600;
 }
 
-.hud-prompt {
-  font-size: clamp(14px, 3.5vw, 22px);
-  letter-spacing: 0.1em;
-  opacity: 0.9;
-  animation: hud-pulse 1.4s ease-in-out infinite;
+.shell-subtitle {
+  font-size: clamp(22px, 7vw, 40px);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  color: #ff66ff;
+  text-shadow: 0 0 10px #ff00ff;
 }
 
-.hud-prompt b {
-  color: #ff6600;
-}
-
-.hud-crash-line {
-  font-size: clamp(16px, 4vw, 26px);
+.shell-best,
+.shell-crash-line {
+  font-size: clamp(14px, 3.6vw, 20px);
   font-weight: 700;
+  color: #ff66ff;
+  text-shadow:
+    0 0 6px #ff00ff,
+    0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+.shell-hint {
+  font-size: clamp(12px, 3.2vw, 18px);
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+  animation: hud-pulse 1.6s ease-in-out infinite;
+}
+
+/* Buttons: large tap targets (>= 48px), neon fill for primary, ghost for
+   secondary actions. */
+.shell-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  font: 800 clamp(15px, 4.2vw, 20px) / 1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #1a0033;
+  background: #00ffff;
+  border: none;
+  border-radius: 10px;
+  padding: clamp(12px, 2.2vh, 16px) clamp(28px, 8vw, 44px);
+  min-height: 48px;
+  min-width: clamp(160px, 52vw, 240px);
+  box-shadow: 0 0 18px rgba(0, 255, 255, 0.6);
+}
+
+.shell-btn:active {
+  transform: translateY(1px);
+}
+
+.shell-btn--ghost {
+  color: #00ffff;
+  background: transparent;
+  border: 2px solid #00ffff;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.35);
+  min-width: clamp(120px, 38vw, 170px);
+}
+
+.shell-row {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Settings rows. */
+.shell-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  width: min(360px, 86vw);
+}
+
+.shell-setting-label {
+  font-size: clamp(16px, 4.5vw, 22px);
+  font-weight: 700;
+}
+
+.shell-toggle {
+  min-width: 96px;
+  color: #ff6600;
+  background: transparent;
+  border: 2px solid #ff6600;
+  box-shadow: 0 0 12px rgba(255, 102, 0, 0.35);
+}
+
+.shell-toggle--on {
+  color: #1a0033;
+  background: #ff6600;
+}
+
+/* Car picker. */
+.shell-car-stage {
+  display: flex;
+  align-items: center;
+  gap: clamp(10px, 4vw, 24px);
+}
+
+.shell-arrow {
+  min-width: auto;
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border-radius: 50%;
+  font-size: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shell-car-preview {
+  position: relative;
+  width: clamp(120px, 40vw, 180px);
+  height: clamp(72px, 24vw, 108px);
+  border: 3px solid #00ffff;
+  border-radius: 14px;
+}
+
+/* Accent "headlights" on the preview tile (colour set per car via --accent). */
+.shell-car-preview::before,
+.shell-car-preview::after {
+  content: '';
+  position: absolute;
+  bottom: 12px;
+  width: 16px;
+  height: 8px;
+  border-radius: 3px;
+  background: var(--accent, #ff6600);
+  box-shadow: 0 0 10px var(--accent, #ff6600);
+}
+
+.shell-car-preview::before { left: 18%; }
+.shell-car-preview::after { right: 18%; }
+
+.shell-car-name {
+  font-size: clamp(20px, 6vw, 32px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
   text-shadow: 0 0 8px #00ffff;
+}
+
+.shell-car-dots {
+  display: flex;
+  gap: 10px;
+}
+
+.shell-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: rgba(0, 255, 255, 0.3);
+}
+
+.shell-dot--on {
+  background: #00ffff;
+  box-shadow: 0 0 10px #00ffff;
+}
+
+/* "Link copied" toast (share clipboard fallback). */
+.ui-toast {
+  position: absolute;
+  left: 50%;
+  bottom: max(28px, env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(8px);
+  pointer-events: none;
+  z-index: 70;
+  max-width: 80vw;
+  padding: 10px 18px;
+  border: 1px solid #00ffff;
+  border-radius: 8px;
+  background: rgba(8, 0, 20, 0.92);
+  color: #00ffff;
+  font: 700 14px/1 'Segoe UI', system-ui, sans-serif;
+  box-shadow: 0 0 14px rgba(0, 255, 255, 0.5);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.ui-toast--visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
 }
 
 @keyframes hud-pulse {
@@ -165,7 +352,10 @@ body,
 }
 
 /* --- on-screen touch handbrake ----------------------------------------- */
+/* Hidden by default; shown only while a run is in progress (body.playing),
+   so it never overlaps the start / settings / car-picker / crash screens. */
 .touch-handbrake {
+  display: none;
   position: absolute;
   right: 24px;
   bottom: 28px;
@@ -182,6 +372,10 @@ body,
   text-shadow: 0 0 8px #ff6600;
   box-shadow: 0 0 16px rgba(255, 102, 0, 0.5);
   -webkit-tap-highlight-color: transparent;
+}
+
+body.playing .touch-handbrake {
+  display: block;
 }
 
 .touch-handbrake:active {

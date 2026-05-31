@@ -8,8 +8,10 @@
  */
 
 import './style.css';
-import { createGameState, update } from './game/GameState';
+import { createGameState, Phase, update } from './game/GameState';
+import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
+import { AudioEngine } from './audio/AudioEngine';
 import { SceneManager } from './rendering/SceneManager';
 import { Environment } from './rendering/Environment';
 import { RoadRenderer } from './rendering/RoadRenderer';
@@ -32,6 +34,13 @@ const game = createGameState();
 const controls = new Controls();
 controls.attachKeyboard(window);
 
+// Synthesized audio — resumed on the first user gesture (autoplay policy).
+const audio = new AudioEngine();
+const resumeAudio = () => void audio.resume();
+window.addEventListener('keydown', resumeAudio, { once: true });
+window.addEventListener('pointerdown', resumeAudio, { once: true });
+window.addEventListener('touchstart', resumeAudio, { once: true });
+
 // Rendering layer.
 const scene = new SceneManager(app, isTouch);
 const environment = new Environment(scene.scene, game.seed);
@@ -47,6 +56,7 @@ const best = { distance: 0, score: 0 };
 
 let last = performance.now();
 let accumulator = 0;
+let prevPhase = game.phase;
 
 function frame(now: number): void {
   const ms = now - last;
@@ -56,11 +66,24 @@ function frame(now: number): void {
   accumulator += ms / 1000;
   // Clamp to avoid a spiral of death after a tab-switch stall.
   if (accumulator > 0.25) accumulator = 0.25;
+  let nearMisses = 0;
   while (accumulator >= TIMESTEP) {
     update(game, controls.intent, TIMESTEP);
+    nearMisses += game.lastEvents.nearMisses;
     accumulator -= TIMESTEP;
   }
   controls.endFrame();
+
+  // Audio reactions.
+  if (audio.started) {
+    audio.setSpeed(normalizedSpeed(game.vehicle.speed));
+    audio.setScreech(
+      game.phase === Phase.Playing && controls.intent.handbrake && game.vehicle.speed > 1,
+    );
+    if (nearMisses > 0) audio.playNearMiss();
+    if (game.phase === Phase.Crashed && prevPhase === Phase.Playing) audio.playCrash();
+  }
+  prevPhase = game.phase;
 
   const dt = ms / 1000;
   scene.updateCamera(game, dt);

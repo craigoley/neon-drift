@@ -177,6 +177,7 @@ let last = performance.now();
 let accumulator = 0;
 let prevPhase = game.phase;
 let slowmo = 0;
+const NO_UNLOCKS: string[] = [];
 
 function frame(now: number): void {
   const ms = now - last;
@@ -230,7 +231,7 @@ function frame(now: number): void {
   if (shieldBlocked) screenFx.pulsePickup(cssHex(POWERUP_DEFS[PowerupKind.Shield].color));
   // Ramp boost juice: a green flash in the ramp's "go" colour.
   if (rampBoosts > 0) screenFx.pulsePickup(cssHex(OBSTACLE_DEFS[ObstacleKind.Ramp].color));
-  let unlockedNames: string[] = [];
+  let unlockedNames = NO_UNLOCKS;
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);

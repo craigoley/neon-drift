@@ -1,0 +1,46 @@
+/* Global layout for the full-viewport canvas and HUD overlay. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #1a0033;
+}
+
+#app {
+  position: relative;
+}
+
+#app canvas {
+  display: block;
+}
+
+/* HUD overlay sits above the canvas and never intercepts pointer events. */
+.hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.hud-title {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: clamp(28px, 8vw, 64px);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  text-shadow:
+    0 0 8px #00ffff,
+    0 0 20px #00ffff;
+}

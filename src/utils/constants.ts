@@ -500,33 +500,6 @@ export const SUN = {
   scrollRepaintHz: 20,
 } as const;
 
-/**
- * Horizon "scrim": a soft dark belt across the horizon / obstacle-spawn zone.
- * A vertical alpha gradient (deep purple, transparent → peak at the horizon →
- * transparent) on a wide backdrop quad. It seats the sun's lower rim and the
- * waveform mountains back into the night so they recede, keeping the spawn zone
- * clean. Depth-tested, drawn after the sun but before gameplay, so it only
- * darkens the far sky/backdrop — nearer gameplay (road, obstacles, car) is
- * never dimmed. Part of the readability pass; set `peakOpacity` to 0 to disable.
- */
-export const HORIZON_SCRIM = {
-  /** World-y centre of the belt (≈ the horizon line at the backdrop). */
-  centerY: 10,
-  /** Half-height of the belt in world units (full vertical span = 2x). */
-  halfHeight: 110,
-  /** Quad width — wide enough to cover the screen at the backdrop distance. */
-  width: 3000,
-  /** Peak darkening at the horizon line (0..1). Subtle by design; tune on device. */
-  peakOpacity: 0.5,
-  /** Vertical resolution (px) of the 1-D gradient texture. */
-  textureSize: 128,
-  /**
-   * Render order: after the sun (SUN.renderOrder -1), before gameplay (0). Sits
-   * behind the road/obstacles but in front of the sun's lower edge.
-   */
-  renderOrder: -0.5,
-} as const;
-
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
 export const BLOOM = {
   // Tamed from the original (strength 0.9 / threshold 0.2 / exposure 1.1) which

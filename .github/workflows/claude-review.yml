@@ -3,16 +3,18 @@ name: Claude PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    # Skip auto-review on PRs that only edit this workflow file. The
-    # `anthropics/claude-code-action@v1` action refuses to run when its
-    # workflow file differs from the version on `main` (a security check
-    # that prevents PRs from editing the workflow and having the action
-    # execute the edited version under privileged context). On a personal
-    # repo there's no attacker, but the action still self-fails with exit
-    # 1 on every workflow-edit PR, leaving a recurring red ✗. paths-ignore
-    # short-circuits the trigger so it never runs on those PRs.
+    # Skip auto-review on PRs that only touch workflow files. The
+    # `anthropics/claude-code-action@v1` action refuses to run when a PR
+    # modifies files under `.github/workflows/` (a security check that
+    # prevents PRs from editing a workflow and having the action execute
+    # the edited version under privileged context). On a personal repo
+    # there's no attacker, but the action still self-fails with exit 1 on
+    # every workflow-touching PR, leaving a recurring red ✗. Matching the
+    # whole workflows dir (not just this file) short-circuits the trigger
+    # so it never runs on CI-only PRs — e.g. adding codeql.yml. Mixed PRs
+    # (workflow + source) still run, since not all paths are ignored.
     paths-ignore:
-      - '.github/workflows/claude-review.yml'
+      - '.github/workflows/**'
 
 # Workflow-level default: read-only. The job below grants exactly the
 # scopes the review needs (pull-requests: write to post the review,

@@ -215,6 +215,25 @@ export class AudioEngine {
     osc.stop(t + AUDIO.pickupStop);
   }
 
+  /** Milestone reached: a three-note ascending fanfare (a bigger "achievement"
+   *  than a pickup). Respects the sound toggle via the muted master bus. */
+  playMilestone(): void {
+    if (!this.ctx || !this.master) return;
+    const ctx = this.ctx;
+    AUDIO.milestoneHz.forEach((hz, i) => {
+      const t = ctx.currentTime + i * AUDIO.milestoneNoteGap;
+      const osc = ctx.createOscillator();
+      const g = ctx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.value = hz;
+      g.gain.setValueAtTime(AUDIO.milestoneGain, t);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.milestoneDecay);
+      osc.connect(g).connect(this.master!);
+      osc.start(t);
+      osc.stop(t + AUDIO.milestoneStop);
+    });
+  }
+
   private blip(hz: number, gain: number): void {
     const ctx = this.ctx!;
     const t = ctx.currentTime;

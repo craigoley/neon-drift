@@ -124,6 +124,50 @@ body,
   font-size: clamp(11px, 2.4vw, 15px);
 }
 
+/* Subtle per-run objectives — bottom-left, dim, never over the road centre. */
+.hud-objectives {
+  position: absolute;
+  left: clamp(8px, 2.5vw, 18px);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(10px, 3vw, 20px));
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  pointer-events: none;
+  font-size: clamp(10px, 2.2vw, 13px);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  opacity: 0.5;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+
+.hud-objective {
+  color: #00ffff;
+  transition: opacity 0.3s ease;
+}
+
+.hud-objective.done {
+  color: #39ff14; /* neon green — completed (matches the "beneficial" language) */
+  opacity: 0.85;
+}
+
+/* Transient milestone / biome toast — centred, upper third, clear of the road. */
+.hud-toast {
+  position: absolute;
+  left: 50%;
+  top: clamp(96px, 22vh, 200px);
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: 900;
+  font-size: clamp(20px, 6vw, 40px);
+  letter-spacing: 0.04em;
+  color: var(--toast-color, #ff00ff);
+  text-shadow:
+    0 0 10px var(--toast-color, #ff00ff),
+    0 0 24px var(--toast-color, #ff00ff),
+    0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
 /* --- front-end shell (start / settings / car picker / crash) ----------- */
 /* Root never blocks input; only a visible screen captures taps. Sits above the
    HUD; built for mobile portrait first (flex column, clamp() sizing, safe-area

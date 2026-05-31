@@ -201,6 +201,15 @@ export function updatePickups(
 
 /** Apply a freshly-collected powerup's effect. Timed effects (re)set to full
  *  duration; SHIELD is a held boolean charge. */
+/**
+ * Grant a powerup's effect directly, with no pickup involved — e.g. a distance
+ * milestone awarding a free shield. Routes through the SAME applyEffect path as
+ * collecting one, so a granted effect behaves identically. Pure.
+ */
+export function grantPowerup(effects: PowerupEffects, kind: PowerupKind): void {
+  applyEffect(effects, POWERUP_DEFS[kind]);
+}
+
 function applyEffect(effects: PowerupEffects, def: PowerupDef): void {
   switch (def.id) {
     case PowerupKind.Shield:

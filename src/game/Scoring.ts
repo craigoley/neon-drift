@@ -126,6 +126,14 @@ export interface TrafficEvents {
   shieldBlocked?: boolean;
   /** Number of RAMPs contacted this step (each grants a speed + score burst). */
   rampBoosts?: number;
+  /** Label of a distance MILESTONE hit this step (last one), else null — for the
+   *  celebratory toast + fanfare. See Milestones.ts. */
+  milestone?: string | null;
+  /** True on the step the active biome advanced to a new index — for a "NEW
+   *  BIOME" celebration that tracks the actual environment transition. */
+  biomeChanged?: boolean;
+  /** Label of a per-run OBJECTIVE completed this step (last one), else null. */
+  objectiveDone?: string | null;
   /** Instrumentation (surfaced in ?debug=1): active obstacles checked this frame. */
   evaluated?: number;
   /** Instrumentation: lateral gap to the nearest obstacle (by |longitudinal|). */

@@ -810,6 +810,8 @@ export const JUICE = {
   nearMissPulse: 0.35,
   /** Powerup collection: brief screen glow flash (s) in the pickup's colour. */
   pickupFlash: 0.3,
+  /** Milestone / objective toast: total on-screen time (ms) including fades. */
+  milestoneToastMs: 1900,
   /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
   nearMissSlowmo: 0.12,
   slowmoScale: 0.45,
@@ -884,7 +886,73 @@ export const AUDIO = {
   pickupDecay: 0.16,
   pickupStop: 0.18,
   pickupNoteGap: 0.07,
+  /** Milestone fanfare: a brighter THREE-note ascending arpeggio (a bigger
+   *  "achievement" than a pickup). Frequencies (Hz), per-note gain, gap between
+   *  notes (s), and note decay/stop (s). */
+  milestoneHz: [660, 880, 1320] as readonly number[],
+  milestoneGain: 0.16,
+  milestoneNoteGap: 0.085,
+  milestoneDecay: 0.2,
+  milestoneStop: 0.22,
 } as const;
+
+/**
+ * Distance MILESTONES — a sense of progress within a run. Each is a one-shot
+ * distance threshold that fires a celebratory reward, granted through the
+ * EXISTING powerup / score hooks (no new special-casing): a milestone just
+ * calls grantPowerup() or adds to the score, exactly like a collected pickup or
+ * a ramp burst. Kept celebratory, not nagging — sparse and escalating.
+ *
+ * MUST stay sorted ascending by `distance` (the tracker fires them in order).
+ * Biome changes get their OWN celebration, detected from the biome system's
+ * advance rather than a hardcoded distance (see Milestones.ts), so they always
+ * line up with the actual environment transition regardless of BIOME_CYCLE.span.
+ */
+export type MilestoneReward =
+  | { readonly kind: 'powerup'; readonly powerup: PowerupKind }
+  | { readonly kind: 'score'; readonly amount: number };
+
+export interface Milestone {
+  /** Stable id (test/debug). */
+  readonly id: string;
+  /** Distance threshold in metres; fires once when distance first reaches it. */
+  readonly distance: number;
+  /** Toast text shown when hit. */
+  readonly label: string;
+  /** Reward, routed through the existing powerup/score systems. */
+  readonly reward: MilestoneReward;
+}
+
+export const MILESTONES: ReadonlyArray<Milestone> = [
+  { id: 'm1000', distance: 1000, label: '1000m — SHIELD!', reward: { kind: 'powerup', powerup: PowerupKind.Shield } },
+  { id: 'm2000', distance: 2000, label: '2000m — SLOW-MO!', reward: { kind: 'powerup', powerup: PowerupKind.SlowMo } },
+  { id: 'm3000', distance: 3000, label: '3000m — SCORE ×2!', reward: { kind: 'powerup', powerup: PowerupKind.ScoreBoost } },
+  { id: 'm4000', distance: 4000, label: '4000m — MAGNET!', reward: { kind: 'powerup', powerup: PowerupKind.Magnet } },
+  { id: 'm5000', distance: 5000, label: '5000m — LEGEND', reward: { kind: 'score', amount: 5000 } },
+  { id: 'm7500', distance: 7500, label: '7500m — SHIELD!', reward: { kind: 'powerup', powerup: PowerupKind.Shield } },
+  { id: 'm10000', distance: 10000, label: '10,000m — SCORE ×2!', reward: { kind: 'powerup', powerup: PowerupKind.ScoreBoost } },
+];
+
+/**
+ * Optional per-run OBJECTIVES — small self-directed goals shown subtly in the
+ * HUD. Each counts a kind of event over the run and latches when its target is
+ * reached (a quiet toast, no extra reward — they exist for the sense of a goal,
+ * not to double-dip on powerups). The three ids map to existing per-step events
+ * (near-miss / pickup-collected / ramp), so no new tracking is invented.
+ */
+export type ObjectiveId = 'nearMiss' | 'collect' | 'ramp';
+
+export interface Objective {
+  readonly id: ObjectiveId;
+  readonly label: string;
+  readonly target: number;
+}
+
+export const OBJECTIVES: ReadonlyArray<Objective> = [
+  { id: 'nearMiss', label: 'Thread 5 near-misses', target: 5 },
+  { id: 'collect', label: 'Collect 3 powerups', target: 3 },
+  { id: 'ramp', label: 'Ride 2 ramps', target: 2 },
+];
 
 /** Front-end shell / overlay UI tuning. */
 export const UI = {

@@ -57,18 +57,16 @@ describe('HUD combo funnel (detection -> increment -> display)', () => {
     const intent: InputIntent = { steer: 0, handbrake: false, restart: false };
 
     // Replicate main.ts: fixed-timestep update loop, then hud.sync once per frame.
-    let sawComboAboveOne = false;
+    // Invariant under test: the HUD combo text MIRRORS the internal combo on
+    // every single frame (this is exactly the desync the symptom would be).
+    let frames = 0;
     for (let frame = 0; frame < 60 * 60; frame++) {
       update(game, intent, TIMESTEP);
       hud.sync(game, { distance: 0, score: 0 });
-      const text = comboText(parent);
-      if (text && text !== 'x1.0' && game.phase === 'playing') sawComboAboveOne = true;
+      expect(comboText(parent)).toBe(`x${game.score.combo.toFixed(1)}`);
+      frames++;
       if (game.phase !== 'playing') break;
     }
-    // Over a straight-line run the car will eventually pass obstacles closely;
-    // if/when the combo rises, the HUD text must rise with it. If it never rose
-    // here that's fine (no near-miss happened) — the planted-funnel test above is
-    // the deterministic proof. This guards the loop wiring doesn't desync.
-    expect(typeof sawComboAboveOne).toBe('boolean');
+    expect(frames).toBeGreaterThan(0);
   });
 });

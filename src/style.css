@@ -1,4 +1,5 @@
-/* Global layout for the full-viewport canvas and HUD overlay. */
+/* Global layout for the full-viewport canvas and HUD overlay. Palette:
+   #ff00ff magenta, #00ffff cyan, #1a0033 deep purple, #ff6600 accent. */
 
 * {
   margin: 0;
@@ -13,6 +14,7 @@ body,
   height: 100%;
   overflow: hidden;
   background: #1a0033;
+  touch-action: none;
 }
 
 #app {
@@ -29,18 +31,94 @@ body,
   inset: 0;
   pointer-events: none;
   font-family: 'Segoe UI', system-ui, sans-serif;
+  color: #00ffff;
+  user-select: none;
+}
+
+/* --- live stats bar ---------------------------------------------------- */
+.hud-stats {
+  position: absolute;
+  top: 16px;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: clamp(12px, 4vw, 40px);
+  justify-content: center;
+  align-items: baseline;
+  font-variant-numeric: tabular-nums;
+  transition: opacity 0.3s ease;
+}
+
+.hud-stat {
+  font-size: clamp(14px, 3vw, 22px);
+  font-weight: 700;
+  text-shadow: 0 0 8px #00ffff;
+}
+
+.hud-combo {
+  font-size: clamp(16px, 4vw, 28px);
+  font-weight: 800;
+  color: #ff6600;
+  text-shadow: 0 0 10px #ff6600;
+  transition: opacity 0.2s ease;
+}
+
+.hud-best {
+  font-size: clamp(12px, 2.4vw, 16px);
+  color: #ff00ff;
+  text-shadow: 0 0 8px #ff00ff;
+  opacity: 0.85;
+}
+
+/* --- full-screen menu / crash panels ----------------------------------- */
+.hud-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 45%, rgba(26, 0, 51, 0.2), rgba(26, 0, 51, 0.85));
 }
 
 .hud-title {
-  position: absolute;
-  top: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: clamp(28px, 8vw, 64px);
-  font-weight: 800;
-  letter-spacing: 0.2em;
+  font-size: clamp(40px, 12vw, 110px);
+  font-weight: 900;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
+  color: #00ffff;
   text-shadow:
-    0 0 8px #00ffff,
-    0 0 20px #00ffff;
+    0 0 12px #00ffff,
+    0 0 32px #ff00ff;
+}
+
+.hud-wipeout {
+  color: #ff00ff;
+  text-shadow:
+    0 0 12px #ff00ff,
+    0 0 36px #ff6600;
+}
+
+.hud-prompt {
+  font-size: clamp(14px, 3.5vw, 22px);
+  letter-spacing: 0.1em;
+  opacity: 0.9;
+  animation: hud-pulse 1.4s ease-in-out infinite;
+}
+
+.hud-prompt b {
+  color: #ff6600;
+}
+
+.hud-crash-line {
+  font-size: clamp(16px, 4vw, 26px);
+  font-weight: 700;
+  text-shadow: 0 0 8px #00ffff;
+}
+
+@keyframes hud-pulse {
+  0%, 100% { opacity: 0.45; }
+  50% { opacity: 1; }
 }

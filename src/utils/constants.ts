@@ -135,6 +135,50 @@ export const FOG = {
 export const GRID = {
   size: 4000,
   divisions: 160,
+  /** Y offset below the road surface. */
+  y: -0.05,
+} as const;
+
+/** Road visual tuning (rendering only — geometry is reused per pool slot). */
+export const ROAD_VIS = {
+  /** Half-width of the glowing edge strip. */
+  edgeHalfWidth: 0.18,
+  /** Height of edge/stripe geometry above the ground. */
+  edgeHeight: 0.06,
+  /** Centre lane stripes per segment. */
+  stripesPerSegment: 2,
+  /** Stripe length (world units) along the segment. */
+  stripeLength: 6,
+  /** Stripe half-width. */
+  stripeHalfWidth: 0.12,
+} as const;
+
+/** Player car visual tuning. */
+export const CAR_VIS = {
+  width: 1.9,
+  height: 0.8,
+  length: 4.0,
+  /** Roll (radians) at full lateral velocity, for steering feel. */
+  maxRoll: 0.25,
+  /** Lateral velocity that maps to maxRoll. */
+  rollReference: 30,
+  /** Headlight cone length + offset. */
+  headlightLength: 8,
+  headlightInset: 0.6,
+} as const;
+
+/** Horizon sun + wireframe mountains (procedural, fog-excluded). */
+export const ENV = {
+  /** Distance ahead of the camera the horizon backdrop sits. */
+  distance: 900,
+  sunRadius: 220,
+  sunY: 120,
+  /** Horizontal band count carved out of the sun disc. */
+  sunBands: 9,
+  mountainCount: 28,
+  mountainSpread: 1400,
+  mountainMaxHeight: 140,
+  mountainBaseY: 0,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */

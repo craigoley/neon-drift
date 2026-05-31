@@ -1,7 +1,13 @@
 /**
- * Renders the player car: a low-poly body with glowing neon edge lines and twin
- * headlight beams. Reads VehicleState (pure) and positions/rolls the mesh; never
- * mutates state. All geometry built once.
+ * Renders the player car: a dark low-poly body with glowing neon edge lines.
+ * Reads VehicleState (pure) and positions/rolls the mesh; never mutates state.
+ * All geometry built once.
+ *
+ * The forward headlight cones were removed: from the chase cam (behind/above)
+ * the open cones rendered as two flat triangles stuck to the car's nose rather
+ * than reading as light (additive blending on a flat, unlit cone still paints
+ * solid triangles). They didn't earn their place, so the car is now just the
+ * neon wireframe box.
  */
 
 import * as THREE from 'three';
@@ -11,10 +17,8 @@ import { CAR_VIS, PALETTE } from '../utils/constants';
 
 export class VehicleRenderer {
   readonly group = new THREE.Group();
-  private readonly isDebug: boolean;
 
-  constructor(scene: THREE.Scene, isDebug = false) {
-    this.isDebug = isDebug;
+  constructor(scene: THREE.Scene) {
     const { width, height, length } = CAR_VIS;
 
     // Dark body so the emissive edges read as neon wireframe.
@@ -31,49 +35,7 @@ export class VehicleRenderer {
     edges.position.y = height / 2;
 
     this.group.add(body, edges);
-    this.group.add(this.makeHeadlight(-width / 2 + CAR_VIS.headlightInset, length));
-    this.group.add(this.makeHeadlight(width / 2 - CAR_VIS.headlightInset, length));
-
     scene.add(this.group);
-  }
-
-  /**
-   * A soft forward-pointing light beam. Additive blending (not normal) is what
-   * makes the open cone read as *light* rather than a flat orange triangle: it
-   * ADDS its colour to the scene, brightest where the beam is densest and
-   * fading into nothing at the edges. depthWrite off + a render order after the
-   * opaque geometry keeps it from ever punching a solid hole over the car.
-   * Intensity (headlightOpacity) and length (headlightLength) live in CAR_VIS.
-   */
-  private makeHeadlight(x: number, length: number): THREE.Mesh {
-    // ?debug=1: render the cones as flat, fully-opaque BRIGHT GREEN so the
-    // "orange triangles" can be identified with certainty (if they turn green,
-    // they ARE these headlight cones; if they stay orange/turn blue, they're not).
-    const material = this.isDebug
-      ? new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide })
-      : new THREE.MeshBasicMaterial({
-          color: PALETTE.accent,
-          transparent: true,
-          opacity: CAR_VIS.headlightOpacity,
-          side: THREE.DoubleSide,
-          depthWrite: false,
-          blending: THREE.AdditiveBlending,
-        });
-    const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(
-        CAR_VIS.headlightConeRadius,
-        CAR_VIS.headlightLength,
-        CAR_VIS.headlightConeSegments,
-        1,
-        true,
-      ),
-      material,
-    );
-    cone.renderOrder = CAR_VIS.headlightRenderOrder; // draw after opaque geometry
-    // Point the cone forward (-z) and sit it at the car's nose.
-    cone.rotation.x = -Math.PI / 2;
-    cone.position.set(x, CAR_VIS.height / 2, -length / 2 - CAR_VIS.headlightLength / 2);
-    return cone;
   }
 
   /** Mirror pure state onto the transform; roll into the steer for feel. */

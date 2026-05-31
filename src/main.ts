@@ -31,9 +31,6 @@ const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
 
 const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
-// Debug mode (?debug=1): enables the funnel panel and the mesh-identification
-// tints (headlight cones -> green, mountains -> blue).
-const isDebug = new URLSearchParams(window.location.search).get('debug') === '1';
 
 // Pure game layer.
 const game = createGameState();
@@ -53,9 +50,9 @@ window.addEventListener('touchstart', resumeAudio, { once: true });
 // Rendering layer.
 const scene = new SceneManager(app, isTouch);
 const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
-const environment = new Environment(scene.scene, game.seed, isDebug);
+const environment = new Environment(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
-const vehicle = new VehicleRenderer(scene.scene, isDebug);
+const vehicle = new VehicleRenderer(scene.scene);
 const traffic = new TrafficRenderer(scene.scene);
 const speedLines = new SpeedLines(scene.scene);
 const shards = new CrashShards(scene.scene);

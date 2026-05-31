@@ -16,10 +16,8 @@ export class Environment {
   private readonly grid: THREE.GridHelper;
   private readonly backdrop = new THREE.Group();
   private readonly cellSize: number;
-  private readonly isDebug: boolean;
 
-  constructor(scene: THREE.Scene, seed: number, isDebug = false) {
-    this.isDebug = isDebug;
+  constructor(scene: THREE.Scene, seed: number) {
     this.cellSize = GRID.size / GRID.divisions;
 
     this.grid = new THREE.GridHelper(GRID.size, GRID.divisions, PALETTE.magenta, PALETTE.cyan);
@@ -100,21 +98,16 @@ export class Environment {
     // Background layer: drawn first (most-negative render order) with no depth
     // interaction, so the mountains sit behind the sun AND behind every gameplay
     // element — they can never overlap the car or traffic, only the far horizon.
-    // ?debug=1: render the mountains as BRIGHT BLUE so they can be identified
-    // with certainty against the headlight cones (green). If the offending
-    // triangles turn blue, they're the mountains; if green, the cones.
-    const mat = this.isDebug
-      ? new THREE.LineBasicMaterial({ color: 0x0000ff, fog: false, depthWrite: false, depthTest: false })
-      : new THREE.LineBasicMaterial({
-          color: PALETTE.cyan,
-          fog: false,
-          depthWrite: false,
-          depthTest: false,
-          // Faint so the waveform silhouette doesn't fight the sun's bands at the
-          // horizon — it reads as a distant ridge, not a competing bright line.
-          transparent: true,
-          opacity: ENV.mountainOpacity,
-        });
+    const mat = new THREE.LineBasicMaterial({
+      color: PALETTE.cyan,
+      fog: false,
+      depthWrite: false,
+      depthTest: false,
+      // Faint so the waveform silhouette doesn't fight the sun's bands at the
+      // horizon — it reads as a distant ridge, not a competing bright line.
+      transparent: true,
+      opacity: ENV.mountainOpacity,
+    });
     const lines = new THREE.LineSegments(geo, mat);
     lines.position.set(0, ENV.mountainBaseY, -ENV.distance * ENV.mountainDepthFactor);
     lines.renderOrder = ENV.mountainRenderOrder;

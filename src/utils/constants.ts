@@ -18,8 +18,6 @@ export const PALETTE = {
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
 export const CSS_PALETTE = {
   magenta: '#ff00ff',
-  /** Lighter magenta tint used for the top of the horizon-sun gradient. */
-  magentaLight: '#ff66ff',
   cyan: '#00ffff',
   deepPurple: '#1a0033',
   accent: '#ff6600',
@@ -234,14 +232,10 @@ export const TRAFFIC_VIS = {
   meshY: 0.6,
 } as const;
 
-/** Horizon sun + wireframe mountains (procedural, fog-excluded). */
+/** Horizon backdrop placement + wireframe mountains (procedural, fog-excluded). */
 export const ENV = {
   /** Distance ahead of the camera the horizon backdrop sits. */
   distance: 900,
-  sunRadius: 220,
-  sunY: 120,
-  /** Horizontal band count carved out of the sun disc. */
-  sunBands: 9,
   mountainCount: 28,
   mountainSpread: 1400,
   // Lowered (was 140) so the ridge sits below the sun's banded core instead of
@@ -254,12 +248,63 @@ export const ENV = {
    *  sun), so the silhouette reads clearly behind the sun's framing. */
   mountainDepthFactor: 0.4,
   /**
-   * Backdrop render order. Sun + mountains are drawn as a guaranteed-background
-   * layer (depthTest/Write off) BEFORE all gameplay geometry, so they can never
-   * paint over the car or traffic. Mountains sit behind the sun (drawn first).
+   * Mountain render order. The backdrop (sun + mountains) is drawn as a
+   * guaranteed-background layer (depthTest/Write off) BEFORE all gameplay
+   * geometry, so it can never paint over the car or traffic. Mountains sit
+   * behind the sun (drawn first / most-negative order).
    */
-  sunRenderOrder: -1,
   mountainRenderOrder: -2,
+} as const;
+
+/**
+ * The signature synthwave "retrosun": a vertical colour gradient (warm hot top
+ * → deep-purple base) overlaid with horizontal scanline bands that thin and
+ * tighten toward the bottom — a sunset, not a flat striped disc. Rendered as a
+ * CanvasTexture on a single background plane (no extra post-processing pass);
+ * see rendering/Environment.ts. Every value here is tunable.
+ */
+export const SUN = {
+  /** Plane half-extent / disc radius (world units). */
+  radius: 220,
+  /** Vertical position of the sun centre (world units, above the horizon). */
+  y: 120,
+  /** Square CanvasTexture resolution in pixels. */
+  textureSize: 384,
+  /**
+   * Vertical gradient stops, top (at: 0) → bottom (at: 1), as CSS colour
+   * strings drawn into a 2D linear gradient. A hot warm core blends down
+   * through orange and hot pink to magenta, ending in the deep purple that
+   * meets the night sky at the base.
+   */
+  gradient: [
+    { at: 0.0, color: '#ffd24a' }, // hot warm core (top)
+    { at: 0.3, color: '#ff7a18' }, // orange
+    { at: 0.58, color: '#ff2d95' }, // hot pink
+    { at: 0.82, color: '#ff00ff' }, // magenta
+    { at: 1.0, color: '#1a0033' }, // deep purple base
+  ] as ReadonlyArray<{ at: number; color: string }>,
+  /** Number of horizontal scanline bands carved from the disc. */
+  bandCount: 12,
+  /**
+   * Fraction of the disc height (from the top) where banding begins — bands
+   * only cut the lower portion so the warm upper core stays a solid glow.
+   */
+  bandStartFraction: 0.4,
+  /**
+   * Thinning-curve exponent (> 1). Higher bunches the bands harder toward the
+   * bottom: wide gaps near the top, tight scanlines down at the horizon.
+   */
+  bandThinningCurve: 2.6,
+  /** Each band's carved thickness as a fraction of its local gap to the next. */
+  bandThicknessRatio: 0.5,
+  /** Background render order (drawn before all gameplay geometry). */
+  renderOrder: -1,
+  /**
+   * Phase 3 — slow downward drift of the scanlines, in band-spacings per
+   * second. Set to 0 to disable motion entirely (and all per-frame texture
+   * work). Subtle by design; tune during playtest.
+   */
+  scrollSpeed: 0.03,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */

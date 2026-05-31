@@ -32,7 +32,15 @@ permissions:
   contents: read
 
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.event.issue.number }}
+  # Scope by EVENT TYPE. Without this, a bot comment (issue_comment — e.g.
+  # vercel[bot]'s preview-deploy comment, which lands on every PR) shares the
+  # same group as the pull_request review run and, with cancel-in-progress,
+  # CANCELS it mid-flight ("Set up job: cancelled") before it can merge. Observed
+  # directly: a vercel[bot] comment killed the review run ~2s after it started.
+  # Including event_name keeps comment events in their own group; within an event
+  # type, cancel-in-progress still supersedes a stale run (a new push cancels an
+  # older review of the same PR).
+  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number }}
   cancel-in-progress: true
 
 jobs:

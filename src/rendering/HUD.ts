@@ -23,6 +23,7 @@ export class HUD {
   private readonly menu: HTMLElement;
   private readonly crash: HTMLElement;
   private readonly crashScore: HTMLElement;
+  private readonly crashCombo: HTMLElement;
   private readonly crashBest: HTMLElement;
 
   constructor(parent: HTMLElement) {
@@ -46,12 +47,15 @@ export class HUD {
     const crashTitle = el('h1', 'hud-title hud-wipeout');
     crashTitle.textContent = 'WIPEOUT';
     this.crashScore = el('p', 'hud-crash-line');
+    // Peak multiplier for the run — the live combo resets on crash, so this is
+    // where the player sees how daring the run actually was.
+    this.crashCombo = el('p', 'hud-crash-combo');
     this.crashBest = el('p', 'hud-crash-line');
     const crashPrompt = el('p', 'hud-prompt');
     // Any keydown triggers restart (see Controls.onKey), so match the menu's
     // wording rather than implying only Enter works.
     crashPrompt.innerHTML = `press <b>any key</b> / <b>tap</b> to restart`;
-    this.crash.append(crashTitle, this.crashScore, this.crashBest, crashPrompt);
+    this.crash.append(crashTitle, this.crashScore, this.crashCombo, this.crashBest, crashPrompt);
 
     root.append(this.stats, this.menu, this.crash);
     parent.appendChild(root);
@@ -72,6 +76,9 @@ export class HUD {
 
     if (game.phase === Phase.Crashed) {
       this.crashScore.textContent = `score ${Math.round(game.score.score)} · ${Math.round(game.distance)} m`;
+      this.crashCombo.textContent = `MAX COMBO x${game.score.maxCombo.toFixed(1)}`;
+      // Dim the line when the run never built a combo, so a daring run pops.
+      this.crashCombo.style.opacity = game.score.maxCombo > 1 ? '1' : '0.45';
       this.crashBest.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
     }
   }

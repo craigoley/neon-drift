@@ -136,6 +136,17 @@ body,
   text-shadow: 0 0 8px #00ffff;
 }
 
+/* Peak combo for the run — the headline reward on the WIPEOUT screen. */
+.hud-crash-combo {
+  font-size: clamp(20px, 6vw, 40px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ff8a3d;
+  text-shadow:
+    0 0 10px #ff6600,
+    0 0 28px #ff00ff;
+}
+
 @keyframes hud-pulse {
   0%, 100% { opacity: 0.45; }
   50% { opacity: 1; }

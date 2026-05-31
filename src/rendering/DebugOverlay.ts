@@ -85,7 +85,7 @@ export class DebugOverlay {
       `2 closest lat/lon    ${closeLat} / ${closeLon}\n` +
       `3 near-miss thresh   ${SCORING.nearMissLateral.toFixed(2)} (lat gap < this = hit)\n` +
       `4 near-miss events   ${score.nearMisses}\n` +
-      `5 combo INTERNAL     ${score.combo.toFixed(3)}\n` +
+      `5 combo INTERNAL     ${score.combo.toFixed(3)}  (peak ${score.maxCombo.toFixed(2)})\n` +
       `6 combo HUD-bound    ${hudComboText}\n` +
       `7 combo timer        ${score.comboTimer.toFixed(2)}s\n` +
       `  score ${score.score.toFixed(0)}  score/dist ${scoreRatio.toFixed(2)}`;

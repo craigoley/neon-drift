@@ -23,6 +23,7 @@ import { CrashShards } from './rendering/CrashShards';
 import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
+import { BestStore } from './storage/BestStore';
 import { Telemetry } from './utils/Telemetry';
 import { JUICE, TIMESTEP } from './utils/constants';
 
@@ -60,8 +61,8 @@ const hud = new HUD(app);
 const debug = new DebugOverlay(app);
 const telemetry = new Telemetry();
 
-// Best run (wired to persistence in a later step).
-const best = { distance: 0, score: 0 };
+// Persisted best run (localStorage).
+const bestStore = new BestStore();
 
 let last = performance.now();
 let accumulator = 0;
@@ -98,6 +99,7 @@ function frame(now: number): void {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, 1, 0);
     screenFx.flashCrash();
+    bestStore.submit(game.distance, game.score.score);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
@@ -124,7 +126,7 @@ function frame(now: number): void {
   );
   shards.update(realDt);
   screenFx.update(realDt);
-  hud.sync(game, best);
+  hud.sync(game, bestStore.best);
   debug.update(game, telemetry);
 
   post.render();

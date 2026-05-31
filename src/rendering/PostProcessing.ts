@@ -1,28 +1,63 @@
 /**
- * Post-processing seam for the synthwave bloom/glow look.
+ * Bloom post-processing for the synthwave neon glow.
  *
- * SCAFFOLD STUB: this establishes the architectural seam without committing to
- * an effect chain yet. Today it renders straight through the SceneManager. When
- * gameplay lands, this is where an EffectComposer + UnrealBloomPass
- * (`three/addons/postprocessing/...`) will be wired so the neon geometry glows.
+ * Step 1 findings (verified against three 0.184.0 source):
+ *   - Chain order MUST be RenderPass -> UnrealBloomPass -> OutputPass.
+ *   - OutputPass is LAST; it reads renderer.toneMapping / outputColorSpace /
+ *     toneMappingExposure (set in SceneManager) and applies tone mapping + the
+ *     sRGB transfer. Omitting it writes the linear composer result straight to
+ *     the sRGB framebuffer -> washed-out colours.
+ *   - Render via composer.render(), NEVER renderer.render().
+ * On touch devices the bloom pass runs at a reduced internal resolution for GPU
+ * headroom (the composer itself stays at full resolution).
  */
 
-import type { SceneManager } from './SceneManager';
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { BLOOM } from '../utils/constants';
 
 export class PostProcessing {
-  private readonly sceneManager: SceneManager;
+  private readonly composer: EffectComposer;
+  private readonly bloom: UnrealBloomPass;
+  private readonly resScale: number;
 
-  constructor(sceneManager: SceneManager) {
-    this.sceneManager = sceneManager;
+  constructor(
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    renderer: THREE.WebGLRenderer,
+    isTouch: boolean,
+  ) {
+    this.resScale = isTouch ? BLOOM.mobileResolutionScale : 1;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+
+    this.composer = new EffectComposer(renderer);
+    this.composer.setPixelRatio(renderer.getPixelRatio());
+    this.composer.setSize(w, h);
+
+    this.composer.addPass(new RenderPass(scene, camera));
+
+    this.bloom = new UnrealBloomPass(
+      new THREE.Vector2(w * this.resScale, h * this.resScale),
+      BLOOM.strength,
+      BLOOM.radius,
+      BLOOM.threshold,
+    );
+    this.composer.addPass(this.bloom);
+
+    // OutputPass must be last (tone mapping + sRGB conversion).
+    this.composer.addPass(new OutputPass());
   }
 
-  /** Render one frame. Currently a straight passthrough; bloom comes later. */
   render(): void {
-    this.sceneManager.render();
+    this.composer.render();
   }
 
-  /** Keep effect buffers in sync with the viewport. No-op until bloom exists. */
-  resize(_width: number, _height: number): void {
-    // Intentionally empty until the EffectComposer is added.
+  setSize(width: number, height: number): void {
+    this.composer.setSize(width, height);
+    this.bloom.setSize(width * this.resScale, height * this.resScale);
   }
 }

@@ -1,28 +1,68 @@
 /**
- * Renders the player vehicle as procedural neon geometry. Reads VehicleState
- * (a pure type from the game layer) and positions the mesh. Never mutates it.
+ * Renders the player car: a low-poly body with glowing neon edge lines and twin
+ * headlight beams. Reads VehicleState (pure) and positions/rolls the mesh; never
+ * mutates state. All geometry built once.
  */
 
 import * as THREE from 'three';
 import type { VehicleState } from '../game/Vehicle';
-import { PALETTE } from '../utils/constants';
+import { clamp } from '../utils/math';
+import { CAR_VIS, PALETTE } from '../utils/constants';
 
 export class VehicleRenderer {
-  readonly mesh: THREE.Mesh;
+  readonly group = new THREE.Group();
 
   constructor(scene: THREE.Scene) {
-    const geometry = new THREE.BoxGeometry(1.4, 0.6, 2.4);
-    const material = new THREE.MeshBasicMaterial({
-      color: PALETTE.accent,
-      wireframe: true,
-    });
-    this.mesh = new THREE.Mesh(geometry, material);
-    this.mesh.position.set(0, 0.3, 0);
-    scene.add(this.mesh);
+    const { width, height, length } = CAR_VIS;
+
+    // Dark body so the emissive edges read as neon wireframe.
+    const body = new THREE.Mesh(
+      new THREE.BoxGeometry(width, height, length),
+      new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple }),
+    );
+    body.position.y = height / 2;
+
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, length)),
+      new THREE.LineBasicMaterial({ color: PALETTE.cyan }),
+    );
+    edges.position.y = height / 2;
+
+    this.group.add(body, edges);
+    this.group.add(this.makeHeadlight(-width / 2 + CAR_VIS.headlightInset, length));
+    this.group.add(this.makeHeadlight(width / 2 - CAR_VIS.headlightInset, length));
+
+    scene.add(this.group);
   }
 
-  /** Mirror the pure vehicle state onto the mesh transform. */
+  /** A bright forward-pointing cone standing in for a headlight beam. */
+  private makeHeadlight(x: number, length: number): THREE.Mesh {
+    const cone = new THREE.Mesh(
+      new THREE.ConeGeometry(
+        CAR_VIS.headlightConeRadius,
+        CAR_VIS.headlightLength,
+        CAR_VIS.headlightConeSegments,
+        1,
+        true,
+      ),
+      new THREE.MeshBasicMaterial({
+        color: PALETTE.accent,
+        transparent: true,
+        opacity: CAR_VIS.headlightOpacity,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    // Point the cone forward (-z) and sit it at the car's nose.
+    cone.rotation.x = -Math.PI / 2;
+    cone.position.set(x, CAR_VIS.height / 2, -length / 2 - CAR_VIS.headlightLength / 2);
+    return cone;
+  }
+
+  /** Mirror pure state onto the transform; roll into the steer for feel. */
   sync(state: VehicleState): void {
-    this.mesh.position.x = state.lateral;
+    this.group.position.x = state.lateral;
+    const roll = clamp(-state.lateralVel / CAR_VIS.rollReference, -1, 1) * CAR_VIS.maxRoll;
+    this.group.rotation.z = roll;
   }
 }

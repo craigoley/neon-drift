@@ -1,44 +1,66 @@
 /**
- * Renders the road: the glowing centre line and lane dividers. Reads road
- * descriptors from the pure game layer and positions geometry accordingly.
- * Never mutates game state.
+ * Renders the recycled road-segment pool. One reusable "tile" group is built per
+ * pool slot (glowing edge rails + centre lane stripes) using shared geometries;
+ * each frame the tiles are repositioned from the pure RoadState. No geometry is
+ * allocated per frame. Reads game state; never mutates it.
  */
 
 import * as THREE from 'three';
-import { laneCenters } from '../game/Road';
-import { PALETTE, ROAD } from '../utils/constants';
+import type { RoadState } from '../game/Road';
+import { poolSize } from '../game/Road';
+import { ROAD, ROAD_VIS, PALETTE } from '../utils/constants';
 
 export class RoadRenderer {
-  readonly group = new THREE.Group();
-  private readonly length = ROAD.segmentLength * ROAD.visibleSegments;
+  private readonly group = new THREE.Group();
+  private readonly tiles: THREE.Group[] = [];
+
+  // Shared geometries + materials (created once, reused by every tile).
+  private readonly edgeGeo: THREE.BoxGeometry;
+  private readonly stripeGeo: THREE.BoxGeometry;
+  private readonly edgeMat: THREE.MeshBasicMaterial;
+  private readonly stripeMat: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene) {
-    // Glowing magenta centre line running into the distance.
-    this.group.add(this.makeLine(0, PALETTE.magenta));
+    this.edgeGeo = new THREE.BoxGeometry(ROAD_VIS.edgeHalfWidth * 2, ROAD_VIS.edgeHeight, ROAD.segmentLength);
+    this.stripeGeo = new THREE.BoxGeometry(ROAD_VIS.stripeHalfWidth * 2, ROAD_VIS.edgeHeight, ROAD_VIS.stripeLength);
+    this.edgeMat = new THREE.MeshBasicMaterial({ color: PALETTE.magenta });
+    this.stripeMat = new THREE.MeshBasicMaterial({ color: PALETTE.cyan });
 
-    // Cyan lane dividers either side, dimmer than the centre line.
-    for (const x of laneCenters()) {
-      if (x === 0) continue;
-      this.group.add(this.makeLine(x, PALETTE.cyan));
+    for (let i = 0; i < poolSize(); i++) {
+      this.tiles.push(this.makeTile());
     }
-
+    this.tiles.forEach((t) => this.group.add(t));
     scene.add(this.group);
   }
 
-  private makeLine(x: number, color: number): THREE.Line {
-    const geometry = new THREE.BufferGeometry().setFromPoints([
-      new THREE.Vector3(x, 0, ROAD.segmentLength),
-      new THREE.Vector3(x, 0, -this.length),
-    ]);
-    const material = new THREE.LineBasicMaterial({ color });
-    return new THREE.Line(geometry, material);
+  private makeTile(): THREE.Group {
+    const tile = new THREE.Group();
+
+    const left = new THREE.Mesh(this.edgeGeo, this.edgeMat);
+    left.position.x = -ROAD.halfWidth;
+    const right = new THREE.Mesh(this.edgeGeo, this.edgeMat);
+    right.position.x = ROAD.halfWidth;
+    tile.add(left, right);
+
+    // Evenly spaced centre stripes along the segment.
+    const spacing = ROAD.segmentLength / ROAD_VIS.stripesPerSegment;
+    for (let s = 0; s < ROAD_VIS.stripesPerSegment; s++) {
+      const stripe = new THREE.Mesh(this.stripeGeo, this.stripeMat);
+      stripe.position.z = -ROAD.segmentLength / 2 + spacing * (s + 0.5);
+      tile.add(stripe);
+    }
+    return tile;
   }
 
-  /**
-   * Scroll the road to match travelled distance. The geometry repeats every
-   * segment, so we only need the fractional offset within one segment.
-   */
-  sync(distance: number): void {
-    this.group.position.z = distance % ROAD.segmentLength;
+  /** Map each pool segment onto its tile. The car is at z = 0; ahead is -z. */
+  sync(road: RoadState, distance: number): void {
+    const segments = road.segments;
+    for (let i = 0; i < this.tiles.length; i++) {
+      const seg = segments[i];
+      const tile = this.tiles[i];
+      // Near edge world-z, then shift back by half a segment to centre the tile.
+      const nearZ = -(seg.start - distance);
+      tile.position.set(seg.curve, 0, nearZ - ROAD.segmentLength / 2);
+    }
   }
 }

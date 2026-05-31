@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clamp, inverseLerp, laneCenter, lerp, wrap } from '../../utils/math';
+import { aabbOverlap, clamp, decay, intervalsOverlap, lerp } from '../../utils/math';
 
 describe('math helpers', () => {
   it('clamps into range', () => {
@@ -8,17 +8,20 @@ describe('math helpers', () => {
     expect(clamp(99, 0, 10)).toBe(10);
   });
 
-  it('lerps and inverse-lerps consistently', () => {
+  it('lerps', () => {
     expect(lerp(0, 10, 0.5)).toBe(5);
-    expect(inverseLerp(0, 10, 5)).toBe(0.5);
   });
 
-  it('wraps into [0, range)', () => {
-    expect(wrap(12, 10)).toBe(2);
-    expect(wrap(-1, 10)).toBe(9);
+  it('decay returns full quantity at dt=0 and shrinks over time', () => {
+    expect(decay(0.5, 0)).toBe(1);
+    expect(decay(0.5, 1)).toBeCloseTo(0.5);
+    expect(decay(0.5, 2)).toBeCloseTo(0.25);
   });
 
-  it('places the centre lane at x = 0 for an odd lane count', () => {
-    expect(laneCenter(1, 3, 12)).toBe(0);
+  it('interval + aabb overlap', () => {
+    expect(intervalsOverlap(0, 1, 1.5, 1)).toBe(true);
+    expect(intervalsOverlap(0, 1, 2.5, 1)).toBe(false);
+    expect(aabbOverlap(0, 0, 1, 1, 0.5, 0.5, 1, 1)).toBe(true);
+    expect(aabbOverlap(0, 0, 1, 1, 5, 5, 1, 1)).toBe(false);
   });
 });

@@ -1,48 +1,43 @@
 /**
- * Renders traffic obstacles. Keeps a pool of meshes keyed by obstacle id and
- * positions them from the pure TrafficState each frame. Never mutates state.
+ * Renders traffic obstacles as a single InstancedMesh sized to the pure pool.
+ * Each frame, active obstacles get a transform and inactive slots are collapsed
+ * to zero scale. One reused scratch Object3D composes the matrices — no per-frame
+ * allocation. Reads game state; never mutates it.
  */
 
 import * as THREE from 'three';
 import type { TrafficState } from '../game/Traffic';
-import { laneCenters } from '../game/Road';
-import { PALETTE } from '../utils/constants';
+import { TRAFFIC, TRAFFIC_VIS, PALETTE } from '../utils/constants';
 
 export class TrafficRenderer {
-  private readonly group = new THREE.Group();
-  private readonly geometry = new THREE.BoxGeometry(1.6, 1, 2.6);
-  private readonly material = new THREE.MeshBasicMaterial({
-    color: PALETTE.cyan,
-    wireframe: true,
-  });
-  private readonly pool = new Map<number, THREE.Mesh>();
+  private readonly mesh: THREE.InstancedMesh;
+  private readonly dummy = new THREE.Object3D();
+  private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
   constructor(scene: THREE.Scene) {
-    scene.add(this.group);
+    const geo = new THREE.BoxGeometry(TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
+    const mat = new THREE.MeshBasicMaterial({ color: PALETTE.accent });
+    this.mesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
+    this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.mesh.frustumCulled = false;
+    scene.add(this.mesh);
   }
 
-  /** Reconcile the mesh pool with the current obstacle list. */
-  sync(state: TrafficState): void {
-    const lanes = laneCenters();
-    const live = new Set<number>();
-
-    for (const obstacle of state.obstacles) {
-      live.add(obstacle.id);
-      let mesh = this.pool.get(obstacle.id);
-      if (!mesh) {
-        mesh = new THREE.Mesh(this.geometry, this.material);
-        this.pool.set(obstacle.id, mesh);
-        this.group.add(mesh);
+  /** Position active obstacles; collapse inactive slots. Car at z = 0, ahead -z. */
+  sync(traffic: TrafficState, playerDistance: number): void {
+    const pool = traffic.pool;
+    for (let i = 0; i < pool.length; i++) {
+      const o = pool[i];
+      if (!o.active) {
+        this.mesh.setMatrixAt(i, this.hidden);
+        continue;
       }
-      mesh.position.set(lanes[obstacle.lane] ?? 0, 0.5, obstacle.z);
+      this.dummy.position.set(o.lateral, TRAFFIC_VIS.meshY, -(o.distance - playerDistance));
+      this.dummy.rotation.set(0, 0, 0);
+      this.dummy.scale.set(1, 1, 1);
+      this.dummy.updateMatrix();
+      this.mesh.setMatrixAt(i, this.dummy.matrix);
     }
-
-    // Remove meshes whose obstacles have been culled.
-    for (const [id, mesh] of this.pool) {
-      if (!live.has(id)) {
-        this.group.remove(mesh);
-        this.pool.delete(id);
-      }
-    }
+    this.mesh.instanceMatrix.needsUpdate = true;
   }
 }

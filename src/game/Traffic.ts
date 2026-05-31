@@ -18,11 +18,13 @@ export interface Obstacle {
   active: boolean;
   /** Unique id within a run (stable while active; for renderer pooling). */
   id: number;
-  /** Lateral position, 0 = centre (the live value, after any sway). */
+  /** Absolute lateral position (the live value: road centre + lane offset +
+   *  any sway, clamped to the road). 0 = world centre. */
   lateral: number;
-  /** Lane centre this obstacle was spawned on; movers sway about it. */
-  baseLateral: number;
-  /** Sway amplitude (world units); 0 = a static obstacle holding its line. */
+  /** Lane position as an offset from the road centre, so the obstacle tracks
+   *  the road through bends instead of holding an absolute line. */
+  laneOffset: number;
+  /** Sway amplitude (world units); 0 = a static obstacle holding its lane. */
   sway: number;
   /** Current sway phase (radians); advanced each frame for movers. */
   swayPhase: number;
@@ -54,7 +56,7 @@ export function createTrafficState(): TrafficState {
       active: false,
       id: -1,
       lateral: 0,
-      baseLateral: 0,
+      laneOffset: 0,
       sway: 0,
       swayPhase: 0,
       distance: 0,
@@ -89,6 +91,17 @@ function firstInactive(state: TrafficState): Obstacle | null {
 }
 
 /**
+ * Absolute lateral for an obstacle: the road centre at its current distance,
+ * plus its lane offset, plus any sway — clamped to the drivable corridor so it
+ * always sits on the road through bends. Pure.
+ */
+function resolveLateral(o: Obstacle, seed: number): number {
+  const center = roadCenterAt(seed, o.distance);
+  const sway = o.sway > 0 ? Math.sin(o.swayPhase) * o.sway : 0;
+  return clamp(center + o.laneOffset + sway, center - ROAD.halfWidth, center + ROAD.halfWidth);
+}
+
+/**
  * Advance traffic by `dt` seconds. Moves active obstacles forward, culls those
  * behind the player, and spawns new ones on the difficulty cadence. Mutates and
  * returns `state`; allocates nothing.
@@ -100,16 +113,14 @@ export function updateTraffic(
   playerDistance: number,
   dt: number,
 ): TrafficState {
-  // Move + cull + sway.
+  // Move + resolve lateral against the curve + cull.
   const cullLine = playerDistance - TRAFFIC.cullBehind;
   for (const o of state.pool) {
     if (!o.active) continue;
     o.distance += o.speed * dt;
-    // Movers drift laterally about their lane; static obstacles hold their line.
-    if (o.sway > 0) {
-      o.swayPhase += TRAFFIC.swayRate * dt;
-      o.lateral = o.baseLateral + Math.sin(o.swayPhase) * o.sway;
-    }
+    // Movers advance their sway phase; static obstacles hold their lane offset.
+    if (o.sway > 0) o.swayPhase += TRAFFIC.swayRate * dt;
+    o.lateral = resolveLateral(o, seed);
     if (o.distance < cullLine) {
       o.active = false;
       state.culled++;
@@ -122,13 +133,11 @@ export function updateTraffic(
     const slot = firstInactive(state);
     if (slot) {
       const spread = ROAD.halfWidth * TRAFFIC.lateralSpread;
-      const spawnDistance = playerDistance + TRAFFIC.spawnAhead;
-      // Spawn relative to the curved road centre so traffic sits on the road
-      // through bends, not in a fixed absolute lane.
-      const center = roadCenterAt(seed, spawnDistance);
       slot.active = true;
       slot.id = state.nextId++;
-      slot.baseLateral = clamp(center + rng.range(-spread, spread), -ROAD.halfWidth, ROAD.halfWidth);
+      // Pick a lane as an offset from the road centre; resolveLateral maps it to
+      // an absolute position on the curved road each frame.
+      slot.laneOffset = rng.range(-spread, spread);
       // A fraction become lane-changing movers.
       if (rng.next() < TRAFFIC.moverFraction) {
         slot.sway = rng.range(TRAFFIC.swayAmplitudeMin, TRAFFIC.swayAmplitudeMax);
@@ -137,9 +146,9 @@ export function updateTraffic(
         slot.sway = 0;
         slot.swayPhase = 0;
       }
-      slot.lateral = slot.baseLateral + Math.sin(slot.swayPhase) * slot.sway;
       slot.speed = rng.range(TRAFFIC.minSpeed, TRAFFIC.maxSpeed);
-      slot.distance = spawnDistance;
+      slot.distance = playerDistance + TRAFFIC.spawnAhead;
+      slot.lateral = resolveLateral(slot, seed);
       slot.passed = false;
       state.spawned++;
       state.sinceSpawn = 0;

@@ -5,6 +5,7 @@ import {
   spawnInterval,
   updateTraffic,
 } from '../Traffic';
+import { roadCenterAt } from '../Road';
 import { Rng } from '../../utils/rng';
 import { ROAD, TIMESTEP, TRAFFIC } from '../../utils/constants';
 
@@ -50,21 +51,30 @@ describe('Traffic — lane-changing movers', () => {
     const speed = 120;
     let movers = 0;
     let statics = 0;
+    let swayObserved = false;
     for (let step = 0; step < 8000; step++) {
       distance += speed * TIMESTEP;
       updateTraffic(traffic, rng, seed, distance, TIMESTEP);
       for (const o of traffic.pool) {
         if (!o.active) continue;
-        // Curve-relative spawn keeps every obstacle on the drivable road.
-        expect(Math.abs(o.baseLateral)).toBeLessThanOrEqual(ROAD.halfWidth + 1e-9);
-        // A mover never strays further than its amplitude from its lane centre.
-        expect(Math.abs(o.lateral - o.baseLateral)).toBeLessThanOrEqual(o.sway + 1e-9);
-        if (o.sway > 0) movers++;
-        else statics++;
+        // Every obstacle — static or swaying — stays on the curved drivable
+        // road: within [centre - halfWidth, centre + halfWidth] at its distance.
+        const center = roadCenterAt(seed, o.distance);
+        expect(o.lateral).toBeGreaterThanOrEqual(center - ROAD.halfWidth - 1e-9);
+        expect(o.lateral).toBeLessThanOrEqual(center + ROAD.halfWidth + 1e-9);
+        if (o.sway > 0) {
+          movers++;
+          // A mover's live position departs from its static lane line (centre +
+          // laneOffset) — proving the sway is actually applied.
+          if (Math.abs(o.lateral - (center + o.laneOffset)) > 0.3) swayObserved = true;
+        } else {
+          statics++;
+        }
       }
     }
     // Both behaviours occur over a long run (not all-static, not all-movers).
     expect(movers).toBeGreaterThan(0);
     expect(statics).toBeGreaterThan(0);
+    expect(swayObserved).toBe(true);
   });
 });

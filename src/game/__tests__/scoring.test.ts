@@ -10,7 +10,7 @@ import { createTrafficState, type Obstacle } from '../Traffic';
 import { SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
 
 function obstacleAt(lateral: number, distance: number): Obstacle {
-  return { active: true, id: 1, lateral, baseLateral: lateral, sway: 0, swayPhase: 0, distance, speed: 0, passed: false };
+  return { active: true, id: 1, lateral, laneOffset: lateral, sway: 0, swayPhase: 0, distance, speed: 0, passed: false };
 }
 
 describe('Scoring — collision detection', () => {
@@ -96,7 +96,7 @@ describe('Scoring — combo multiplier actually changes the score', () => {
       integrateScore(daring, speed, dt);
       distance += speed * dt;
     }
-    expect(cruise.score).toBeCloseTo(distance);
+    expect(cruise.score).toBeCloseTo(distance * SCORING.distanceFactor * SCORING.baseCombo);
     // If the combo weren't multiplied into the score these would be equal.
     expect(daring.score).toBeGreaterThan(cruise.score * 1.5);
     expect(daring.combo).toBeGreaterThan(SCORING.baseCombo);

@@ -2,7 +2,12 @@ name: Claude PR Review & Merge
 
 on:
   pull_request:
-    types: [opened, synchronize]
+    # `ready_for_review` is a deliberate neon-drift-specific divergence from
+    # ClawApp parity: visual PRs open as DRAFT, get playtested on device, then
+    # are marked "Ready for review" — that transition fires this trigger so the
+    # auto-merge runs hands-off. (Drafts still can't be merged: GitHub blocks
+    # merging a draft PR, so `gh pr merge` no-ops until the PR is ready.)
+    types: [opened, synchronize, ready_for_review]
     # Skip auto-review on PRs that only edit this workflow file. The
     # `anthropics/claude-code-action@v1` action refuses to run when its
     # workflow file differs from the version on `main` (a security check that

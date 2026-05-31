@@ -9,7 +9,7 @@
  */
 
 import { aabbOverlap } from '../utils/math';
-import { SCORING, TRAFFIC, VEHICLE } from '../utils/constants';
+import { SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
 import type { Obstacle, TrafficState } from './Traffic';
 
 export interface ScoreState {
@@ -33,10 +33,13 @@ export function createScoreState(): ScoreState {
 
 /**
  * Integrate score for one step and decay the combo timer. Score rises while the
- * vehicle moves (speed > 0). Mutates and returns `state`.
+ * vehicle moves (speed > 0). `multiplier` is an EXTERNAL gain multiplier (the
+ * SCORE-BOOST powerup passes 2 — stacking multiplicatively on top of the
+ * combo); it defaults to 1 so existing callers are unchanged. Mutates and
+ * returns `state`.
  */
-export function integrateScore(state: ScoreState, speed: number, dt: number): ScoreState {
-  state.score += speed * dt * SCORING.distanceFactor * state.combo;
+export function integrateScore(state: ScoreState, speed: number, dt: number, multiplier = 1): ScoreState {
+  state.score += speed * dt * SCORING.distanceFactor * state.combo * multiplier;
   if (state.comboTimer > 0) {
     state.comboTimer -= dt;
     if (state.comboTimer <= 0) {
@@ -84,6 +87,10 @@ export function isCollision(
 export interface TrafficEvents {
   crashed: boolean;
   nearMisses: number;
+  /** The powerup kind collected this step (last one), else null — for juice/audio. */
+  collected?: PowerupKind | null;
+  /** True on the step a held SHIELD absorbed a crash — for juice/audio. */
+  shieldBlocked?: boolean;
   /** Instrumentation (surfaced in ?debug=1): active obstacles checked this frame. */
   evaluated?: number;
   /** Instrumentation: lateral gap to the nearest obstacle (by |longitudinal|). */

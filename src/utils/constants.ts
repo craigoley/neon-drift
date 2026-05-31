@@ -68,6 +68,13 @@ export const VEHICLE = {
   lateralFriction: 0.02,
   /** Per-second retained fraction while the handbrake is held (drift). */
   handbrakeFriction: 0.5,
+  /**
+   * Hard ceiling on the per-car-scaled retained fraction. decay() needs a value
+   * in [0, 1); a retained fraction of 1+ would mean lateral velocity never bleeds
+   * (or grows), so an extreme drift multiplier can't make the car uncontrollable
+   * or produce NaN/Infinity. Below 1 with margin.
+   */
+  maxRetainedFriction: 0.95,
   /** Vehicle collision box half-extents (lateral, forward). */
   halfWidth: 1.1,
   halfLength: 2.0,
@@ -404,18 +411,57 @@ export const SETTINGS_STORAGE_KEY = 'neon-drift.settings';
 export const DEFAULT_SEED = 0x9e3779b9;
 
 /**
- * Cosmetic-only car definitions. COSMETIC for now — `body`/`glow`/`accent` are
- * 0xRRGGBB colors the VehicleRenderer applies. The type carries an OPTIONAL
- * `handling` block so a follow-up PR can add speed/grip/drift stats per car
- * WITHOUT touching the picker UI or the selection plumbing (both read only
- * id/displayName/cosmetic). All cars handle identically until that lands.
+ * Per-car handling, expressed as MULTIPLIERS against the base VEHICLE tuning
+ * (never absolute replacements) so the base game stays the single source of
+ * truth: retuning VEHICLE rescales every car proportionally and per-car balance
+ * survives. 1.0 = identical to base on that axis.
+ *
+ * The four axes form a tradeoff triangle — every car is strong on one and pays
+ * on another, so there is NO strictly-best car (verified in CAR_HANDLING_TABLE
+ * below). Higher is "more" of the axis; for `lateralFriction`, higher = more
+ * slide / less settle (lower = more planted/control).
  */
 export interface CarHandling {
-  /** Multipliers on the shared VEHICLE tuning; added in a follow-up PR. */
-  speed: number;
-  grip: number;
+  /** Multiplier on the forward speed cap (top speed). >1 = faster. */
+  speedCap: number;
+  /** Multiplier on lateral acceleration — steering responsiveness / grip. */
+  lateralAccel: number;
+  /** Multiplier on the NORMAL retained-friction fraction. <1 settles quicker
+   *  (planted/precise); >1 holds lateral velocity longer (looser/slidier). */
+  lateralFriction: number;
+  /** Multiplier on the handbrake slide (drift effectiveness). >1 = longer slide.
+   *  Scales the drift; never removes it — handbrake always loosens grip. */
   drift: number;
 }
+
+/** Fallback handling: identical to base on every axis (the pre-stats behaviour).
+ *  Used for any car with no `handling` block or an unknown id — never crashes. */
+export const BASE_HANDLING: CarHandling = {
+  speedCap: 1,
+  lateralAccel: 1,
+  lateralFriction: 1,
+  drift: 1,
+};
+
+/*
+ * TRADEOFF-TRIANGLE BALANCE (reviewable at a glance — feel confirmed on device):
+ *
+ *   car     speedCap  lateralAccel  lateralFriction  drift   identity
+ *   Pulse     1.00       1.00           1.00          1.00    balanced all-rounder
+ *   Vapor     0.90       1.25           0.70          0.85    grip / precise, slow
+ *   Ember     1.18       0.85           1.20          1.00    fast / twitchy, sluggish steer
+ *   Ghost     0.95       0.95           1.10          1.45    drift specialist
+ *
+ * Desirability (↑good): speedCap↑, lateralAccel↑, lateralFriction↓, drift↑.
+ * No row is ≥ another on all four axes, so no car strictly dominates:
+ *   - Pulse trades nothing but is beaten on each axis by that axis's specialist.
+ *   - Vapor wins steer+control, loses speed+drift.
+ *   - Ember wins speed, loses steer+control.
+ *   - Ghost wins drift, loses speed+steer.
+ * NOTE: base lateralFriction is already very low (0.02), so the lateralFriction
+ * multiplier is a subtle settle difference; lateralAccel is the dominant control
+ * lever and `drift` the dominant slide lever.
+ */
 
 export interface CarCosmetic {
   /** Dark body color (kept deep so the emissive edges read as neon). */
@@ -439,21 +485,32 @@ export const CARS: readonly CarDef[] = [
     id: 'pulse',
     displayName: 'Pulse',
     cosmetic: { body: 0x1a0033, glow: 0x00ffff, accent: 0xff00ff },
+    // Balanced all-rounder: no weakness, no specialty. The reference point.
+    handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
   },
   {
     id: 'vapor',
     displayName: 'Vapor',
     cosmetic: { body: 0x1a0033, glow: 0xff00ff, accent: 0x00ffff },
+    // Grip / precision: snappy, planted steering — but the slowest, and its
+    // handbrake barely slides (you place it, you don't drift it).
+    handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
   },
   {
     id: 'ember',
     displayName: 'Ember',
     cosmetic: { body: 0x1a0033, glow: 0xff6600, accent: 0xff00ff },
+    // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
+    // — fast in a straight line, a handful to place laterally.
+    handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
   },
   {
     id: 'ghost',
     displayName: 'Ghost',
     cosmetic: { body: 0x1a0033, glow: 0xffffff, accent: 0x00ffff },
+    // Drift specialist: massive handbrake slide for stylish dodges, at the cost
+    // of a little top speed and steering bite vs the balanced Pulse.
+    handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
   },
 ] as const;
 
@@ -463,6 +520,15 @@ export const DEFAULT_CAR_ID = CARS[0].id;
 /** Resolve a car by id, falling back to the default if the id is unknown. */
 export function carById(id: string): CarDef {
   return CARS.find((c) => c.id === id) ?? CARS[0];
+}
+
+/**
+ * Resolve the handling profile for a car id. Falls back to BASE_HANDLING for an
+ * unknown id or a car with no `handling` block — so the pure sim always gets a
+ * complete, finite profile and never crashes.
+ */
+export function handlingFor(id: string): CarHandling {
+  return CARS.find((c) => c.id === id)?.handling ?? BASE_HANDLING;
 }
 
 /** CSS hex string for a 0xRRGGBB color (for HTML/CSS previews of car colors). */

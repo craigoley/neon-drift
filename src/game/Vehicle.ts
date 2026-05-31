@@ -7,7 +7,7 @@
  */
 
 import { clamp, decay } from '../utils/math';
-import { ROAD, VEHICLE } from '../utils/constants';
+import { ROAD, VEHICLE, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 
 export interface VehicleState {
@@ -41,23 +41,32 @@ export function normalizedSpeed(speed: number): number {
 
 /**
  * Advance the vehicle by `dt` seconds under the given intent and distance.
- * Mutates and returns `state`.
+ * Per-car `handling` multipliers scale the base tuning (see CarHandling); pass
+ * BASE_HANDLING for stock behaviour. Mutates and returns `state`.
  */
 export function updateVehicle(
   state: VehicleState,
   intent: InputIntent,
   distance: number,
   roadCenter: number,
+  handling: CarHandling,
   dt: number,
 ): VehicleState {
-  // Forward: auto-accelerate toward the distance-dependent cap.
-  const cap = speedCap(distance);
+  // Forward: auto-accelerate toward the distance-dependent cap, scaled by the
+  // car's top-speed multiplier.
+  const cap = speedCap(distance) * handling.speedCap;
   state.speed = clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
 
-  // Lateral: steer applies acceleration; friction bleeds velocity. Handbrake
-  // retains far more lateral velocity, letting the car slide/drift sideways.
-  state.lateralVel += intent.steer * VEHICLE.lateralAccel * dt;
-  const retained = intent.handbrake ? VEHICLE.handbrakeFriction : VEHICLE.lateralFriction;
+  // Lateral: steer applies acceleration (scaled by grip); friction bleeds
+  // velocity. The handbrake retains far more lateral velocity (drift) — the
+  // car's `drift` multiplier scales that slide, `lateralFriction` the normal
+  // settle. Clamp the retained fraction below 1 so no multiplier can make the
+  // car uncontrollable or blow up to NaN/Infinity.
+  state.lateralVel += intent.steer * VEHICLE.lateralAccel * handling.lateralAccel * dt;
+  const requested = intent.handbrake
+    ? VEHICLE.handbrakeFriction * handling.drift
+    : VEHICLE.lateralFriction * handling.lateralFriction;
+  const retained = clamp(requested, 0, VEHICLE.maxRetainedFriction);
   state.lateralVel *= decay(retained, dt);
   state.lateral += state.lateralVel * dt;
 

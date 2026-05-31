@@ -27,7 +27,7 @@ import { Shell } from './ui/Shell';
 import { BestStore } from './storage/BestStore';
 import { SettingsStore } from './state/Settings';
 import { Telemetry } from './utils/Telemetry';
-import { AUDIO, carById, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
+import { AUDIO, carById, handlingFor, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -80,7 +80,10 @@ const canonicalUrl = window.location.origin + window.location.pathname;
 const shell = new Shell(app, settings, bestStore, audio, {
   isTouch,
   shareUrl: canonicalUrl,
-  onPlay: () => startRun(game),
+  // Resolve the selected car's handling fresh each run (the picker can change
+  // it between runs) and pass it into the pure sim — the game layer never reads
+  // settings/UI itself.
+  onPlay: () => startRun(game, handlingFor(settings.get('selectedCarId'))),
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
 });
 shell.showStart();

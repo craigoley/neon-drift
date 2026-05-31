@@ -11,7 +11,7 @@
  */
 
 import { Rng } from '../utils/rng';
-import { DEFAULT_SEED } from '../utils/constants';
+import { BASE_HANDLING, DEFAULT_SEED, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 import { createVehicleState, updateVehicle, type VehicleState } from './Vehicle';
 import { createRoadState, roadCenterAt, updateRoad, type RoadState } from './Road';
@@ -45,6 +45,10 @@ export interface GameState {
   road: RoadState;
   traffic: TrafficState;
   score: ScoreState;
+  /** Active car handling profile for this run (resolved from the selected car
+   *  by the composition root and passed in — the pure layer never reaches into
+   *  UI/storage). Defaults to BASE_HANDLING. */
+  handling: CarHandling;
   /** Events produced on the most recent update — read by audio/juice. */
   lastEvents: TrafficEvents;
 }
@@ -60,12 +64,21 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     road: createRoadState(seed),
     traffic: createTrafficState(),
     score: createScoreState(),
+    handling: BASE_HANDLING,
     lastEvents: { crashed: false, nearMisses: 0 },
   };
 }
 
-/** Reset everything for a fresh run and enter the playing phase. */
-export function startRun(state: GameState, seed: number = state.seed): GameState {
+/**
+ * Reset everything for a fresh run and enter the playing phase. `handling` is
+ * the selected car's profile, supplied by the caller (composition root); it
+ * persists on the state until the next run.
+ */
+export function startRun(
+  state: GameState,
+  handling: CarHandling = state.handling,
+  seed: number = state.seed,
+): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
   state.rng = new Rng(seed);
@@ -75,6 +88,7 @@ export function startRun(state: GameState, seed: number = state.seed): GameState
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
   state.score = createScoreState();
+  state.handling = handling;
   state.lastEvents = { crashed: false, nearMisses: 0 };
   return state;
 }
@@ -98,7 +112,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
 
   // The drivable corridor follows the road's curve at the player's position.
   const roadCenter = roadCenterAt(state.seed, state.distance);
-  updateVehicle(state.vehicle, intent, state.distance, roadCenter, dt);
+  updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, dt);
   state.distance += state.vehicle.speed * dt;
   state.time += dt;
 

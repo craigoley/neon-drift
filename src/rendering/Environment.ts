@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { ENV, GRID, PALETTE, SUN } from '../utils/constants';
+import { ENV, GRID, PALETTE, SUN, type BiomeGradientStop } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 export class Environment {
@@ -16,11 +16,14 @@ export class Environment {
   private readonly grid: THREE.GridHelper;
   private readonly backdrop = new THREE.Group();
   private readonly cellSize: number;
+  /** Mountain line material — held so a biome change can recolour it. */
+  private mountainMat!: THREE.LineBasicMaterial;
 
   // Sun canvas state, kept for the optional scanline drift (Phase 3).
   private readonly sunCtx: CanvasRenderingContext2D;
   private readonly sunTexture: THREE.CanvasTexture;
-  private readonly sunGradient: CanvasGradient;
+  // Rebuilt when a biome changes the gradient stops (see setPalette).
+  private sunGradient: CanvasGradient;
   private sunScroll = 0;
   // Time since the drifting scanlines were last re-rasterised, for throttling
   // the canvas redraw + texture upload below the frame rate.
@@ -146,10 +149,55 @@ export class Environment {
       transparent: true,
       opacity: ENV.mountainOpacity,
     });
+    this.mountainMat = mat;
     const lines = new THREE.LineSegments(geo, mat);
     lines.position.set(0, ENV.mountainBaseY, -ENV.distance * ENV.mountainDepthFactor);
     lines.renderOrder = ENV.mountainRenderOrder;
     return lines;
+  }
+
+  /**
+   * Apply a (blended) biome palette: rebuild the sun's gradient stops on the
+   * EXISTING canvas texture, recolour the grid in place, and tint the mountains.
+   * Called only when the biome blend advances (throttled by BiomeView), never
+   * per-frame at rest. Allocates a CanvasGradient per call (bounded by that
+   * throttle); the grid recolour overwrites its existing buffer in place.
+   */
+  setPalette(
+    stops: ReadonlyArray<BiomeGradientStop>,
+    gridCenter: THREE.Color,
+    gridLine: THREE.Color,
+    mountain: THREE.Color,
+  ): void {
+    const grad = this.sunCtx.createLinearGradient(0, 0, 0, SUN.textureSize);
+    for (const s of stops) grad.addColorStop(s.at, s.color);
+    this.sunGradient = grad;
+    this.drawSun(this.sunScroll);
+    this.sunTexture.needsUpdate = true;
+
+    this.applyGridColors(gridCenter, gridLine);
+    this.mountainMat.color.copy(mountain);
+  }
+
+  /**
+   * Overwrite the GridHelper's vertex colours in place (no allocation): the two
+   * centre-cross lines take `center`, every other line `line`. Mirrors the
+   * GridHelper layout (4 vertices per line index; centre at divisions/2).
+   */
+  private applyGridColors(center: THREE.Color, line: THREE.Color): void {
+    const attr = this.grid.geometry.getAttribute('color') as THREE.BufferAttribute;
+    const arr = attr.array as Float32Array;
+    const half = GRID.divisions / 2;
+    let j = 0;
+    for (let i = 0; i <= GRID.divisions; i++) {
+      const c = i === half ? center : line;
+      for (let v = 0; v < 4; v++) {
+        arr[j++] = c.r;
+        arr[j++] = c.g;
+        arr[j++] = c.b;
+      }
+    }
+    attr.needsUpdate = true;
   }
 
   /** Scroll the grid toward the camera and keep the backdrop on the horizon. */

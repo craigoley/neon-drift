@@ -14,6 +14,7 @@ import { Controls } from './input/Controls';
 import { AudioEngine } from './audio/AudioEngine';
 import { SceneManager } from './rendering/SceneManager';
 import { Environment } from './rendering/Environment';
+import { BiomeView } from './rendering/BiomeView';
 import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
 import { CarPreview } from './rendering/CarPreview';
@@ -72,6 +73,7 @@ window.addEventListener('touchstart', resumeAudio, { once: true });
 const scene = new SceneManager(app, isTouch);
 const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
 const environment = new Environment(scene.scene, game.seed);
+const biomeView = new BiomeView(scene.scene, environment);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
 vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted cosmetic
@@ -214,6 +216,7 @@ function frame(now: number): void {
   // Visuals advance on real time (only the simulation slows in slow-mo).
   scene.updateCamera(game, realDt);
   environment.update(game.distance, scene.camera.position.x, scene.camera.position.z, realDt);
+  biomeView.apply(game.biome); // environment palette follows the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
   traffic.sync(game.traffic, game.distance);

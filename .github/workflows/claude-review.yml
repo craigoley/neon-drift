@@ -45,13 +45,18 @@ jobs:
     # retained for parity with ClawApp (whose owner shows as MEMBER under an
     # org) and is harmless here.
     #
-    # Dependabot PRs are explicitly ALLOWED through (matching ClawApp): on this
-    # single-developer repo there are no untrusted contributors, Dependabot only
-    # touches version pins, and letting Claude review + merge those removes a
-    # recurring manual step. The github-actions[bot] check still prevents
-    # self-loops on Claude's own push-backs.
+    # Dependabot PRs are SKIPPED here — the one deliberate deviation from
+    # ClawApp (which allows them through). Rationale: ClawApp's CI fully
+    # validates its output, but neon-drift has a visual/rendering dimension that
+    # no automated check covers. A three.js or Vite bump can pass tsc, vitest,
+    # CodeQL and OSV while still breaking the actual render — and an auto-merge
+    # would then auto-deploy that breakage to the public Vercel site. So
+    # dependency bumps get reviewed and merged by a human, not this workflow.
+    # The github-actions[bot] check still prevents self-loops on Claude's own
+    # push-backs.
     if: |
       (github.event_name == 'pull_request' &&
+       github.event.pull_request.user.login != 'dependabot[bot]' &&
        github.event.pull_request.user.login != 'github-actions[bot]' &&
        (github.event.pull_request.author_association == 'OWNER' || github.event.pull_request.author_association == 'MEMBER') &&
        !contains(github.event.pull_request.head.ref, 'claude-fix'))

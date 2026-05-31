@@ -392,3 +392,34 @@ body.playing .touch-handbrake {
 .touch-handbrake:active {
   background: rgba(255, 102, 0, 0.35);
 }
+
+/* --- in-run PAUSE button ----------------------------------------------- */
+/* Top-left, clear of the centred HUD stats and the bottom-right DRIFT button.
+   Shown only while a run is in progress (keyboard users use Esc/P). */
+.shell-pause-btn {
+  display: none;
+  position: absolute;
+  top: max(10px, env(safe-area-inset-top));
+  left: max(10px, env(safe-area-inset-left));
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  pointer-events: auto;
+  z-index: 60;
+  background: rgba(8, 0, 20, 0.55);
+  border: 2px solid #00ffff;
+  color: #00ffff;
+  font: 700 14px/1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.06em;
+  text-shadow: 0 0 8px #00ffff;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+  -webkit-tap-highlight-color: transparent;
+}
+
+body.playing .shell-pause-btn {
+  display: block;
+}
+
+.shell-pause-btn:active {
+  background: rgba(0, 255, 255, 0.2);
+}

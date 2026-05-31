@@ -26,6 +26,9 @@ export class AudioEngine {
   /** Master mute state (the sound on/off setting). Remembered before the
    *  context exists so it can be applied the moment it's unlocked. */
   private enabled = true;
+  /** Transient mute (e.g. while the game is paused / backgrounded), kept
+   *  separate from the user's `enabled` setting so resuming restores it. */
+  private muted = false;
 
   get started(): boolean {
     return this.ctx !== null;
@@ -38,9 +41,22 @@ export class AudioEngine {
    */
   setEnabled(enabled: boolean): void {
     this.enabled = enabled;
+    this.applyMasterGain();
+  }
+
+  /** Transient mute, independent of the user's sound setting — used to silence
+   *  audio while paused / backgrounded. Restored (to the user's setting) on
+   *  unmute. */
+  setMuted(muted: boolean): void {
+    this.muted = muted;
+    this.applyMasterGain();
+  }
+
+  /** Effective master gain = on only when sound is enabled AND not transiently muted. */
+  private applyMasterGain(): void {
     if (this.master && this.ctx) {
       this.master.gain.setTargetAtTime(
-        enabled ? AUDIO.masterGain : 0,
+        this.enabled && !this.muted ? AUDIO.masterGain : 0,
         this.ctx.currentTime,
         AUDIO.muteRamp,
       );
@@ -56,7 +72,7 @@ export class AudioEngine {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
       // Honour the persisted sound setting from the very first sample.
-      this.master.gain.value = this.enabled ? AUDIO.masterGain : 0;
+      this.master.gain.value = this.enabled && !this.muted ? AUDIO.masterGain : 0;
       this.master.connect(this.ctx.destination);
       this.noiseBuffer = this.makeNoiseBuffer();
       this.startEngine();

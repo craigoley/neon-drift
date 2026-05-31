@@ -34,7 +34,7 @@ function geometryFor(shape: PowerupShape): THREE.BufferGeometry {
       return new THREE.OctahedronGeometry(s);
     case 'chevron':
       // A 4-sided pyramid pointing up — reads as an upward "boost" chevron.
-      return new THREE.ConeGeometry(s, s * 1.7, 4);
+      return new THREE.ConeGeometry(s, s * POWERUP_VIS.chevronAspect, 4);
     case 'horseshoe':
       // Half a torus — a magnet "U".
       return new THREE.TorusGeometry(s, tube, 10, 24, Math.PI);
@@ -46,6 +46,7 @@ export class PowerupRenderer {
   private readonly meshes: Record<PowerupKind, THREE.InstancedMesh>;
   private readonly dummy = new THREE.Object3D();
   private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
+  private readonly cursor: Record<string, number> = {};
 
   private readonly shieldRing: THREE.Mesh;
   private readonly shieldMat: THREE.MeshBasicMaterial;
@@ -90,15 +91,13 @@ export class PowerupRenderer {
   sync(powerups: PowerupState, playerDistance: number, vehicleLateral: number, dt: number): void {
     this.t += dt;
 
-    // Per-kind instance cursors — active pickups of a kind fill that mesh's
-    // instances in order; the rest collapse to zero scale.
-    const cursor: Record<string, number> = {};
-    for (const kind of POWERUP_ORDER) cursor[kind] = 0;
+    // Reset per-kind instance cursors (reused object — no per-frame allocation).
+    for (const kind of POWERUP_ORDER) this.cursor[kind] = 0;
 
     for (const p of powerups.pool) {
       if (!p.active) continue;
       const mesh = this.meshes[p.kind];
-      const i = cursor[p.kind]++;
+      const i = this.cursor[p.kind]++;
       const bob = Math.sin(this.t * POWERUP_VIS.bobRate + p.id) * POWERUP_VIS.bobAmplitude;
       this.dummy.position.set(p.lateral, POWERUP_VIS.meshY + bob, -(p.distance - playerDistance));
       this.dummy.rotation.set(0, this.t * POWERUP_VIS.spinRate + p.id, 0);
@@ -110,7 +109,7 @@ export class PowerupRenderer {
     // Collapse the unused tail of each kind's mesh and flush.
     for (const kind of POWERUP_ORDER) {
       const mesh = this.meshes[kind];
-      for (let i = cursor[kind]; i < POWERUPS.poolSize; i++) mesh.setMatrixAt(i, this.hidden);
+      for (let i = this.cursor[kind]; i < POWERUPS.poolSize; i++) mesh.setMatrixAt(i, this.hidden);
       mesh.instanceMatrix.needsUpdate = true;
     }
 

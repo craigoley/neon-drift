@@ -294,6 +294,8 @@ export const POWERUP_VIS = {
   /** Vertical bob amplitude (world units) and rate (radians/second). */
   bobAmplitude: 0.28,
   bobRate: 2.2,
+  /** Chevron (cone) height as a multiple of `size`. */
+  chevronAspect: 1.7,
   /** Torus tube radius as a fraction of `size` (ring + horseshoe thickness). */
   tubeFraction: 0.3,
   /** Shield protection ring around the car: radius, tube, height above road. */

@@ -83,7 +83,10 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // Resolve the selected car's handling fresh each run (the picker can change
   // it between runs) and pass it into the pure sim — the game layer never reads
   // settings/UI itself.
-  onPlay: () => startRun(game, handlingFor(settings.get('selectedCarId'))),
+  onPlay: () => {
+    audio.setMuted(false); // a fresh run is never muted (defensive)
+    startRun(game, handlingFor(settings.get('selectedCarId')));
+  },
   onPause: () => {
     pause(game);
     audio.setMuted(true); // silence the engine drone while paused

@@ -131,13 +131,15 @@ export const SCORING = {
   /**
    * Lateral gap (centre-to-centre) below which a pass counts as a near-miss.
    * Must exceed the summed collision half-widths (2.2) or nothing would ever
-   * be a near-miss without also colliding. Tuned generously: with the road
-   * 18 units wide, the old 3.2 window almost never fired in normal play (a
-   * pass had to thread a 1-unit band), so combos never formed and score
-   * tracked distance exactly. 4.8 gives a ~2.6-unit-of-clear-space window so
-   * daring passes reliably reward the player.
+   * be a near-miss without also colliding. Tuned generously: traces showed the
+   * 4.8 window only fired for players who threaded within ~2.6 units of clear
+   * space — a cautious player giving obstacles a normal berth almost never
+   * triggered one, so the combo sat at x1.0 the whole run despite the loop
+   * working. 6.5 (~4.3 units of clear space) makes a normal close pass register,
+   * so the multiplier visibly climbs in ordinary play while hugging the far wall
+   * still earns nothing.
    */
-  nearMissLateral: 4.8,
+  nearMissLateral: 6.5,
 } as const;
 
 /** Camera + chase-cam tuning (rendering layer). */

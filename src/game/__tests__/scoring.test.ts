@@ -125,6 +125,26 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
     expect(events.crashed).toBe(false);
     expect(events.nearMisses).toBe(1);
   });
+
+  it('a normal-berth close pass (5.5 units) bumps the combo', () => {
+    // Pins Phase-1 (pass 2): a pass at a normal dodging distance must register,
+    // so the multiplier engages in ordinary play. This fails if nearMissLateral
+    // regresses below 5.5 (e.g. back to the old 4.8 that only rewarded experts).
+    const s = createScoreState();
+    const traffic = createTrafficState();
+    const slot = traffic.pool[0];
+    slot.active = true;
+    slot.lateral = 5.5; // clear of the 2.2 collision box; a real near-miss
+    slot.laneOffset = 5.5;
+    slot.distance = 99; // just behind the player at 100
+    slot.passed = false;
+    const events = { crashed: false, nearMisses: 0 };
+    const before = s.combo;
+    resolveTraffic(events, s, 0, 100, traffic);
+    expect(events.crashed).toBe(false);
+    expect(events.nearMisses).toBe(1);
+    expect(s.combo).toBeGreaterThan(before);
+  });
 });
 
 describe('Scoring — score monotonic while moving', () => {

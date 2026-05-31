@@ -340,6 +340,8 @@ export const JUICE = {
 /** Synthesized audio tuning (Web Audio API — no files). */
 export const AUDIO = {
   masterGain: 0.5,
+  /** Ramp time (s) for muting/unmuting the master bus on the sound toggle. */
+  muteRamp: 0.05,
   /** Noise-buffer duration in seconds (how long before the pattern repeats). */
   noiseBufferSeconds: 2,
   /** Engine oscillator pitch range mapped from normalised speed. */

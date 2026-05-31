@@ -24,6 +24,7 @@ import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { BestStore } from './storage/BestStore';
+import { SettingsStore } from './state/Settings';
 import { Telemetry } from './utils/Telemetry';
 import { AUDIO, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
@@ -40,8 +41,12 @@ const controls = new Controls();
 controls.attachKeyboard(window);
 if (isTouch) controls.attachTouch(app, app);
 
+// Player settings (sound, selected car) — persisted to localStorage.
+const settings = new SettingsStore();
+
 // Synthesized audio — resumed on the first user gesture (autoplay policy).
 const audio = new AudioEngine();
+audio.setEnabled(settings.get('soundEnabled')); // honour persisted sound setting
 const resumeAudio = () => void audio.resume();
 window.addEventListener('keydown', resumeAudio, { once: true });
 window.addEventListener('pointerdown', resumeAudio, { once: true });

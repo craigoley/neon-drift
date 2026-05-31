@@ -215,17 +215,6 @@ export const CAR_VIS = {
   maxRoll: 0.25,
   /** Lateral velocity that maps to maxRoll. */
   rollReference: 30,
-  /** Headlight cone length + offset. */
-  headlightLength: 8,
-  headlightInset: 0.6,
-  /** Headlight cone radius, additive-glow intensity and radial segment count.
-   *  Opacity is low because the beam uses additive blending (reads as light). */
-  headlightConeRadius: 0.5,
-  headlightOpacity: 0.18,
-  headlightConeSegments: 8,
-  /** Render order for the additive headlight glow — drawn after opaque geometry
-   *  (sits alongside ENV.sunRenderOrder / mountainRenderOrder in the stack). */
-  headlightRenderOrder: 1,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */

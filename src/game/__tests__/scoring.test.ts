@@ -162,6 +162,32 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
   });
 });
 
+describe('Scoring — full near-miss funnel (regression: combo must climb)', () => {
+  it('an obstacle passing within threshold increments near-miss count AND raises the combo', () => {
+    const s = createScoreState();
+    const traffic = createTrafficState();
+    const o = traffic.pool[0];
+    o.active = true;
+    o.passed = false;
+    o.lateral = SCORING.nearMissLateral - 0.5; // inside the near-miss window
+    o.laneOffset = o.lateral;
+    o.distance = 99; // just behind the player at 100 — a fresh overtake
+    const events = { crashed: false, nearMisses: 0 };
+    const comboBefore = s.combo;
+
+    resolveTraffic(events, s, 0, 100, traffic);
+
+    // Detection (step 4) AND increment (step 5) — the two that the symptom
+    // claimed were broken. If either regresses, this fails.
+    expect(events.nearMisses).toBe(1);
+    expect(s.nearMisses).toBe(1);
+    expect(s.combo).toBeGreaterThan(comboBefore);
+    // Diagnostics surfaced in the ?debug=1 funnel panel.
+    expect((events as { evaluated?: number }).evaluated).toBe(1);
+    expect((events as { closestLateral?: number }).closestLateral).toBeCloseTo(o.lateral);
+  });
+});
+
 describe('Scoring — score monotonic while moving', () => {
   it('score strictly increases each step at positive speed', () => {
     const s = createScoreState();

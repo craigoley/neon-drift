@@ -75,6 +75,12 @@ export class HUD {
       this.crashBest.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
     }
   }
+
+  /** The exact text currently shown by the combo element — for the ?debug=1
+   *  funnel panel (step 6: what the HUD multiplier is actually bound to). */
+  comboText(): string {
+    return this.comboEl.textContent ?? '';
+  }
 }
 
 function el(tag: string, className: string): HTMLElement {

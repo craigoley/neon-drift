@@ -401,6 +401,19 @@ export const UI = {
   carSwipeThresholdPx: 40,
   /** Car-picker 3D preview: gentle auto-rotate speed (radians/second). */
   carPreviewSpinPerSec: 0.6,
+  /** Preview camera field-of-view (degrees). Narrow for a flattering close-up. */
+  carPreviewFov: 34,
+  /** Preview camera near / far clip planes. */
+  carPreviewNear: 0.1,
+  carPreviewFar: 100,
+  /** Camera height = CAR_VIS.height * this. */
+  carPreviewCamHeightMul: 2.2,
+  /** Camera distance back along Z. */
+  carPreviewCamZ: 8.5,
+  /** Look-at height = CAR_VIS.height * this. */
+  carPreviewLookAtMul: 0.4,
+  /** Fixed X-axis tilt (radians) so the rotation reads as 3D. */
+  carPreviewTilt: 0.18,
 } as const;
 
 /** Touch-control tuning. */

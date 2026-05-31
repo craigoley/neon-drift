@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { CAR_VIS, UI, type CarDef } from '../utils/constants';
+import { CAR_VIS, PALETTE, RENDER, UI, type CarDef } from '../utils/constants';
 
 export class CarPreview {
   private readonly container: HTMLElement;
@@ -31,30 +31,30 @@ export class CarPreview {
     this.container = container;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    this.renderer.setClearColor(0x000000, 0); // transparent — picker bg shows through
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, RENDER.maxPixelRatio));
+    this.renderer.setClearColor(0x000000, 0);
     container.appendChild(this.renderer.domElement);
 
-    this.camera = new THREE.PerspectiveCamera(34, 1, 0.1, 100);
-    this.camera.position.set(0, CAR_VIS.height * 2.2, 8.5);
-    this.camera.lookAt(0, CAR_VIS.height * 0.4, 0);
+    this.camera = new THREE.PerspectiveCamera(UI.carPreviewFov, 1, UI.carPreviewNear, UI.carPreviewFar);
+    this.camera.position.set(0, CAR_VIS.height * UI.carPreviewCamHeightMul, UI.carPreviewCamZ);
+    this.camera.lookAt(0, CAR_VIS.height * UI.carPreviewLookAtMul, 0);
 
     const { width, height, length } = CAR_VIS;
     this.bodyGeo = new THREE.BoxGeometry(width, height, length);
-    this.bodyMat = new THREE.MeshBasicMaterial({ color: 0x1a0033 });
+    this.bodyMat = new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple });
     const body = new THREE.Mesh(this.bodyGeo, this.bodyMat);
     body.position.y = height / 2;
 
     const tmp = new THREE.BoxGeometry(width, height, length);
     this.edgesGeo = new THREE.EdgesGeometry(tmp);
     tmp.dispose();
-    this.edgesMat = new THREE.LineBasicMaterial({ color: 0x00ffff });
+    this.edgesMat = new THREE.LineBasicMaterial({ color: PALETTE.cyan });
     const edges = new THREE.LineSegments(this.edgesGeo, this.edgesMat);
     edges.position.y = height / 2;
 
     this.carGroup.add(body, edges);
     // A slight fixed tilt so the rotation reads as 3D (see top + side + front).
-    this.carGroup.rotation.x = 0.18;
+    this.carGroup.rotation.x = UI.carPreviewTilt;
     this.scene.add(this.carGroup);
 
     this.resize();

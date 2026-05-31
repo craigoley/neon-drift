@@ -17,10 +17,14 @@ import { Environment } from './rendering/Environment';
 import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
 import { TrafficRenderer } from './rendering/TrafficRenderer';
+import { PostProcessing } from './rendering/PostProcessing';
+import { SpeedLines } from './rendering/SpeedLines';
+import { CrashShards } from './rendering/CrashShards';
+import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { Telemetry } from './utils/Telemetry';
-import { TIMESTEP } from './utils/constants';
+import { JUICE, TIMESTEP } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -43,10 +47,14 @@ window.addEventListener('touchstart', resumeAudio, { once: true });
 
 // Rendering layer.
 const scene = new SceneManager(app, isTouch);
+const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
 const environment = new Environment(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
 const traffic = new TrafficRenderer(scene.scene);
+const speedLines = new SpeedLines(scene.scene);
+const shards = new CrashShards(scene.scene);
+const screenFx = new ScreenFx(app);
 const hud = new HUD(app);
 const debug = new DebugOverlay(app);
 const telemetry = new Telemetry();
@@ -57,15 +65,19 @@ const best = { distance: 0, score: 0 };
 let last = performance.now();
 let accumulator = 0;
 let prevPhase = game.phase;
+let slowmo = 0;
 
 function frame(now: number): void {
   const ms = now - last;
   last = now;
   telemetry.push(ms);
 
-  accumulator += ms / 1000;
-  // Clamp to avoid a spiral of death after a tab-switch stall.
-  if (accumulator > 0.25) accumulator = 0.25;
+  const realDt = Math.min(ms / 1000, 0.25); // clamp tab-switch stalls
+  // Optional micro slow-mo after a near-miss: feed the sim scaled time.
+  const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
+  if (slowmo > 0) slowmo -= realDt;
+
+  accumulator += realDt * simScale;
   let nearMisses = 0;
   while (accumulator >= TIMESTEP) {
     update(game, controls.intent, TIMESTEP);
@@ -74,27 +86,47 @@ function frame(now: number): void {
   }
   controls.endFrame();
 
-  // Audio reactions.
+  const crashed = game.phase === Phase.Crashed && prevPhase === Phase.Playing;
+
+  // Event-driven juice + audio.
+  if (nearMisses > 0) {
+    screenFx.pulseNearMiss();
+    slowmo = JUICE.nearMissSlowmo;
+  }
+  if (crashed) {
+    scene.addShake(JUICE.shakeMagnitude);
+    shards.burst(game.vehicle.lateral, 1, 0);
+    screenFx.flashCrash();
+  }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
     audio.setScreech(
       game.phase === Phase.Playing && controls.intent.handbrake && game.vehicle.speed > 1,
     );
     if (nearMisses > 0) audio.playNearMiss();
-    if (game.phase === Phase.Crashed && prevPhase === Phase.Playing) audio.playCrash();
+    if (crashed) audio.playCrash();
   }
   prevPhase = game.phase;
 
-  const dt = ms / 1000;
-  scene.updateCamera(game, dt);
+  // Visuals advance on real time (only the simulation slows in slow-mo).
+  scene.updateCamera(game, realDt);
   environment.update(game.distance, scene.camera.position.x, scene.camera.position.z);
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
   traffic.sync(game.traffic, game.distance);
+  speedLines.update(
+    scene.camera.position.x,
+    scene.camera.position.y,
+    scene.camera.position.z,
+    normalizedSpeed(game.vehicle.speed),
+    realDt,
+  );
+  shards.update(realDt);
+  screenFx.update(realDt);
   hud.sync(game, best);
   debug.update(game, telemetry);
 
-  scene.renderer.render(scene.scene, scene.camera);
+  post.render();
   requestAnimationFrame(frame);
 }
 
@@ -102,4 +134,5 @@ requestAnimationFrame(frame);
 
 window.addEventListener('resize', () => {
   scene.resize(window.innerWidth, window.innerHeight);
+  post.setSize(window.innerWidth, window.innerHeight);
 });

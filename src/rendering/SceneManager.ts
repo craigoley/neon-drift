@@ -12,7 +12,7 @@ import * as THREE from 'three';
 import type { GameState } from '../game/GameState';
 import { normalizedSpeed } from '../game/Vehicle';
 import { smoothFollow } from '../utils/math';
-import { BLOOM, CAMERA, FOG, PALETTE, RENDER } from '../utils/constants';
+import { BLOOM, CAMERA, FOG, JUICE, PALETTE, RENDER } from '../utils/constants';
 
 export class SceneManager {
   readonly scene: THREE.Scene;
@@ -20,8 +20,9 @@ export class SceneManager {
   readonly renderer: THREE.WebGLRenderer;
   readonly isTouch: boolean;
 
-  /** Transient camera shake offset (set by the juice layer on crash). */
-  readonly shake = new THREE.Vector3();
+  /** Current shake magnitude (decays each frame); jitter is derived per frame. */
+  private shakeAmount = 0;
+  private readonly shake = new THREE.Vector3();
 
   constructor(parent: HTMLElement, isTouch: boolean) {
     this.isTouch = isTouch;
@@ -56,10 +57,23 @@ export class SceneManager {
    * speed, and apply any transient shake. The car sits at world z = 0; objects
    * ahead are rendered at negative z (see the renderers).
    */
+  /** Kick the camera shake (e.g. on crash). */
+  addShake(magnitude: number): void {
+    this.shakeAmount = Math.max(this.shakeAmount, magnitude);
+  }
+
   updateCamera(game: GameState, dt: number): void {
+    // Decay shake and derive a fresh jitter offset for this frame.
+    this.shakeAmount = Math.max(0, this.shakeAmount - JUICE.shakeDecay * dt * this.shakeAmount);
+    this.shake.set(
+      (Math.random() - 0.5) * 2 * this.shakeAmount,
+      (Math.random() - 0.5) * 2 * this.shakeAmount,
+      0,
+    );
+
     const follow = smoothFollow(CAMERA.followLerp, dt);
     const targetX = game.vehicle.lateral;
-    this.camera.position.x += (targetX - this.camera.position.x) * follow;
+    this.camera.position.x += (targetX - this.camera.position.x) * follow + this.shake.x;
     this.camera.position.y = CAMERA.offsetUp + this.shake.y;
     this.camera.position.z = CAMERA.offsetBehind;
 

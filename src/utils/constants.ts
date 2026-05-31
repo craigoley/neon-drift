@@ -206,6 +206,18 @@ export const JUICE = {
   speedLineCount: 80,
   /** Normalised speed (0..1) above which speed lines appear. */
   speedLineThreshold: 0.45,
+  /** Length of each speed-line streak (world units). */
+  speedLineLength: 6,
+  /** Radius of the streak field around the camera. */
+  speedLineFieldRadius: 26,
+  /** Depth of the streak field ahead of the camera. */
+  speedLineFieldDepth: 120,
+  /** Base streak travel speed toward the camera. */
+  speedLineForwardSpeed: 240,
+  /** Vertical centre offset of the streak field. */
+  speedLineHeightOffset: 4,
+  /** Z past the camera at which a streak respawns. */
+  speedLinePastMargin: 4,
   /** Crash screen-shake magnitude (world units) and decay (per second). */
   shakeMagnitude: 1.4,
   shakeDecay: 4,
@@ -213,8 +225,17 @@ export const JUICE = {
   freezeFrame: 0.12,
   /** Neon-shard burst count on crash. */
   shardCount: 36,
+  /** Shard initial speed, lifetime (s), gravity, per-second drag and point size. */
+  shardSpeed: 26,
+  shardLifetime: 0.9,
+  shardGravity: 18,
+  shardDrag: 0.6,
+  shardSize: 0.5,
   /** Near-miss screen-edge glow pulse duration in seconds. */
   nearMissPulse: 0.35,
+  /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
+  nearMissSlowmo: 0.12,
+  slowmoScale: 0.45,
 } as const;
 
 /** Synthesized audio tuning (Web Audio API — no files). */

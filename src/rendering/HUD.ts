@@ -67,7 +67,7 @@ export class HUD {
     this.distEl.textContent = `${Math.round(game.distance)} m`;
     this.scoreEl.textContent = `${Math.round(game.score.score)}`;
     this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
-    this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.4';
+    this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
     this.bestEl.textContent = `best ${Math.round(best.score)}`;
 
     if (game.phase === Phase.Crashed) {

@@ -233,11 +233,15 @@ export const ENV = {
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
 export const BLOOM = {
-  strength: 0.9,
-  radius: 0.6,
-  threshold: 0.2,
+  // Tamed from the original (strength 0.9 / threshold 0.2 / exposure 1.1) which
+  // blew the sun out toward white and washed out the HUD. Lower strength + a
+  // higher luminance threshold mean only the brightest neon cores bloom; the
+  // synthwave glow stays but the sun no longer clips to white.
+  strength: 0.6,
+  radius: 0.5,
+  threshold: 0.45,
   /** Tone-mapping exposure applied by the renderer (OutputPass reads this). */
-  exposure: 1.1,
+  exposure: 1.0,
   /** Bloom internal-resolution divisor on touch devices (GPU headroom). */
   mobileResolutionScale: 0.5,
 } as const;

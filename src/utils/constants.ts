@@ -108,13 +108,17 @@ export const SCORING = {
   /** Maximum combo multiplier. */
   maxCombo: 10,
   /** Seconds a combo survives without a fresh near-miss before resetting. */
-  comboTimeout: 4,
+  comboTimeout: 5,
   /**
    * Lateral gap (centre-to-centre) below which a pass counts as a near-miss.
-   * Must exceed the summed collision half-widths or nothing would ever be a
-   * near-miss without also colliding.
+   * Must exceed the summed collision half-widths (2.2) or nothing would ever
+   * be a near-miss without also colliding. Tuned generously: with the road
+   * 18 units wide, the old 3.2 window almost never fired in normal play (a
+   * pass had to thread a 1-unit band), so combos never formed and score
+   * tracked distance exactly. 4.8 gives a ~2.6-unit-of-clear-space window so
+   * daring passes reliably reward the player.
    */
-  nearMissLateral: 3.2,
+  nearMissLateral: 4.8,
 } as const;
 
 /** Camera + chase-cam tuning (rendering layer). */

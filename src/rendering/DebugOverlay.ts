@@ -57,11 +57,15 @@ export class DebugOverlay {
     if (!this.visible) return;
     const road = game.road;
     const traffic = game.traffic;
+    const score = game.score;
+    // Scoring funnel: if combo stays 1.00 and score==dist, near-misses never fire.
+    const scoreRatio = game.distance > 0 ? score.score / game.distance : 1;
     this.el.textContent =
       `NEON DRIFT · debug (\` to toggle)\n` +
       `fps ${telemetry.fps.toFixed(0).padStart(3)}  frame ${telemetry.lastMs.toFixed(1)}ms  avg ${telemetry.avgMs.toFixed(1)}ms\n` +
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +
-      `traf  active ${activeObstacleCount(traffic)}/${traffic.pool.length}  spawned ${traffic.spawned}  culled ${traffic.culled}`;
+      `traf  active ${activeObstacleCount(traffic)}/${traffic.pool.length}  spawned ${traffic.spawned}  culled ${traffic.culled}\n` +
+      `score ${score.score.toFixed(0)}  combo x${score.combo.toFixed(2)}  near-miss ${score.nearMisses}  score/dist ${scoreRatio.toFixed(2)}`;
   }
 }

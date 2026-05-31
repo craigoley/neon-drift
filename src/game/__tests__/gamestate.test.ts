@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, Phase, startRun, update } from '../GameState';
+import { createGameState, Phase, pause, resume, returnToMenu, startRun, update } from '../GameState';
 import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad } from '../Road';
 import { activeObstacleCount, createTrafficState, updateTraffic } from '../Traffic';
 import { createIntent } from '../Input';
@@ -90,5 +90,73 @@ describe('GameState — full-loop integration & bounded pools', () => {
     expect(game.phase).toBe(Phase.Playing);
     expect(game.distance).toBeGreaterThanOrEqual(0);
     expect(game.score.score).toBe(0);
+  });
+});
+
+describe('GameState — menu/pause state machine', () => {
+  const intent = createIntent();
+
+  it('menu -> play -> crash -> menu -> play resets cleanly (no stale run carries over)', () => {
+    const game = createGameState(9);
+    expect(game.phase).toBe(Phase.Menu);
+
+    // Play a bit.
+    startRun(game);
+    for (let i = 0; i < 120; i++) update(game, intent, TIMESTEP);
+    expect(game.phase).toBe(Phase.Playing);
+    expect(game.distance).toBeGreaterThan(0);
+
+    // Force a crash.
+    const o = game.traffic.pool[0];
+    o.active = true;
+    o.laneOffset = -roadCenterAt(game.seed, game.distance);
+    o.sway = 0;
+    o.speed = 0;
+    o.distance = game.distance;
+    o.passed = false;
+    update(game, intent, TIMESTEP);
+    expect(game.phase).toBe(Phase.Crashed);
+
+    // Return to menu: fully reset, idle.
+    returnToMenu(game);
+    expect(game.phase).toBe(Phase.Menu);
+    expect(game.distance).toBe(0);
+    expect(game.time).toBe(0);
+    expect(game.score.score).toBe(0);
+    expect(activeObstacleCount(game.traffic)).toBe(0);
+
+    // Idle in the menu — the sim must not advance.
+    update(game, intent, TIMESTEP);
+    expect(game.distance).toBe(0);
+
+    // Play again from the menu — a clean run.
+    startRun(game);
+    expect(game.phase).toBe(Phase.Playing);
+    expect(game.distance).toBe(0);
+    expect(game.score.score).toBe(0);
+  });
+
+  it('pause halts the sim; resume continues from the same spot', () => {
+    const game = startRun(createGameState(3));
+    for (let i = 0; i < 60; i++) update(game, intent, TIMESTEP);
+    const distAtPause = game.distance;
+
+    pause(game);
+    expect(game.phase).toBe(Phase.Paused);
+    for (let i = 0; i < 120; i++) update(game, intent, TIMESTEP); // frozen
+    expect(game.distance).toBe(distAtPause);
+
+    resume(game);
+    expect(game.phase).toBe(Phase.Playing);
+    update(game, intent, TIMESTEP);
+    expect(game.distance).toBeGreaterThan(distAtPause);
+  });
+
+  it('pause/resume only act from the matching phase', () => {
+    const menu = createGameState();
+    pause(menu);
+    expect(menu.phase).toBe(Phase.Menu); // can't pause the menu
+    resume(menu);
+    expect(menu.phase).toBe(Phase.Menu);
   });
 });

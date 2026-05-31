@@ -29,6 +29,7 @@ import {
 export const Phase = {
   Menu: 'menu',
   Playing: 'playing',
+  Paused: 'paused',
   Crashed: 'crashed',
 } as const;
 export type Phase = (typeof Phase)[keyof typeof Phase];
@@ -94,8 +95,41 @@ export function startRun(
 }
 
 /**
+ * Reset to a fresh, idle MENU state (no run in progress). Used by "return to
+ * menu" so a stale run never carries over; the next PLAY (startRun) begins clean.
+ * Keeps the selected `handling` so the menu's car selection persists.
+ */
+export function returnToMenu(state: GameState, seed: number = state.seed): GameState {
+  state.phase = Phase.Menu;
+  state.seed = seed;
+  state.rng = new Rng(seed);
+  state.time = 0;
+  state.distance = 0;
+  state.vehicle = createVehicleState();
+  state.road = createRoadState(seed);
+  state.traffic = createTrafficState();
+  state.score = createScoreState();
+  state.lastEvents.crashed = false;
+  state.lastEvents.nearMisses = 0;
+  return state;
+}
+
+/** Pause an in-progress run (no-op unless Playing). The sim won't advance while
+ *  Paused; `resume` returns to Playing exactly where it left off. */
+export function pause(state: GameState): GameState {
+  if (state.phase === Phase.Playing) state.phase = Phase.Paused;
+  return state;
+}
+
+/** Resume a paused run (no-op unless Paused). */
+export function resume(state: GameState): GameState {
+  if (state.phase === Phase.Paused) state.phase = Phase.Playing;
+  return state;
+}
+
+/**
  * Advance the whole simulation by `dt` seconds under the given intent. Mutates
- * and returns `state`.
+ * and returns `state`. No-ops unless Playing (Menu/Paused/Crashed are frozen).
  */
 export function update(state: GameState, intent: InputIntent, dt: number): GameState {
   // Restart from the menu or crash screen.

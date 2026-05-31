@@ -157,21 +157,24 @@ export const CAMERA = {
   near: 0.1,
   far: 2000,
   /**
-   * Chase-cam offset behind/above the car. Raised and pulled back from the
-   * original (4.5 up / 11 back) so the car drops to the lower quarter of the
-   * screen and far more road ahead is visible — essential reaction time at
-   * speed in a dodging game.
+   * Chase-cam offset behind/above the car. Pulled further back + a touch higher
+   * (was 15 back / 8.5 up) — on device the car still sat large at the bottom
+   * edge with cramped forward visibility at speed. Pulling BACK is the key
+   * lever: it shrinks the car on screen AND lifts it off the bottom (the car's
+   * angle below the look-centre shrinks faster than the look pitch), while
+   * opening up the road ahead. The mesh itself can't shrink — it's the
+   * collision box (see CAR_VIS) — so framing is all camera.
    */
-  offsetBehind: 15,
-  offsetUp: 8.5,
+  offsetBehind: 21,
+  offsetUp: 9.5,
   /**
-   * Look-at point ahead of the car. Pushed well forward (was 24) so the gaze
-   * sits down the road, lifting the horizon and opening up the drivable area
-   * ahead rather than framing the car itself.
+   * Look-at point ahead of the car. Pushed further down the road (was 42) so
+   * the gaze sits well ahead, lifting the horizon and showing more drivable
+   * road rather than framing the car.
    */
-  lookAhead: 42,
+  lookAhead: 48,
   /** Height of the look-at point above the road (slightly up = more road ahead). */
-  lookAtUp: 1.5,
+  lookAtUp: 2.0,
   /** Smoothing factor (per-second) for camera follow. */
   followLerp: 6,
 } as const;
@@ -325,6 +328,11 @@ export const JUICE = {
   /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
   nearMissSlowmo: 0.12,
   slowmoScale: 0.45,
+  /** Combo tier-up celebration: a brief scale/glow pulse on the in-run HUD
+   *  multiplier when it climbs a tier. Duration (ms) + peak scale. Subtle. */
+  comboPulseMs: 280,
+  comboPulseScale: 1.35,
+  comboPulseBrightness: 1.6,
   /**
    * Minimum fraction of the full magnitude for randomised spreads (shard speed,
    * speed-line radius): value = spreadMinFraction + (1 - spreadMinFraction)*rand.

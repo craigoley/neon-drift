@@ -19,7 +19,7 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { CARS, cssHex, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
-type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | null;
+type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | 'pause' | null;
 
 export interface ShellOptions {
   isTouch: boolean;
@@ -27,6 +27,12 @@ export interface ShellOptions {
   shareUrl: string;
   /** Start a fresh run. */
   onPlay: () => void;
+  /** Pause the in-progress run (freeze sim + silence audio). */
+  onPause: () => void;
+  /** Resume a paused run. */
+  onResume: () => void;
+  /** Abandon the run and reset to an idle menu state. */
+  onMenu: () => void;
   /** Apply the selected car's cosmetic to the rendered vehicle. */
   applyCar: (carId: string) => void;
 }
@@ -41,6 +47,9 @@ export class Shell {
   private readonly settingsScreen: HTMLElement;
   private readonly carScreen: HTMLElement;
   private readonly crashScreen: HTMLElement;
+  private readonly pauseScreen: HTMLElement;
+  /** In-run PAUSE affordance (visible only while playing). */
+  private readonly pauseBtn: HTMLButtonElement;
 
   // Dynamic nodes.
   private readonly startBest: HTMLElement;
@@ -80,6 +89,7 @@ export class Shell {
     this.settingsScreen = this.buildSettings();
     this.carScreen = this.buildCarPicker();
     this.crashScreen = this.buildCrash();
+    this.pauseScreen = this.buildPause();
 
     // Cache nodes that update at runtime.
     this.startBest = this.startScreen.querySelector('.shell-best')!;
@@ -91,7 +101,23 @@ export class Shell {
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
 
-    this.root.append(this.startScreen, this.settingsScreen, this.carScreen, this.crashScreen);
+    // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
+    // only while playing, gated by `body.playing` like the touch DRIFT button.
+    this.pauseBtn = document.createElement('button');
+    this.pauseBtn.className = 'shell-pause-btn';
+    this.pauseBtn.type = 'button';
+    this.pauseBtn.setAttribute('aria-label', 'pause');
+    this.pauseBtn.textContent = '❚❚';
+    this.pauseBtn.addEventListener('click', () => this.requestPause());
+
+    this.root.append(
+      this.startScreen,
+      this.settingsScreen,
+      this.carScreen,
+      this.crashScreen,
+      this.pauseScreen,
+      this.pauseBtn,
+    );
     parent.appendChild(this.root);
 
     window.addEventListener('keydown', (e) => this.onKeyDown(e));
@@ -125,6 +151,14 @@ export class Shell {
     this.go(null);
   }
 
+  /** Pause an in-progress run (from the PAUSE button, Esc/P, or tab-blur). Only
+   *  acts while actually playing (no overlay shown). Idempotent. */
+  requestPause(): void {
+    if (this.current !== null) return;
+    this.opts.onPause();
+    this.go('pause');
+  }
+
   // --- routing ------------------------------------------------------------
 
   private go(screen: Screen): void {
@@ -133,13 +167,26 @@ export class Shell {
     this.settingsScreen.style.display = screen === 'settings' ? 'flex' : 'none';
     this.carScreen.style.display = screen === 'carpicker' ? 'flex' : 'none';
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
-    // `body.playing` gates the touch DRIFT button (only visible while playing).
+    this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
+    // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
     document.body.classList.toggle('playing', screen === null);
   }
 
   private play(): void {
     this.go(null);
     this.opts.onPlay();
+  }
+
+  /** Resume from the pause overlay back into the run. */
+  private resumeRun(): void {
+    this.opts.onResume();
+    this.go(null);
+  }
+
+  /** Abandon the current run and return to the (reset) start screen. */
+  private menu(): void {
+    this.opts.onMenu();
+    this.showStart();
   }
 
   // --- start screen -------------------------------------------------------
@@ -274,15 +321,33 @@ export class Shell {
       `<p class="shell-crash-combo"></p>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
+      `<div class="shell-row">` +
+      `<button class="shell-btn shell-btn--ghost shell-menu" type="button">MENU</button>` +
       `<button class="shell-btn shell-btn--ghost shell-share" type="button">SHARE</button>` +
-      `<p class="shell-hint">tap / any key to retry</p>`;
+      `</div>` +
+      `<p class="shell-hint">tap / any key to retry · Esc for menu</p>`;
 
     s.querySelector('.shell-play-again')!.addEventListener('click', () => this.play());
+    s.querySelector('.shell-menu')!.addEventListener('click', () => this.menu());
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());
     // Tap anywhere on the crash backdrop (not a button) also retries.
     s.addEventListener('click', (e) => {
       if (e.target === s) this.play();
     });
+    return s;
+  }
+
+  // --- pause overlay ------------------------------------------------------
+
+  private buildPause(): HTMLElement {
+    const s = screen('shell-pause');
+    s.innerHTML =
+      `<h2 class="shell-subtitle">PAUSED</h2>` +
+      `<button class="shell-btn shell-resume" type="button">RESUME</button>` +
+      `<button class="shell-btn shell-btn--ghost shell-quit" type="button">QUIT TO MENU</button>` +
+      `<p class="shell-hint">Esc / P to resume</p>`;
+    s.querySelector('.shell-resume')!.addEventListener('click', () => this.resumeRun());
+    s.querySelector('.shell-quit')!.addEventListener('click', () => this.menu());
     return s;
   }
 
@@ -296,7 +361,22 @@ export class Shell {
   // --- keyboard -----------------------------------------------------------
 
   private onKeyDown(e: KeyboardEvent): void {
+    // In play (no overlay): Esc / P pauses.
+    if (this.current === null) {
+      if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+        e.preventDefault();
+        this.requestPause();
+      }
+      return;
+    }
     switch (this.current) {
+      case 'pause':
+        // Esc / P resume; buttons handle their own Enter/Space activation.
+        if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+          e.preventDefault();
+          this.resumeRun();
+        }
+        break;
       case 'start':
         // Any key starts — except Tab (focus traversal) and Enter/Space when a
         // non-PLAY button is focused (so keyboard users can reach CARS/SETTINGS/
@@ -307,6 +387,11 @@ export class Shell {
         this.play();
         break;
       case 'crash':
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.menu();
+          return;
+        }
         if (e.key === 'Tab' || e.key === 'Shift') return;
         if ((e.key === 'Enter' || e.key === ' ') && this.focusedNonPlayButton()) return;
         e.preventDefault();

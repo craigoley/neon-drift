@@ -8,7 +8,7 @@
  */
 
 import './style.css';
-import { createGameState, Phase, startRun, update } from './game/GameState';
+import { createGameState, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
 import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
 import { AudioEngine } from './audio/AudioEngine';
@@ -83,10 +83,32 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // Resolve the selected car's handling fresh each run (the picker can change
   // it between runs) and pass it into the pure sim — the game layer never reads
   // settings/UI itself.
-  onPlay: () => startRun(game, handlingFor(settings.get('selectedCarId'))),
+  onPlay: () => {
+    audio.setMuted(false); // a fresh run is never muted (defensive)
+    startRun(game, handlingFor(settings.get('selectedCarId')));
+  },
+  onPause: () => {
+    pause(game);
+    audio.setMuted(true); // silence the engine drone while paused
+  },
+  onResume: () => {
+    resume(game);
+    audio.setMuted(false);
+  },
+  onMenu: () => {
+    returnToMenu(game); // fully reset — no stale run carries into the menu
+    audio.setMuted(false);
+  },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
 });
 shell.showStart();
+
+// Auto-pause when the tab/app is backgrounded mid-run (don't let it run blind).
+// requestPause() is a no-op unless actually playing, so this never double-fires
+// with the crash/menu overlays.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) shell.requestPause();
+});
 
 let last = performance.now();
 let accumulator = 0;
@@ -99,16 +121,24 @@ function frame(now: number): void {
   telemetry.push(ms);
 
   const realDt = Math.min(ms / 1000, MAX_FRAME_DT); // clamp tab-switch stalls
-  // Optional micro slow-mo after a near-miss: feed the sim scaled time.
-  const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
-  if (slowmo > 0) slowmo -= realDt;
+  const playing = game.phase === Phase.Playing;
 
-  accumulator += realDt * simScale;
+  // Advance the sim only while playing. When on the menu / paused / crash
+  // screens, don't bank time in the accumulator (so resuming never fast-forwards
+  // a backlog of steps).
   let nearMisses = 0;
-  while (accumulator >= TIMESTEP) {
-    update(game, controls.intent, TIMESTEP);
-    nearMisses += game.lastEvents.nearMisses;
-    accumulator -= TIMESTEP;
+  if (playing) {
+    // Optional micro slow-mo after a near-miss: feed the sim scaled time.
+    const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
+    if (slowmo > 0) slowmo -= realDt;
+    accumulator += realDt * simScale;
+    while (accumulator >= TIMESTEP) {
+      update(game, controls.intent, TIMESTEP);
+      nearMisses += game.lastEvents.nearMisses;
+      accumulator -= TIMESTEP;
+    }
+  } else {
+    accumulator = 0;
   }
   controls.endFrame();
 
@@ -144,11 +174,14 @@ function frame(now: number): void {
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
   traffic.sync(game.traffic, game.distance);
+  // Speed lines only stream while actually playing — otherwise they keep
+  // rushing on the frozen menu / pause / WIPEOUT screens (the cyan edge streak
+  // seen on the crash screen). Feeding 0 fades them out.
   speedLines.update(
     scene.camera.position.x,
     scene.camera.position.y,
     scene.camera.position.z,
-    normalizedSpeed(game.vehicle.speed),
+    playing ? normalizedSpeed(game.vehicle.speed) : 0,
     realDt,
   );
   shards.update(realDt);

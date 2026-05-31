@@ -7,7 +7,7 @@
 
 import * as THREE from 'three';
 import type { TrafficState } from '../game/Traffic';
-import { TRAFFIC, PALETTE } from '../utils/constants';
+import { TRAFFIC, TRAFFIC_VIS, PALETTE } from '../utils/constants';
 
 export class TrafficRenderer {
   private readonly mesh: THREE.InstancedMesh;
@@ -15,7 +15,7 @@ export class TrafficRenderer {
   private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
   constructor(scene: THREE.Scene) {
-    const geo = new THREE.BoxGeometry(TRAFFIC.halfWidth * 2, 1.2, TRAFFIC.halfLength * 2);
+    const geo = new THREE.BoxGeometry(TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
     const mat = new THREE.MeshBasicMaterial({ color: PALETTE.accent });
     this.mesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
     this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -32,7 +32,7 @@ export class TrafficRenderer {
         this.mesh.setMatrixAt(i, this.hidden);
         continue;
       }
-      this.dummy.position.set(o.lateral, 0.6, -(o.distance - playerDistance));
+      this.dummy.position.set(o.lateral, TRAFFIC_VIS.meshY, -(o.distance - playerDistance));
       this.dummy.rotation.set(0, 0, 0);
       this.dummy.scale.set(1, 1, 1);
       this.dummy.updateMatrix();

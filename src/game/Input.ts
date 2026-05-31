@@ -18,9 +18,3 @@ export interface InputIntent {
 export function createIntent(): InputIntent {
   return { steer: 0, handbrake: false, restart: false };
 }
-
-/** Clamp/normalise an intent into valid ranges (defensive; pure). */
-export function normalizeIntent(intent: InputIntent): InputIntent {
-  const steer = intent.steer < -1 ? -1 : intent.steer > 1 ? 1 : intent.steer;
-  return { steer, handbrake: intent.handbrake, restart: intent.restart };
-}

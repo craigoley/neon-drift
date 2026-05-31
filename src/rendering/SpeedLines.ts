@@ -56,11 +56,12 @@ export class SpeedLines {
 
   update(cameraX: number, cameraY: number, cameraZ: number, normalizedSpeed: number, dt: number): void {
     const target = clamp(inverseLerp(JUICE.speedLineThreshold, 1, normalizedSpeed), 0, 1);
-    this.material.opacity += (target - this.material.opacity) * Math.min(1, dt * 6);
+    this.material.opacity +=
+      (target - this.material.opacity) * Math.min(1, dt * JUICE.speedLineOpacityRate);
 
     this.lines.position.set(cameraX, cameraY, cameraZ);
 
-    const step = FORWARD_SPEED * dt * (0.5 + normalizedSpeed);
+    const step = FORWARD_SPEED * dt * (JUICE.speedLineBaseSpeedScale + normalizedSpeed);
     for (let i = 0; i < this.bx.length; i++) {
       this.bz[i] += step;
       if (this.bz[i] > JUICE.speedLinePastMargin) this.respawn(i, 0);

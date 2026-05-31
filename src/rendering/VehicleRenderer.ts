@@ -38,11 +38,17 @@ export class VehicleRenderer {
   /** A bright forward-pointing cone standing in for a headlight beam. */
   private makeHeadlight(x: number, length: number): THREE.Mesh {
     const cone = new THREE.Mesh(
-      new THREE.ConeGeometry(0.5, CAR_VIS.headlightLength, 8, 1, true),
+      new THREE.ConeGeometry(
+        CAR_VIS.headlightConeRadius,
+        CAR_VIS.headlightLength,
+        CAR_VIS.headlightConeSegments,
+        1,
+        true,
+      ),
       new THREE.MeshBasicMaterial({
         color: PALETTE.accent,
         transparent: true,
-        opacity: 0.35,
+        opacity: CAR_VIS.headlightOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
       }),

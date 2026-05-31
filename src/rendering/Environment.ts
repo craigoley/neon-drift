@@ -23,7 +23,7 @@ export class Environment {
     this.grid = new THREE.GridHelper(GRID.size, GRID.divisions, PALETTE.magenta, PALETTE.cyan);
     this.grid.position.y = GRID.y;
     (this.grid.material as THREE.Material).transparent = true;
-    (this.grid.material as THREE.Material).opacity = 0.55;
+    (this.grid.material as THREE.Material).opacity = GRID.opacity;
     this.group.add(this.grid);
 
     this.backdrop.add(this.makeSun());
@@ -88,7 +88,7 @@ export class Environment {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
     const mat = new THREE.LineBasicMaterial({ color: PALETTE.cyan, fog: false });
     const lines = new THREE.LineSegments(geo, mat);
-    lines.position.set(0, 0, -ENV.distance * 0.4);
+    lines.position.set(0, 0, -ENV.distance * ENV.mountainDepthFactor);
     return lines;
   }
 

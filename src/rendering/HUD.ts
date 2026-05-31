@@ -48,7 +48,9 @@ export class HUD {
     this.crashScore = el('p', 'hud-crash-line');
     this.crashBest = el('p', 'hud-crash-line');
     const crashPrompt = el('p', 'hud-prompt');
-    crashPrompt.innerHTML = `press <b>Enter</b> / <b>tap</b> to restart`;
+    // Any keydown triggers restart (see Controls.onKey), so match the menu's
+    // wording rather than implying only Enter works.
+    crashPrompt.innerHTML = `press <b>any key</b> / <b>tap</b> to restart`;
     this.crash.append(crashTitle, this.crashScore, this.crashBest, crashPrompt);
 
     root.append(this.stats, this.menu, this.crash);

@@ -26,6 +26,12 @@ export const CSS_PALETTE = {
 /** Fixed simulation timestep, in seconds (the game updates at 60 Hz). */
 export const TIMESTEP = 1 / 60;
 
+/**
+ * Maximum frame delta (seconds) fed to the loop. Caps catch-up after a
+ * tab-switch / stall so the accumulator can't trigger a spiral of death.
+ */
+export const MAX_FRAME_DT = 0.25;
+
 /** Road geometry + recycled-segment-pool tuning. */
 export const ROAD = {
   /** Drivable half-width; lateral position is clamped to +/- this. */
@@ -137,6 +143,8 @@ export const GRID = {
   divisions: 160,
   /** Y offset below the road surface. */
   y: -0.05,
+  /** Opacity of the grid lines (how prominent the ground plane reads). */
+  opacity: 0.55,
 } as const;
 
 /** Road visual tuning (rendering only — geometry is reused per pool slot). */
@@ -165,6 +173,17 @@ export const CAR_VIS = {
   /** Headlight cone length + offset. */
   headlightLength: 8,
   headlightInset: 0.6,
+  /** Headlight cone radius, opacity and radial segment count. */
+  headlightConeRadius: 0.5,
+  headlightOpacity: 0.35,
+  headlightConeSegments: 8,
+} as const;
+
+/** Traffic obstacle visual tuning (rendering only). */
+export const TRAFFIC_VIS = {
+  /** Obstacle mesh height and its y-centre above the ground. */
+  meshHeight: 1.2,
+  meshY: 0.6,
 } as const;
 
 /** Horizon sun + wireframe mountains (procedural, fog-excluded). */
@@ -179,6 +198,8 @@ export const ENV = {
   mountainSpread: 1400,
   mountainMaxHeight: 140,
   mountainBaseY: 0,
+  /** Fraction of `distance` the mountains sit in front of the backdrop origin. */
+  mountainDepthFactor: 0.4,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
@@ -218,6 +239,10 @@ export const JUICE = {
   speedLineHeightOffset: 4,
   /** Z past the camera at which a streak respawns. */
   speedLinePastMargin: 4,
+  /** Per-second rate at which speed-line opacity eases toward its target. */
+  speedLineOpacityRate: 6,
+  /** Base fraction of forward speed applied to streaks at zero normalised speed. */
+  speedLineBaseSpeedScale: 0.5,
   /** Crash screen-shake magnitude (world units) and decay (per second). */
   shakeMagnitude: 1.4,
   shakeDecay: 4,
@@ -245,15 +270,44 @@ export const AUDIO = {
   engineBaseHz: 60,
   engineTopHz: 220,
   engineGain: 0.06,
-  /** Tyre-screech filtered-noise gain on handbrake. */
+  /** Engine lowpass cutoff (Hz), detune ratio between the two oscillators, and
+   *  the pitch-glide time constant (s) for setTargetAtTime. */
+  engineLowpassHz: 800,
+  engineDetune: 1.01,
+  enginePitchGlide: 0.08,
+  /** Tyre-screech filtered-noise gain on handbrake, bandpass centre (Hz), Q,
+   *  and gain ramp time constant (s). */
   screechGain: 0.05,
+  screechBandHz: 2200,
+  screechQ: 2,
+  screechRamp: 0.05,
   /** Near-miss whoosh + combo-tick blip. */
   whooshHz: 520,
   whooshGain: 0.08,
+  /** Whoosh envelope: attack (s), tail/decay (s), stop (s), and the upward
+   *  frequency-sweep multiplier. */
+  whooshAttack: 0.04,
+  whooshDecay: 0.3,
+  whooshStop: 0.32,
+  whooshSweep: 2.5,
   comboBlipHz: 880,
+  /** Combo blip: gain, decay (s) and stop (s). */
+  comboBlipGain: 0.12,
+  comboBlipDecay: 0.12,
+  comboBlipStop: 0.14,
   /** Crash hit: noise burst + low sine thump. */
   crashNoiseGain: 0.25,
+  /** Crash noise envelope: decay (s) and stop (s). */
+  crashNoiseDecay: 0.4,
+  crashNoiseStop: 0.42,
   crashThumpHz: 55,
+  /** Crash thump: start-pitch multiplier, gain, pitch glide (s), gain decay (s)
+   *  and stop (s). */
+  crashThumpStartMul: 2,
+  crashThumpGain: 0.6,
+  crashThumpGlide: 0.5,
+  crashThumpDecay: 0.6,
+  crashThumpStop: 0.62,
 } as const;
 
 /** Touch-control tuning. */

@@ -25,7 +25,7 @@ import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { BestStore } from './storage/BestStore';
 import { Telemetry } from './utils/Telemetry';
-import { JUICE, TIMESTEP } from './utils/constants';
+import { JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -74,7 +74,7 @@ function frame(now: number): void {
   last = now;
   telemetry.push(ms);
 
-  const realDt = Math.min(ms / 1000, 0.25); // clamp tab-switch stalls
+  const realDt = Math.min(ms / 1000, MAX_FRAME_DT); // clamp tab-switch stalls
   // Optional micro slow-mo after a near-miss: feed the sim scaled time.
   const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
   if (slowmo > 0) slowmo -= realDt;

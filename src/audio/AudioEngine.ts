@@ -63,14 +63,14 @@ export class AudioEngine {
     this.engineGain.gain.value = AUDIO.engineGain;
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
-    filter.frequency.value = 800;
+    filter.frequency.value = AUDIO.engineLowpassHz;
 
     this.engineOscA = ctx.createOscillator();
     this.engineOscB = ctx.createOscillator();
     this.engineOscA.type = 'sawtooth';
     this.engineOscB.type = 'sawtooth';
     this.engineOscA.frequency.value = AUDIO.engineBaseHz;
-    this.engineOscB.frequency.value = AUDIO.engineBaseHz * 1.01; // slight detune
+    this.engineOscB.frequency.value = AUDIO.engineBaseHz * AUDIO.engineDetune;
     this.engineOscA.connect(filter);
     this.engineOscB.connect(filter);
     filter.connect(this.engineGain).connect(this.master!);
@@ -84,8 +84,8 @@ export class AudioEngine {
     this.screechGain.gain.value = 0;
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.value = 2200;
-    band.Q.value = 2;
+    band.frequency.value = AUDIO.screechBandHz;
+    band.Q.value = AUDIO.screechQ;
     this.screechSource = ctx.createBufferSource();
     this.screechSource.buffer = this.noiseBuffer;
     this.screechSource.loop = true;
@@ -98,15 +98,15 @@ export class AudioEngine {
     if (!this.ctx || !this.engineOscA || !this.engineOscB) return;
     const hz = AUDIO.engineBaseHz + (AUDIO.engineTopHz - AUDIO.engineBaseHz) * normalized;
     const t = this.ctx.currentTime;
-    this.engineOscA.frequency.setTargetAtTime(hz, t, 0.08);
-    this.engineOscB.frequency.setTargetAtTime(hz * 1.01, t, 0.08);
+    this.engineOscA.frequency.setTargetAtTime(hz, t, AUDIO.enginePitchGlide);
+    this.engineOscB.frequency.setTargetAtTime(hz * AUDIO.engineDetune, t, AUDIO.enginePitchGlide);
   }
 
   /** Turn tyre screech on/off (handbrake while moving). */
   setScreech(active: boolean): void {
     if (!this.ctx || !this.screechGain) return;
     const t = this.ctx.currentTime;
-    this.screechGain.gain.setTargetAtTime(active ? AUDIO.screechGain : 0, t, 0.05);
+    this.screechGain.gain.setTargetAtTime(active ? AUDIO.screechGain : 0, t, AUDIO.screechRamp);
   }
 
   /** Near-miss: a short upward whoosh plus a bright combo-tick blip. */
@@ -117,19 +117,19 @@ export class AudioEngine {
 
     const whooshGain = ctx.createGain();
     whooshGain.gain.setValueAtTime(0, t);
-    whooshGain.gain.linearRampToValueAtTime(AUDIO.whooshGain, t + 0.04);
-    whooshGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+    whooshGain.gain.linearRampToValueAtTime(AUDIO.whooshGain, t + AUDIO.whooshAttack);
+    whooshGain.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.whooshDecay);
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
     band.frequency.setValueAtTime(AUDIO.whooshHz, t);
-    band.frequency.exponentialRampToValueAtTime(AUDIO.whooshHz * 2.5, t + 0.3);
+    band.frequency.exponentialRampToValueAtTime(AUDIO.whooshHz * AUDIO.whooshSweep, t + AUDIO.whooshDecay);
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
     src.connect(band).connect(whooshGain).connect(this.master);
     src.start(t);
-    src.stop(t + 0.32);
+    src.stop(t + AUDIO.whooshStop);
 
-    this.blip(AUDIO.comboBlipHz, 0.12);
+    this.blip(AUDIO.comboBlipHz, AUDIO.comboBlipGain);
   }
 
   /** Crash: white-noise burst plus a low sine thump. */
@@ -140,23 +140,23 @@ export class AudioEngine {
 
     const noiseGain = ctx.createGain();
     noiseGain.gain.setValueAtTime(AUDIO.crashNoiseGain, t);
-    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.4);
+    noiseGain.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.crashNoiseDecay);
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
     src.connect(noiseGain).connect(this.master);
     src.start(t);
-    src.stop(t + 0.42);
+    src.stop(t + AUDIO.crashNoiseStop);
 
     const thump = ctx.createOscillator();
     const thumpGain = ctx.createGain();
     thump.type = 'sine';
-    thump.frequency.setValueAtTime(AUDIO.crashThumpHz * 2, t);
-    thump.frequency.exponentialRampToValueAtTime(AUDIO.crashThumpHz, t + 0.5);
-    thumpGain.gain.setValueAtTime(0.6, t);
-    thumpGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.6);
+    thump.frequency.setValueAtTime(AUDIO.crashThumpHz * AUDIO.crashThumpStartMul, t);
+    thump.frequency.exponentialRampToValueAtTime(AUDIO.crashThumpHz, t + AUDIO.crashThumpGlide);
+    thumpGain.gain.setValueAtTime(AUDIO.crashThumpGain, t);
+    thumpGain.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.crashThumpDecay);
     thump.connect(thumpGain).connect(this.master);
     thump.start(t);
-    thump.stop(t + 0.62);
+    thump.stop(t + AUDIO.crashThumpStop);
   }
 
   private blip(hz: number, gain: number): void {
@@ -167,9 +167,9 @@ export class AudioEngine {
     osc.type = 'square';
     osc.frequency.value = hz;
     g.gain.setValueAtTime(gain, t);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.12);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.comboBlipDecay);
     osc.connect(g).connect(this.master!);
     osc.start(t);
-    osc.stop(t + 0.14);
+    osc.stop(t + AUDIO.comboBlipStop);
   }
 }

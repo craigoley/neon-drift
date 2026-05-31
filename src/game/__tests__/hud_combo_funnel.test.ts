@@ -62,7 +62,7 @@ describe('HUD combo funnel (detection -> increment -> display)', () => {
     // Build a combo, then crash (which resets the live combo to x1.0).
     registerNearMiss(game.score);
     registerNearMiss(game.score);
-    const peak = game.score.maxCombo;
+    const peak = game.score.peakCombo;
     expect(peak).toBeGreaterThan(1);
     resetCombo(game.score);
     game.phase = Phase.Crashed;

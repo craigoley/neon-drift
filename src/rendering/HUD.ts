@@ -76,9 +76,9 @@ export class HUD {
 
     if (game.phase === Phase.Crashed) {
       this.crashScore.textContent = `score ${Math.round(game.score.score)} · ${Math.round(game.distance)} m`;
-      this.crashCombo.textContent = `MAX COMBO x${game.score.maxCombo.toFixed(1)}`;
+      this.crashCombo.textContent = `MAX COMBO x${game.score.peakCombo.toFixed(1)}`;
       // Dim the line when the run never built a combo, so a daring run pops.
-      this.crashCombo.style.opacity = game.score.maxCombo > 1 ? '1' : '0.45';
+      this.crashCombo.style.opacity = game.score.peakCombo > 1 ? '1' : '0.45';
       this.crashBest.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
     }
   }

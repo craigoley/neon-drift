@@ -1,0 +1,115 @@
+name: Claude PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    # Skip auto-review on PRs that only edit this workflow file. The
+    # `anthropics/claude-code-action@v1` action refuses to run when its
+    # workflow file differs from the version on `main` (a security check
+    # that prevents PRs from editing the workflow and having the action
+    # execute the edited version under privileged context). On a personal
+    # repo there's no attacker, but the action still self-fails with exit
+    # 1 on every workflow-edit PR, leaving a recurring red ✗. paths-ignore
+    # short-circuits the trigger so it never runs on those PRs.
+    paths-ignore:
+      - '.github/workflows/claude-review.yml'
+
+# Workflow-level default: read-only. The job below grants exactly the
+# scopes the review needs (pull-requests: write to post the review,
+# id-token: write for the action's OIDC auth). No contents: write — this
+# is a review-only workflow; it never pushes commits or merges.
+permissions:
+  contents: read
+
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Loop-prevention / actor guards:
+    #   - skip dependabot[bot]: its PRs only touch version pins; no review needed
+    #   - skip github-actions[bot]: prevents self-review loops on bot pushes
+    #   - skip branches containing 'claude-fix': prevents review loops on any
+    #     fix branch a future automation might push
+    # Also skip drafts — only review once a PR is marked ready.
+    if: |
+      github.event.pull_request.draft == false &&
+      github.event.pull_request.user.login != 'dependabot[bot]' &&
+      github.event.pull_request.user.login != 'github-actions[bot]' &&
+      !contains(github.event.pull_request.head.ref, 'claude-fix')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - uses: anthropics/claude-code-action@787c5a0ce96a9a6cfb050ea0c8f4c05f2447c251  # v1
+        with:
+          # OAuth via Craig's Max subscription — same auth ClawApp uses.
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+            BRANCH: ${{ github.event.pull_request.head.ref }}
+
+            You are the code reviewer for Neon Drift, a synthwave endless racing
+            game built with TypeScript + Three.js + Vite and deployed to Vercel as
+            a static site. Review the full diff of this pull request and post your
+            findings as inline review comments plus one short summary comment. You
+            review only — you do not edit, commit, or merge.
+
+            ## Project hard rules — flag any violation immediately
+
+            **1. Purity of the game layer (THE load-bearing rule)**
+            `src/game/` is pure TypeScript and MUST NOT import 'three' anywhere.
+            Any `import ... from 'three'` (or a transitive import that pulls three
+            in) under `src/game/` is a hard failure — flag it at the top of your
+            review. Game logic must stay runnable and testable in Node with no
+            WebGL. The rendering layer (`src/rendering/`) reads game state and
+            never mutates it; flag renderers that write back into game state.
+
+            **2. No magic numbers outside utils/constants.ts**
+            All tuning values live in `src/utils/constants.ts`. Flag any numeric
+            literal used as a tuning/gameplay/dimension value elsewhere (loop
+            indices, 0/1 identities and obvious math constants are fine).
+
+            **3. No allocations in the requestAnimationFrame hot loop**
+            Flag object/array/vector allocations inside the per-frame render loop
+            (anything reached from `requestAnimationFrame`): `new THREE.Vector3()`,
+            `new THREE.Color()`, array/object literals, `.map`/`.filter` that
+            allocate, closures created per frame. Vectors and scratch objects
+            should be created once and reused.
+
+            **4. Touch input parity with keyboard**
+            Mobile is required. Any new keyboard control must have an equivalent
+            touch path, and vice versa. Flag input changes that add one without the
+            other.
+
+            **5. TypeScript strict — no implicit any**
+            Flag implicit `any`, unsafe casts (`as any`, non-null `!` that hides a
+            real nullable), and types that defeat strict mode.
+
+            ## Also review for
+            - Correctness: logic errors, off-by-one, broken edge cases, regressions
+            - Whether all callers of a changed function/type were updated
+            - Swallowed errors, dead code, duplicated logic
+
+            ## What to ignore
+            - Style/formatting (prettier/eslint territory)
+            - TODO/FIXME comments (intentional)
+            - Lock files, generated files, build artifacts
+            - Test code that intentionally exercises edge cases
+
+            Be specific: cite file and line, explain why it matters, and suggest
+            the concrete fix. If the PR is clean, say so briefly and approve.
+
+          claude_args: |
+            --model claude-opus-4-6
+            --max-turns 30
+            --allowedTools Read,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),mcp__github_inline_comment__create_inline_comment

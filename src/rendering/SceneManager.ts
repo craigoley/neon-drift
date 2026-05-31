@@ -39,7 +39,7 @@ export class SceneManager {
       CAMERA.far,
     );
     this.camera.position.set(0, CAMERA.offsetUp, CAMERA.offsetBehind);
-    this.camera.lookAt(0, 0, -CAMERA.lookAhead);
+    this.camera.lookAt(0, CAMERA.lookAtUp, -CAMERA.lookAhead);
 
     this.renderer = new THREE.WebGLRenderer({ antialias: !isTouch, powerPreference: 'high-performance' });
     this.renderer.setPixelRatio(
@@ -83,7 +83,7 @@ export class SceneManager {
       this.camera.updateProjectionMatrix();
     }
 
-    this.camera.lookAt(targetX + this.shake.x, this.shake.y, -CAMERA.lookAhead);
+    this.camera.lookAt(targetX + this.shake.x, CAMERA.lookAtUp + this.shake.y, -CAMERA.lookAhead);
   }
 
   resize(width: number, height: number): void {

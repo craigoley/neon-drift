@@ -123,16 +123,27 @@ export const SCORING = {
 
 /** Camera + chase-cam tuning (rendering layer). */
 export const CAMERA = {
-  fov: 72,
+  fov: 70,
   /** Extra FOV degrees added at top speed for a sense of acceleration. */
-  fovSpeedBoost: 10,
+  fovSpeedBoost: 9,
   near: 0.1,
   far: 2000,
-  /** Chase-cam offset behind/above the car. */
-  offsetBehind: 11,
-  offsetUp: 4.5,
-  /** Look-at point ahead of the car. */
-  lookAhead: 24,
+  /**
+   * Chase-cam offset behind/above the car. Raised and pulled back from the
+   * original (4.5 up / 11 back) so the car drops to the lower quarter of the
+   * screen and far more road ahead is visible — essential reaction time at
+   * speed in a dodging game.
+   */
+  offsetBehind: 15,
+  offsetUp: 8.5,
+  /**
+   * Look-at point ahead of the car. Pushed well forward (was 24) so the gaze
+   * sits down the road, lifting the horizon and opening up the drivable area
+   * ahead rather than framing the car itself.
+   */
+  lookAhead: 42,
+  /** Height of the look-at point above the road (slightly up = more road ahead). */
+  lookAtUp: 1.5,
   /** Smoothing factor (per-second) for camera follow. */
   followLerp: 6,
 } as const;
@@ -169,8 +180,12 @@ export const ROAD_VIS = {
 
 /** Player car visual tuning. */
 export const CAR_VIS = {
-  width: 1.9,
-  height: 0.8,
+  // Slightly sleeker than before (was 1.9 x 0.8) to reduce on-screen bulk; the
+  // bulk of the shrink comes from the raised/pulled-back camera. Length is kept
+  // equal to the collision box (VEHICLE.halfLength*2 = 4.0) so the visible car
+  // matches its hitbox and collisions stay fair.
+  width: 1.7,
+  height: 0.7,
   length: 4.0,
   /** Roll (radians) at full lateral velocity, for steering feel. */
   maxRoll: 0.25,

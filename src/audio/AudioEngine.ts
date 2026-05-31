@@ -18,6 +18,8 @@ export class AudioEngine {
   private engineOscA: OscillatorNode | null = null;
   private engineOscB: OscillatorNode | null = null;
   private engineGain: GainNode | null = null;
+  /** Engine lowpass — its cutoff shifts per biome for a subtle tone change. */
+  private engineFilter: BiquadFilterNode | null = null;
 
   // Tyre screech (filtered noise, gated by handbrake).
   private screechSource: AudioBufferSourceNode | null = null;
@@ -101,6 +103,7 @@ export class AudioEngine {
     const filter = ctx.createBiquadFilter();
     filter.type = 'lowpass';
     filter.frequency.value = AUDIO.engineLowpassHz;
+    this.engineFilter = filter;
 
     this.engineOscA = ctx.createOscillator();
     this.engineOscB = ctx.createOscillator();
@@ -137,6 +140,18 @@ export class AudioEngine {
     const t = this.ctx.currentTime;
     this.engineOscA.frequency.setTargetAtTime(hz, t, AUDIO.enginePitchGlide);
     this.engineOscB.frequency.setTargetAtTime(hz * AUDIO.engineDetune, t, AUDIO.enginePitchGlide);
+  }
+
+  /**
+   * Biome tone: `t` in [0, 1] glides the engine lowpass cutoff between a dark
+   * (low) and bright (high) voicing, so each biome has a subtly different timbre.
+   * No-op until the context is unlocked. Smoothed so transitions never click.
+   */
+  setBiomeTone(t: number): void {
+    if (!this.ctx || !this.engineFilter) return;
+    const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
+    const hz = AUDIO.biomeToneLowHz + (AUDIO.biomeToneHighHz - AUDIO.biomeToneLowHz) * clamped;
+    this.engineFilter.frequency.setTargetAtTime(hz, this.ctx.currentTime, AUDIO.biomeToneGlide);
   }
 
   /** Turn tyre screech on/off (handbrake while moving). */

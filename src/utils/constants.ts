@@ -201,13 +201,13 @@ export const ROAD_VIS = {
 
 /** Player car visual tuning. */
 export const CAR_VIS = {
-  // Slightly sleeker than before (was 1.9 x 0.8) to reduce on-screen bulk; the
-  // bulk of the shrink comes from the raised/pulled-back camera. Length is kept
-  // equal to the collision box (VEHICLE.halfLength*2 = 4.0) so the visible car
-  // matches its hitbox and collisions stay fair.
-  width: 1.7,
+  // The rendered car IS its collision box: width/length are derived from the
+  // VEHICLE half-extents so the neon wireframe the player sees is exactly what
+  // collides. Previously the mesh (1.7 wide) was narrower than the hitbox (2.2),
+  // causing deaths with a visible gap and obstacles clipping the body at impact.
+  width: VEHICLE.halfWidth * 2,
   height: 0.7,
-  length: 4.0,
+  length: VEHICLE.halfLength * 2,
   /** Roll (radians) at full lateral velocity, for steering feel. */
   maxRoll: 0.25,
   /** Lateral velocity that maps to maxRoll. */
@@ -215,9 +215,10 @@ export const CAR_VIS = {
   /** Headlight cone length + offset. */
   headlightLength: 8,
   headlightInset: 0.6,
-  /** Headlight cone radius, opacity and radial segment count. */
+  /** Headlight cone radius, additive-glow intensity and radial segment count.
+   *  Opacity is low because the beam uses additive blending (reads as light). */
   headlightConeRadius: 0.5,
-  headlightOpacity: 0.35,
+  headlightOpacity: 0.18,
   headlightConeSegments: 8,
 } as const;
 

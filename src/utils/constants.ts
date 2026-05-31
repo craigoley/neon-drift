@@ -332,6 +332,7 @@ export const JUICE = {
    *  multiplier when it climbs a tier. Duration (ms) + peak scale. Subtle. */
   comboPulseMs: 280,
   comboPulseScale: 1.35,
+  comboPulseBrightness: 1.6,
   /**
    * Minimum fraction of the full magnitude for randomised spreads (shard speed,
    * speed-line radius): value = spreadMinFraction + (1 - spreadMinFraction)*rand.

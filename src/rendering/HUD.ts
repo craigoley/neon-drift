@@ -67,7 +67,7 @@ export class HUD {
     this.comboEl.animate(
       [
         { transform: 'scale(1)' },
-        { transform: `scale(${JUICE.comboPulseScale})`, filter: 'brightness(1.6)' },
+        { transform: `scale(${JUICE.comboPulseScale})`, filter: `brightness(${JUICE.comboPulseBrightness})` },
         { transform: 'scale(1)' },
       ],
       { duration: JUICE.comboPulseMs, easing: 'ease-out' },

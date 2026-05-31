@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createGameState, Phase, startRun, update } from '../GameState';
-import { activeSegmentCount, createRoadState, poolSize, updateRoad } from '../Road';
+import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad } from '../Road';
 import { activeObstacleCount, createTrafficState, updateTraffic } from '../Traffic';
 import { createIntent } from '../Input';
 import { Rng } from '../../utils/rng';
@@ -31,7 +31,7 @@ describe('GameState — full-loop integration & bounded pools', () => {
     for (let i = 0; i < steps; i++) {
       distance += speed * TIMESTEP;
       updateRoad(road, distance);
-      updateTraffic(traffic, rng, distance, TIMESTEP);
+      updateTraffic(traffic, rng, seed, distance, TIMESTEP);
       // Pool ARRAYS never grow — this is the bounded-memory guarantee.
       expect(road.segments.length).toBe(roadLen);
       expect(traffic.pool.length).toBe(trafficLen);
@@ -71,10 +71,14 @@ describe('GameState — full-loop integration & bounded pools', () => {
 
   it('crash ends the run and restart begins a fresh one', () => {
     const game = startRun(createGameState(5));
-    // Force a crash by parking an obstacle dead-centre on the player.
+    // Force a crash by parking a static obstacle on the player. Its lateral is
+    // resolved as roadCentre + laneOffset, so cancel the centre to land at the
+    // player's lateral (0).
     const o = game.traffic.pool[0];
     o.active = true;
-    o.lateral = 0;
+    o.laneOffset = -roadCenterAt(game.seed, game.distance);
+    o.sway = 0;
+    o.speed = 0;
     o.distance = game.distance;
     o.passed = false;
     update(game, createIntent(), TIMESTEP);

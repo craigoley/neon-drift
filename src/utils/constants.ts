@@ -85,8 +85,16 @@ export const TRAFFIC = {
   baseSpawnInterval: 1.4,
   /** Lowest spawn interval as difficulty ramps. */
   minSpawnInterval: 0.35,
-  /** How much the interval shrinks per world-unit travelled. */
-  spawnRampPerUnit: 0.00006,
+  /**
+   * Difficulty ramp (spawn density). For the first `rampStartDistance` world
+   * units the interval stays at `baseSpawnInterval` — a grace period (~the
+   * first 15s at starting speed) to let the player learn. Past that, the
+   * interval shrinks by `spawnRampPerUnit` per unit toward `minSpawnInterval`,
+   * so traffic meaningfully escalates the further you get.
+   */
+  rampStartDistance: 850,
+  /** How much the interval shrinks per world-unit travelled past the grace. */
+  spawnRampPerUnit: 0.0001,
   /** Obstacle forward-speed range (slower than the player, so they're overtaken). */
   minSpeed: 25,
   maxSpeed: 60,
@@ -95,6 +103,17 @@ export const TRAFFIC = {
   halfLength: 2.2,
   /** Fraction of the road half-width obstacles may occupy. */
   lateralSpread: 0.85,
+  /**
+   * Lane-changing "movers": a fraction of obstacles sway laterally (sine) about
+   * their spawn lane instead of holding a fixed line, so dodging requires
+   * reading movement. Amplitude (world units) is randomised per mover; swayRate
+   * is the phase advance (radians/second). Kept subtle so it reads as drifting
+   * traffic, not teleporting.
+   */
+  moverFraction: 0.35,
+  swayAmplitudeMin: 1.5,
+  swayAmplitudeMax: 3.0,
+  swayRate: 1.1,
 } as const;
 
 /** Scoring, combo, and near-miss / collision thresholds. */
@@ -108,27 +127,42 @@ export const SCORING = {
   /** Maximum combo multiplier. */
   maxCombo: 10,
   /** Seconds a combo survives without a fresh near-miss before resetting. */
-  comboTimeout: 4,
+  comboTimeout: 5,
   /**
    * Lateral gap (centre-to-centre) below which a pass counts as a near-miss.
-   * Must exceed the summed collision half-widths or nothing would ever be a
-   * near-miss without also colliding.
+   * Must exceed the summed collision half-widths (2.2) or nothing would ever
+   * be a near-miss without also colliding. Tuned generously: with the road
+   * 18 units wide, the old 3.2 window almost never fired in normal play (a
+   * pass had to thread a 1-unit band), so combos never formed and score
+   * tracked distance exactly. 4.8 gives a ~2.6-unit-of-clear-space window so
+   * daring passes reliably reward the player.
    */
-  nearMissLateral: 3.2,
+  nearMissLateral: 4.8,
 } as const;
 
 /** Camera + chase-cam tuning (rendering layer). */
 export const CAMERA = {
-  fov: 72,
+  fov: 70,
   /** Extra FOV degrees added at top speed for a sense of acceleration. */
-  fovSpeedBoost: 10,
+  fovSpeedBoost: 9,
   near: 0.1,
   far: 2000,
-  /** Chase-cam offset behind/above the car. */
-  offsetBehind: 11,
-  offsetUp: 4.5,
-  /** Look-at point ahead of the car. */
-  lookAhead: 24,
+  /**
+   * Chase-cam offset behind/above the car. Raised and pulled back from the
+   * original (4.5 up / 11 back) so the car drops to the lower quarter of the
+   * screen and far more road ahead is visible — essential reaction time at
+   * speed in a dodging game.
+   */
+  offsetBehind: 15,
+  offsetUp: 8.5,
+  /**
+   * Look-at point ahead of the car. Pushed well forward (was 24) so the gaze
+   * sits down the road, lifting the horizon and opening up the drivable area
+   * ahead rather than framing the car itself.
+   */
+  lookAhead: 42,
+  /** Height of the look-at point above the road (slightly up = more road ahead). */
+  lookAtUp: 1.5,
   /** Smoothing factor (per-second) for camera follow. */
   followLerp: 6,
 } as const;
@@ -165,8 +199,12 @@ export const ROAD_VIS = {
 
 /** Player car visual tuning. */
 export const CAR_VIS = {
-  width: 1.9,
-  height: 0.8,
+  // Slightly sleeker than before (was 1.9 x 0.8) to reduce on-screen bulk; the
+  // bulk of the shrink comes from the raised/pulled-back camera. Length is kept
+  // equal to the collision box (VEHICLE.halfLength*2 = 4.0) so the visible car
+  // matches its hitbox and collisions stay fair.
+  width: 1.7,
+  height: 0.7,
   length: 4.0,
   /** Roll (radians) at full lateral velocity, for steering feel. */
   maxRoll: 0.25,
@@ -200,17 +238,29 @@ export const ENV = {
   mountainSpread: 1400,
   mountainMaxHeight: 140,
   mountainBaseY: 0,
-  /** Fraction of `distance` the mountains sit in front of the backdrop origin. */
+  /** Fraction of `distance` the mountains sit behind the backdrop origin (the
+   *  sun), so the silhouette reads clearly behind the sun's framing. */
   mountainDepthFactor: 0.4,
+  /**
+   * Backdrop render order. Sun + mountains are drawn as a guaranteed-background
+   * layer (depthTest/Write off) BEFORE all gameplay geometry, so they can never
+   * paint over the car or traffic. Mountains sit behind the sun (drawn first).
+   */
+  sunRenderOrder: -1,
+  mountainRenderOrder: -2,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
 export const BLOOM = {
-  strength: 0.9,
-  radius: 0.6,
-  threshold: 0.2,
+  // Tamed from the original (strength 0.9 / threshold 0.2 / exposure 1.1) which
+  // blew the sun out toward white and washed out the HUD. Lower strength + a
+  // higher luminance threshold mean only the brightest neon cores bloom; the
+  // synthwave glow stays but the sun no longer clips to white.
+  strength: 0.6,
+  radius: 0.5,
+  threshold: 0.45,
   /** Tone-mapping exposure applied by the renderer (OutputPass reads this). */
-  exposure: 1.1,
+  exposure: 1.0,
   /** Bloom internal-resolution divisor on touch devices (GPU headroom). */
   mobileResolutionScale: 0.5,
 } as const;

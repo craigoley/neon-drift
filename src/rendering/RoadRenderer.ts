@@ -24,7 +24,10 @@ export class RoadRenderer {
     this.edgeGeo = new THREE.BoxGeometry(ROAD_VIS.edgeHalfWidth * 2, ROAD_VIS.edgeHeight, ROAD.segmentLength);
     this.stripeGeo = new THREE.BoxGeometry(ROAD_VIS.stripeHalfWidth * 2, ROAD_VIS.edgeHeight, ROAD_VIS.stripeLength);
     this.edgeMat = new THREE.MeshBasicMaterial({ color: PALETTE.magenta });
-    this.stripeMat = new THREE.MeshBasicMaterial({ color: PALETTE.cyan });
+    // Centre stripes share the road's magenta rather than cyan: that reserves
+    // cyan for the player car alone, so the three element classes read at a
+    // glance — you (cyan) / road (magenta) / threat (accent orange).
+    this.stripeMat = new THREE.MeshBasicMaterial({ color: PALETTE.magenta });
 
     for (let i = 0; i < poolSize(); i++) {
       this.tiles.push(this.makeTile());

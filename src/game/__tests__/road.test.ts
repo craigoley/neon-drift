@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeSegmentCount, createRoadState, poolSize, updateRoad } from '../Road';
+import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad } from '../Road';
 import { ROAD } from '../../utils/constants';
 
 describe('Road — seeded reproducibility', () => {
@@ -34,6 +34,31 @@ describe('Road — seeded reproducibility', () => {
     const mapA = byIndex(a.segments);
     const mapB = byIndex(b.segments);
     expect(mapA).toEqual(mapB);
+  });
+});
+
+describe('Road — curve centre (gameplay corridor)', () => {
+  it('is deterministic per seed and stays within the curve amplitude', () => {
+    for (let d = 0; d <= 20000; d += 137) {
+      const a = roadCenterAt(4242, d);
+      expect(roadCenterAt(4242, d)).toBe(a); // pure / repeatable
+      expect(Math.abs(a)).toBeLessThanOrEqual(ROAD.curveAmplitude + 1e-9);
+    }
+  });
+
+  it('matches the per-segment curve at integer segment boundaries', () => {
+    const seed = 31337;
+    const road = createRoadState(seed);
+    // The continuous centre at a segment's start equals that segment's curve.
+    for (const seg of road.segments) {
+      expect(roadCenterAt(seed, seg.index * ROAD.segmentLength)).toBeCloseTo(seg.curve, 6);
+    }
+  });
+
+  it('actually bends (not a flat zero line)', () => {
+    let maxAbs = 0;
+    for (let d = 0; d <= 20000; d += 50) maxAbs = Math.max(maxAbs, Math.abs(roadCenterAt(99, d)));
+    expect(maxAbs).toBeGreaterThan(ROAD.curveAmplitude * 0.5);
   });
 });
 

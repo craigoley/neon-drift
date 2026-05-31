@@ -48,6 +48,19 @@ function curveFor(seed: number, index: number): number {
   return Math.sin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
 }
 
+/**
+ * The lateral centre of the road at an arbitrary forward `distance`. Same curve
+ * as `curveFor` but evaluated at the FRACTIONAL segment index, so the centre is
+ * smooth and continuous (no per-segment steps). Pure — the gameplay layer uses
+ * this to make the drivable corridor (and traffic spawns) follow the bend, so
+ * the curve shifts the lateral challenge instead of being purely cosmetic.
+ */
+export function roadCenterAt(seed: number, distance: number): number {
+  const phase = hashNoise(seed, 0) * Math.PI;
+  const index = distance / ROAD.segmentLength;
+  return Math.sin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
+}
+
 export function createRoadState(seed: number): RoadState {
   const count = poolSize();
   const segments: RoadSegment[] = [];

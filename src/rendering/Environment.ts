@@ -62,9 +62,18 @@ export class Environment {
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const mat = new THREE.MeshBasicMaterial({ map: texture, transparent: true, fog: false, depthWrite: false });
+    // Pure background layer: no depth interaction + negative render order so all
+    // gameplay geometry (road, car, traffic) always draws on top of it.
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      fog: false,
+      depthWrite: false,
+      depthTest: false,
+    });
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ENV.sunRadius * 2, ENV.sunRadius * 2), mat);
     mesh.position.y = ENV.sunY;
+    mesh.renderOrder = ENV.sunRenderOrder;
     return mesh;
   }
 
@@ -86,9 +95,18 @@ export class Environment {
     }
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    const mat = new THREE.LineBasicMaterial({ color: PALETTE.cyan, fog: false });
+    // Background layer: drawn first (most-negative render order) with no depth
+    // interaction, so the mountains sit behind the sun AND behind every gameplay
+    // element — they can never overlap the car or traffic, only the far horizon.
+    const mat = new THREE.LineBasicMaterial({
+      color: PALETTE.cyan,
+      fog: false,
+      depthWrite: false,
+      depthTest: false,
+    });
     const lines = new THREE.LineSegments(geo, mat);
-    lines.position.set(0, 0, -ENV.distance * ENV.mountainDepthFactor);
+    lines.position.set(0, ENV.mountainBaseY, -ENV.distance * ENV.mountainDepthFactor);
+    lines.renderOrder = ENV.mountainRenderOrder;
     return lines;
   }
 

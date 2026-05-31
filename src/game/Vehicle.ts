@@ -47,6 +47,7 @@ export function updateVehicle(
   state: VehicleState,
   intent: InputIntent,
   distance: number,
+  roadCenter: number,
   dt: number,
 ): VehicleState {
   // Forward: auto-accelerate toward the distance-dependent cap.
@@ -60,12 +61,16 @@ export function updateVehicle(
   state.lateralVel *= decay(retained, dt);
   state.lateral += state.lateralVel * dt;
 
-  // Clamp to the road; kill velocity into the wall so the car doesn't stick.
-  if (state.lateral > ROAD.halfWidth) {
-    state.lateral = ROAD.halfWidth;
+  // Clamp to the road, which bends with the curve — the drivable corridor is
+  // [centre - halfWidth, centre + halfWidth]. Kill velocity into the wall so
+  // the car doesn't stick. The player must steer to follow the bend.
+  const maxLat = roadCenter + ROAD.halfWidth;
+  const minLat = roadCenter - ROAD.halfWidth;
+  if (state.lateral > maxLat) {
+    state.lateral = maxLat;
     if (state.lateralVel > 0) state.lateralVel = 0;
-  } else if (state.lateral < -ROAD.halfWidth) {
-    state.lateral = -ROAD.halfWidth;
+  } else if (state.lateral < minLat) {
+    state.lateral = minLat;
     if (state.lateralVel < 0) state.lateralVel = 0;
   }
 

@@ -61,7 +61,7 @@ export class VehicleRenderer {
         blending: THREE.AdditiveBlending,
       }),
     );
-    cone.renderOrder = 1; // draw after opaque geometry
+    cone.renderOrder = CAR_VIS.headlightRenderOrder; // draw after opaque geometry
     // Point the cone forward (-z) and sit it at the car's nose.
     cone.rotation.x = -Math.PI / 2;
     cone.position.set(x, CAR_VIS.height / 2, -length / 2 - CAR_VIS.headlightLength / 2);

@@ -223,6 +223,9 @@ export const CAR_VIS = {
   headlightConeRadius: 0.5,
   headlightOpacity: 0.18,
   headlightConeSegments: 8,
+  /** Render order for the additive headlight glow — drawn after opaque geometry
+   *  (sits alongside ENV.sunRenderOrder / mountainRenderOrder in the stack). */
+  headlightRenderOrder: 1,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */

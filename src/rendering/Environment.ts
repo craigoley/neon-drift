@@ -103,6 +103,10 @@ export class Environment {
       fog: false,
       depthWrite: false,
       depthTest: false,
+      // Faint so the waveform silhouette doesn't fight the sun's bands at the
+      // horizon — it reads as a distant ridge, not a competing bright line.
+      transparent: true,
+      opacity: ENV.mountainOpacity,
     });
     const lines = new THREE.LineSegments(geo, mat);
     lines.position.set(0, ENV.mountainBaseY, -ENV.distance * ENV.mountainDepthFactor);

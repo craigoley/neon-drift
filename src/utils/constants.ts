@@ -178,11 +178,14 @@ export const FOG = {
 /** Synthwave grid ground plane. */
 export const GRID = {
   size: 4000,
-  divisions: 160,
+  // Fewer divisions = wider line spacing, so the lines don't stack into a dense
+  // bright band where they converge at the horizon (was 160).
+  divisions: 120,
   /** Y offset below the road surface. */
   y: -0.05,
-  /** Opacity of the grid lines (how prominent the ground plane reads). */
-  opacity: 0.55,
+  /** Opacity of the grid lines. Lowered (was 0.55) so the grid reads as a depth
+   *  cue that fades back into the fog rather than competing at the horizon. */
+  opacity: 0.4,
 } as const;
 
 /** Road visual tuning (rendering only — geometry is reused per pool slot). */
@@ -239,8 +242,12 @@ export const ENV = {
   sunBands: 9,
   mountainCount: 28,
   mountainSpread: 1400,
-  mountainMaxHeight: 140,
+  // Lowered (was 140) so the ridge sits below the sun's banded core instead of
+  // spiking up through it.
+  mountainMaxHeight: 110,
   mountainBaseY: 0,
+  /** Opacity of the waveform-mountain line — faint so it doesn't fight the sun. */
+  mountainOpacity: 0.5,
   /** Fraction of `distance` the mountains sit behind the backdrop origin (the
    *  sun), so the silhouette reads clearly behind the sun's framing. */
   mountainDepthFactor: 0.4,

@@ -186,7 +186,7 @@ function frame(now: number): void {
 
   // Visuals advance on real time (only the simulation slows in slow-mo).
   scene.updateCamera(game, realDt);
-  environment.update(game.distance, scene.camera.position.x, scene.camera.position.z);
+  environment.update(game.distance, scene.camera.position.x, scene.camera.position.z, realDt);
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
   traffic.sync(game.traffic, game.distance);

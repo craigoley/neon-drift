@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { CSS_PALETTE, ENV, GRID, PALETTE } from '../utils/constants';
+import { ENV, GRID, PALETTE, SUN } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 export class Environment {
@@ -16,6 +16,12 @@ export class Environment {
   private readonly grid: THREE.GridHelper;
   private readonly backdrop = new THREE.Group();
   private readonly cellSize: number;
+
+  // Sun canvas state, kept for the optional per-frame scanline drift (Phase 3).
+  private readonly sunCtx: CanvasRenderingContext2D;
+  private readonly sunTexture: THREE.CanvasTexture;
+  private readonly sunGradient: CanvasGradient;
+  private sunScroll = 0;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.cellSize = GRID.size / GRID.divisions;
@@ -26,6 +32,18 @@ export class Environment {
     (this.grid.material as THREE.Material).opacity = GRID.opacity;
     this.group.add(this.grid);
 
+    // Build the sun's canvas + texture up front so the optional scanline drift
+    // can repaint it each frame. drawSun() does the actual painting.
+    const canvas = document.createElement('canvas');
+    canvas.width = SUN.textureSize;
+    canvas.height = SUN.textureSize;
+    this.sunCtx = canvas.getContext('2d')!;
+    this.sunTexture = new THREE.CanvasTexture(canvas);
+    this.sunTexture.colorSpace = THREE.SRGBColorSpace;
+    const grad = this.sunCtx.createLinearGradient(0, 0, 0, SUN.textureSize);
+    for (const stop of SUN.gradient) grad.addColorStop(stop.at, stop.color);
+    this.sunGradient = grad;
+
     this.backdrop.add(this.makeSun());
     this.backdrop.add(this.makeMountains(seed));
     this.group.add(this.backdrop);
@@ -33,48 +51,65 @@ export class Environment {
     scene.add(this.group);
   }
 
-  /** Banded gradient sun built from a CanvasTexture (magenta -> accent). */
+  /**
+   * Retrosun mesh: a vertical gradient disc (warm top → deep-purple base) with
+   * graduated horizontal scanline bands, painted into a CanvasTexture. The disc
+   * is a pure background layer (no depth interaction + negative render order) so
+   * all gameplay geometry always draws on top of it.
+   */
   private makeSun(): THREE.Mesh {
-    const size = 256;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
-
-    const grad = ctx.createLinearGradient(0, 0, 0, size);
-    grad.addColorStop(0, CSS_PALETTE.magentaLight);
-    grad.addColorStop(0.5, CSS_PALETTE.magenta);
-    grad.addColorStop(1, CSS_PALETTE.accent);
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Carve horizontal bands out of the lower half (classic synthwave sun).
-    ctx.globalCompositeOperation = 'destination-out';
-    const bandStart = size * 0.5;
-    const bandStep = (size - bandStart) / ENV.sunBands;
-    for (let i = 0; i < ENV.sunBands; i++) {
-      const y = bandStart + i * bandStep;
-      const h = (bandStep * (i + 1)) / (ENV.sunBands + 1);
-      ctx.fillRect(0, y, size, h);
-    }
-
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.colorSpace = THREE.SRGBColorSpace;
-    // Pure background layer: no depth interaction + negative render order so all
-    // gameplay geometry (road, car, traffic) always draws on top of it.
+    this.drawSun(0);
     const mat = new THREE.MeshBasicMaterial({
-      map: texture,
+      map: this.sunTexture,
       transparent: true,
       fog: false,
       depthWrite: false,
       depthTest: false,
     });
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(ENV.sunRadius * 2, ENV.sunRadius * 2), mat);
-    mesh.position.y = ENV.sunY;
-    mesh.renderOrder = ENV.sunRenderOrder;
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SUN.radius * 2, SUN.radius * 2), mat);
+    mesh.position.y = SUN.y;
+    mesh.renderOrder = SUN.renderOrder;
     return mesh;
+  }
+
+  /**
+   * Map a band index u to a canvas y coordinate. With curve > 1 the gaps widen
+   * at the top and bunch toward the bottom.
+   */
+  private bandY(u: number): number {
+    const size = SUN.textureSize;
+    const yStart = size * SUN.bandStartFraction;
+    const span = size - yStart;
+    const q = Math.min(Math.max(u / SUN.bandCount, 0), 1);
+    return yStart + (1 - Math.pow(1 - q, SUN.bandThinningCurve)) * span;
+  }
+
+  /**
+   * Paint the gradient disc and carve its scanline bands at the given scroll
+   * phase (0..1 of one band-spacing). Bands begin partway down the disc and
+   * tighten toward the bottom via a power curve, so the lower edge reads as
+   * dense scanlines meeting the horizon — the classic sunset look.
+   */
+  private drawSun(phase: number): void {
+    const size = SUN.textureSize;
+    const ctx = this.sunCtx;
+    ctx.clearRect(0, 0, size, size);
+
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = this.sunGradient;
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.globalCompositeOperation = 'destination-out';
+    for (let i = 0; i <= SUN.bandCount; i++) {
+      const u = i + phase;
+      const y = this.bandY(u);
+      const thickness = (this.bandY(u + 1) - y) * SUN.bandThicknessRatio;
+      if (thickness <= SUN.bandMinThickness) continue;
+      ctx.fillRect(0, y - thickness / 2, size, thickness);
+    }
+    ctx.globalCompositeOperation = 'source-over';
   }
 
   /** Low-poly wireframe mountain silhouette across the horizon (seeded). */
@@ -115,10 +150,18 @@ export class Environment {
   }
 
   /** Scroll the grid toward the camera and keep the backdrop on the horizon. */
-  update(distance: number, cameraX: number, cameraZ: number): void {
+  update(distance: number, cameraX: number, cameraZ: number, dt: number): void {
     this.grid.position.x = cameraX;
     // Wrap by one cell so the grid appears to stream infinitely.
     this.grid.position.z = distance % this.cellSize;
     this.backdrop.position.set(cameraX, 0, cameraZ - ENV.distance);
+
+    // Phase 3: drift the scanlines slowly downward. Only repaints (and re-uploads
+    // the texture) when motion is enabled, so it costs nothing when disabled.
+    if ((SUN.scrollSpeed as number) !== 0) {
+      this.sunScroll = (this.sunScroll + SUN.scrollSpeed * dt) % 1;
+      this.drawSun(this.sunScroll);
+      this.sunTexture.needsUpdate = true;
+    }
   }
 }

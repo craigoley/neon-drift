@@ -12,13 +12,29 @@ import type { AudioEngine } from '../../audio/AudioEngine';
 interface Spy {
   shell: Shell;
   parent: HTMLElement;
-  calls: { play: number; pause: number; resume: number; menu: number };
+  calls: {
+    play: number;
+    pause: number;
+    resume: number;
+    menu: number;
+    pickerEnter: number;
+    pickerExit: number;
+    pickerCar: string[];
+  };
 }
 
 function makeShell(): Spy {
   const parent = document.createElement('div');
   const audio = { setEnabled() {}, setMuted() {} } as unknown as AudioEngine;
-  const calls = { play: 0, pause: 0, resume: 0, menu: 0 };
+  const calls = {
+    play: 0,
+    pause: 0,
+    resume: 0,
+    menu: 0,
+    pickerEnter: 0,
+    pickerExit: 0,
+    pickerCar: [] as string[],
+  };
   const shell = new Shell(parent, new SettingsStore(), new BestStore(), audio, {
     isTouch: false,
     shareUrl: 'https://neon.example/',
@@ -27,6 +43,9 @@ function makeShell(): Spy {
     onResume: () => void calls.resume++,
     onMenu: () => void calls.menu++,
     applyCar: () => {},
+    onCarPickerEnter: () => void calls.pickerEnter++,
+    onCarPickerCar: (id: string) => void calls.pickerCar.push(id),
+    onCarPickerExit: () => void calls.pickerExit++,
   });
   return { shell, parent, calls };
 }
@@ -95,5 +114,37 @@ describe('Shell — menu return + pause routing', () => {
     (parent.querySelector('.shell-quit') as HTMLButtonElement).click();
     expect(calls.menu).toBe(1);
     expect(shown(parent, '.shell-start')).toBe(true);
+  });
+});
+
+describe('Shell — car picker preview lifecycle + stat bars', () => {
+  it('entering the picker spins up the 3D preview; DONE tears it down', () => {
+    const { shell, parent, calls } = makeShell();
+    shell.showStart();
+    (parent.querySelector('.shell-cars') as HTMLButtonElement).click(); // → carpicker
+    expect(calls.pickerEnter).toBe(1);
+    expect(shown(parent, '.shell-carpicker')).toBe(true);
+
+    (parent.querySelector('.shell-carpicker .shell-close') as HTMLButtonElement).click(); // DONE
+    expect(calls.pickerExit).toBe(1);
+    expect(shown(parent, '.shell-start')).toBe(true);
+  });
+
+  it('cycling cars updates the preview and moves the stat bars (single source per car)', () => {
+    const { shell, parent, calls } = makeShell();
+    shell.showStart();
+    (parent.querySelector('.shell-cars') as HTMLButtonElement).click();
+
+    const widths = () =>
+      Array.from(parent.querySelectorAll('.shell-car-stats .shell-stat-fill')).map(
+        (el) => (el as HTMLElement).style.width,
+      );
+    const before = widths().join(',');
+    (parent.querySelector('.shell-next') as HTMLButtonElement).click();
+
+    expect(calls.pickerCar.length).toBeGreaterThan(0); // preview told about the new car
+    expect(widths().join(',')).not.toBe(before); // bars moved -> derived from handling
+    expect(widths()).toHaveLength(3);
+    for (const w of widths()) expect(w).toMatch(/%$/);
   });
 });

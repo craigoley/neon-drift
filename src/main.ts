@@ -16,6 +16,7 @@ import { SceneManager } from './rendering/SceneManager';
 import { Environment } from './rendering/Environment';
 import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
+import { CarPreview } from './rendering/CarPreview';
 import { TrafficRenderer } from './rendering/TrafficRenderer';
 import { PostProcessing } from './rendering/PostProcessing';
 import { SpeedLines } from './rendering/SpeedLines';
@@ -77,6 +78,9 @@ const bestStore = new BestStore();
 
 // Front-end shell (start / settings / car picker / crash overlays).
 const canonicalUrl = window.location.origin + window.location.pathname;
+// The car-picker 3D preview's renderer — created when the picker opens, disposed
+// when it closes (held here so the shell callbacks can manage its lifecycle).
+let carPreview: CarPreview | null = null;
 const shell = new Shell(app, settings, bestStore, audio, {
   isTouch,
   shareUrl: canonicalUrl,
@@ -100,6 +104,18 @@ const shell = new Shell(app, settings, bestStore, audio, {
     audio.setMuted(false);
   },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
+  // 3D car-picker preview (own light renderer; created on enter, disposed on
+  // exit — never runs behind the game).
+  onCarPickerEnter: (container, carId) => {
+    carPreview?.dispose();
+    carPreview = new CarPreview(container);
+    carPreview.setCar(carById(carId));
+  },
+  onCarPickerCar: (carId) => carPreview?.setCar(carById(carId)),
+  onCarPickerExit: () => {
+    carPreview?.dispose();
+    carPreview = null;
+  },
 });
 shell.showStart();
 

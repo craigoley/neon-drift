@@ -7,7 +7,14 @@
 import { describe, expect, it } from 'vitest';
 import { createVehicleState, updateVehicle, type VehicleState } from '../Vehicle';
 import { createIntent, type InputIntent } from '../Input';
-import { BASE_HANDLING, handlingFor, CARS, TIMESTEP, type CarHandling } from '../../utils/constants';
+import {
+  BASE_HANDLING,
+  carStats,
+  handlingFor,
+  CARS,
+  TIMESTEP,
+  type CarHandling,
+} from '../../utils/constants';
 
 /** Drive a fresh vehicle for `steps` frames under fixed intent/distance/handling. */
 function drive(
@@ -100,5 +107,33 @@ describe('Handling — numerical safety (no NaN / Infinity)', () => {
         expect(Number.isFinite(v.lateralVel)).toBe(true);
       }
     }
+  });
+});
+
+describe('Car picker stats — single source of truth (carStats)', () => {
+  it('bars are derived from the handling multipliers (a number change moves the bar)', () => {
+    const base = carStats(BASE_HANDLING);
+    expect(carStats({ ...BASE_HANDLING, speedCap: 1.25 }).speed).toBeGreaterThan(base.speed);
+    expect(carStats({ ...BASE_HANDLING, drift: 1.5 }).drift).toBeGreaterThan(base.drift);
+    expect(carStats({ ...BASE_HANDLING, lateralAccel: 1.4 }).grip).toBeGreaterThan(base.grip);
+    // Lower friction = grippier = higher grip bar.
+    expect(carStats({ ...BASE_HANDLING, lateralFriction: 0.6 }).grip).toBeGreaterThan(base.grip);
+  });
+
+  it('every car bar is within 0..1', () => {
+    for (const c of CARS) {
+      const s = carStats(handlingFor(c.id));
+      for (const v of [s.speed, s.grip, s.drift]) {
+        expect(v).toBeGreaterThanOrEqual(0);
+        expect(v).toBeLessThanOrEqual(1);
+      }
+    }
+  });
+
+  it('the roster bars read as the intended triangle', () => {
+    const s = (id: string) => carStats(handlingFor(id));
+    expect(s('ember').speed).toBeGreaterThan(s('vapor').speed); // EMBER fastest
+    expect(s('vapor').grip).toBeGreaterThan(s('ember').grip); // VAPOR grippiest
+    expect(s('ghost').drift).toBeGreaterThan(s('vapor').drift); // GHOST driftiest
   });
 });

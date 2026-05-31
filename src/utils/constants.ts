@@ -399,6 +399,21 @@ export const UI = {
   toastDurationMs: 1800,
   /** Horizontal swipe distance (px) to cycle cars in the picker. */
   carSwipeThresholdPx: 40,
+  /** Car-picker 3D preview: gentle auto-rotate speed (radians/second). */
+  carPreviewSpinPerSec: 0.6,
+  /** Preview camera field-of-view (degrees). Narrow for a flattering close-up. */
+  carPreviewFov: 34,
+  /** Preview camera near / far clip planes. */
+  carPreviewNear: 0.1,
+  carPreviewFar: 100,
+  /** Camera height = CAR_VIS.height * this. */
+  carPreviewCamHeightMul: 2.2,
+  /** Camera distance back along Z. */
+  carPreviewCamZ: 8.5,
+  /** Look-at height = CAR_VIS.height * this. */
+  carPreviewLookAtMul: 0.4,
+  /** Fixed X-axis tilt (radians) so the rotation reads as 3D. */
+  carPreviewTilt: 0.18,
 } as const;
 
 /** Touch-control tuning. */
@@ -492,14 +507,14 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'pulse',
     displayName: 'Pulse',
-    cosmetic: { body: 0x1a0033, glow: 0x00ffff, accent: 0xff00ff },
+    cosmetic: { body: 0x140a2e, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The reference point.
     handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
   },
   {
     id: 'vapor',
     displayName: 'Vapor',
-    cosmetic: { body: 0x1a0033, glow: 0xff00ff, accent: 0x00ffff },
+    cosmetic: { body: 0x2e0a24, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
     handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
@@ -507,7 +522,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ember',
     displayName: 'Ember',
-    cosmetic: { body: 0x1a0033, glow: 0xff6600, accent: 0xff00ff },
+    cosmetic: { body: 0x2e1605, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
     handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
@@ -515,7 +530,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ghost',
     displayName: 'Ghost',
-    cosmetic: { body: 0x1a0033, glow: 0xffffff, accent: 0x00ffff },
+    cosmetic: { body: 0x06261f, glow: 0xffffff, accent: 0x00ffff },
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
     handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
@@ -537,6 +552,45 @@ export function carById(id: string): CarDef {
  */
 export function handlingFor(id: string): CarHandling {
   return CARS.find((c) => c.id === id)?.handling ?? BASE_HANDLING;
+}
+
+/**
+ * Normalisation ranges for the picker's Speed / Grip / Drift bars. The bars are
+ * DERIVED from the same `handling` multipliers the sim uses (see carStats) — the
+ * single source of truth — so they can never be hand-authored out of sync with
+ * the physics. Chosen to span the roster's spread with a little headroom.
+ */
+export const CAR_STAT_RANGE = {
+  speed: { min: 0.85, max: 1.25 },
+  /** Grip = steering authority / how loose the car is = lateralAccel / lateralFriction. */
+  grip: { min: 0.6, max: 2.0 },
+  drift: { min: 0.8, max: 1.5 },
+} as const;
+
+export interface CarStats {
+  /** 0..1 bar fills. */
+  speed: number;
+  grip: number;
+  drift: number;
+}
+
+function norm01(v: number, min: number, max: number): number {
+  return Math.max(0, Math.min(1, (v - min) / (max - min)));
+}
+
+/**
+ * Derive the 0..1 Speed / Grip / Drift bars from a car's handling multipliers.
+ * The picker MUST read its bars from here so a change to a handling number moves
+ * both the physics and the displayed bar together. Grip combines steering
+ * authority (lateralAccel) with how fast the car settles (lower lateralFriction
+ * = grippier), i.e. lateralAccel / lateralFriction.
+ */
+export function carStats(h: CarHandling): CarStats {
+  return {
+    speed: norm01(h.speedCap, CAR_STAT_RANGE.speed.min, CAR_STAT_RANGE.speed.max),
+    grip: norm01(h.lateralAccel / h.lateralFriction, CAR_STAT_RANGE.grip.min, CAR_STAT_RANGE.grip.max),
+    drift: norm01(h.drift, CAR_STAT_RANGE.drift.min, CAR_STAT_RANGE.drift.max),
+  };
 }
 
 /** CSS hex string for a 0xRRGGBB color (for HTML/CSS previews of car colors). */

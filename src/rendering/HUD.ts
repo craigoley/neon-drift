@@ -9,7 +9,15 @@
 import type { GameState } from '../game/GameState';
 import { Phase } from '../game/GameState';
 import type { PowerupEffects } from '../game/Powerups';
-import { cssHex, JUICE, POWERUP_DEFS, POWERUP_ORDER, PowerupKind } from '../utils/constants';
+import {
+  cssHex,
+  JUICE,
+  OBJECTIVES,
+  type ObjectiveId,
+  POWERUP_DEFS,
+  POWERUP_ORDER,
+  PowerupKind,
+} from '../utils/constants';
 
 /** Minimal shape the HUD needs for the best run (kept local to avoid coupling). */
 export interface BestDisplay {
@@ -27,6 +35,11 @@ export class HUD {
   /** Active-powerup chip strip + a reused chip per kind (built once). */
   private readonly powerups: HTMLElement;
   private readonly chips: Record<PowerupKind, { root: HTMLElement; timer: HTMLElement }>;
+  /** Subtle per-run objectives panel: one reused row per objective. */
+  private readonly objectives: HTMLElement;
+  private readonly objectiveRows: Record<ObjectiveId, { root: HTMLElement; label: HTMLElement }>;
+  /** Transient milestone/biome toast. */
+  private readonly toast: HTMLElement;
   /** Last combo shown, to detect tier-ups for the celebration pulse. */
   private lastCombo = 1;
 
@@ -62,8 +75,43 @@ export class HUD {
       this.chips[kind] = { root: chip, timer };
     }
 
-    root.append(this.stats, this.powerups);
+    // Subtle objectives panel — one reused row per objective (built once).
+    this.objectives = el('div', 'hud-objectives');
+    this.objectiveRows = {} as Record<ObjectiveId, { root: HTMLElement; label: HTMLElement }>;
+    for (const o of OBJECTIVES) {
+      const row = el('div', 'hud-objective');
+      const label = el('span', 'hud-objective-label');
+      row.appendChild(label);
+      this.objectives.appendChild(row);
+      this.objectiveRows[o.id] = { root: row, label };
+    }
+
+    // Transient milestone toast (centred, upper area — clear of the road).
+    this.toast = el('div', 'hud-toast');
+    this.toast.style.opacity = '0';
+
+    root.append(this.stats, this.powerups, this.objectives, this.toast);
     parent.appendChild(root);
+  }
+
+  /**
+   * Flash a milestone / biome toast: a brief, non-intrusive centred banner in
+   * the given palette colour. Uses the Web Animations API (guarded — absent in
+   * jsdom/tests, where it's a no-op besides setting the text).
+   */
+  showToast(text: string, color: string): void {
+    this.toast.textContent = text;
+    this.toast.style.setProperty('--toast-color', color);
+    if (typeof this.toast.animate !== 'function') return;
+    this.toast.animate(
+      [
+        { opacity: 0, transform: 'translate(-50%, -6px) scale(0.96)' },
+        { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.15 },
+        { opacity: 1, transform: 'translate(-50%, 0) scale(1)', offset: 0.7 },
+        { opacity: 0, transform: 'translate(-50%, -6px) scale(1)' },
+      ],
+      { duration: JUICE.milestoneToastMs, easing: 'ease-out' },
+    );
   }
 
   sync(game: GameState, best: BestDisplay): void {
@@ -74,6 +122,7 @@ export class HUD {
     const playing = game.phase === Phase.Playing;
     this.stats.style.display = playing ? 'flex' : 'none';
     this.powerups.style.display = playing ? 'flex' : 'none';
+    this.objectives.style.display = playing ? 'flex' : 'none';
 
     this.speedEl.textContent = `${Math.round(game.vehicle.speed)} km/s`;
     this.distEl.textContent = `${Math.round(game.distance)} m`;
@@ -86,6 +135,19 @@ export class HUD {
     this.bestEl.textContent = `best ${Math.round(best.score)}`;
 
     this.syncPowerups(game.powerups.effects);
+    this.syncObjectives(game);
+  }
+
+  /** Update the subtle objectives panel: progress count + a done state, read
+   *  straight from the pure milestone state. */
+  private syncObjectives(game: GameState): void {
+    for (const o of OBJECTIVES) {
+      const row = this.objectiveRows[o.id];
+      const done = game.milestones.done[o.id];
+      const have = Math.min(game.milestones.progress[o.id], o.target);
+      row.label.textContent = done ? `✓ ${o.label}` : `${o.label} (${have}/${o.target})`;
+      row.root.classList.toggle('done', done);
+    }
   }
 
   /** Show a chip per active effect with its remaining time (SHIELD shows "1",

@@ -35,6 +35,7 @@ import {
   type PowerupState,
 } from './Powerups';
 import { createBiomeState, updateBiome, type BiomeState } from './Biome';
+import { createMilestoneState, updateMilestones, type MilestoneState } from './Milestones';
 import { POWERUPS, RAMP, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
@@ -61,6 +62,8 @@ export interface GameState {
   /** Active biome + transition progress, driven by distance (see Biome.ts).
    *  Pure indices + a blend scalar; the rendering layer maps it to a palette. */
   biome: BiomeState;
+  /** Distance-milestone + per-run-objective progress (see Milestones.ts). */
+  milestones: MilestoneState;
   score: ScoreState;
   /** Active car handling profile for this run (resolved from the selected car
    *  by the composition root and passed in — the pure layer never reaches into
@@ -82,6 +85,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     traffic: createTrafficState(),
     powerups: createPowerupState(seed),
     biome: createBiomeState(),
+    milestones: createMilestoneState(),
     score: createScoreState(),
     handling: BASE_HANDLING,
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
@@ -108,6 +112,7 @@ export function startRun(
   state.traffic = createTrafficState();
   state.powerups = createPowerupState(seed);
   state.biome = createBiomeState();
+  state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.handling = handling;
   state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
@@ -130,6 +135,7 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.traffic = createTrafficState();
   state.powerups = createPowerupState(seed);
   state.biome = createBiomeState();
+  state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.lastEvents.crashed = false;
   state.lastEvents.nearMisses = 0;
@@ -169,6 +175,9 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents.collected = null;
     state.lastEvents.shieldBlocked = false;
     state.lastEvents.rampBoosts = 0;
+    state.lastEvents.milestone = null;
+    state.lastEvents.biomeChanged = false;
+    state.lastEvents.objectiveDone = null;
     return state;
   }
 
@@ -204,6 +213,24 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.vehicle.boostTimer = RAMP.boostDuration;
     state.vehicle.speed += VEHICLE.boostBonus;
   }
+
+  // MILESTONE hook: distance thresholds grant rewards through the SAME powerup /
+  // score seams used above (no new special-casing), and objectives count this
+  // step's events. Runs after the ramp/pickup events are resolved so its
+  // objective counters see them, and before the shield/crash check so a
+  // milestone-granted shield can guard the very step it is awarded. Reset the
+  // one-step milestone signals first (mutate in place, no allocation).
+  state.lastEvents.milestone = null;
+  state.lastEvents.biomeChanged = false;
+  state.lastEvents.objectiveDone = null;
+  updateMilestones(
+    state.milestones,
+    state.distance,
+    state.biome.from,
+    effects,
+    state.score,
+    state.lastEvents,
+  );
 
   // SCORE-BOOST hook: an external multiplier stacked on top of the combo.
   integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));

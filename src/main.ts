@@ -39,6 +39,7 @@ import {
   MAX_FRAME_DT,
   OBSTACLE_DEFS,
   ObstacleKind,
+  PALETTE,
   POWERUP_DEFS,
   PowerupKind,
   TIMESTEP,
@@ -162,6 +163,9 @@ function frame(now: number): void {
   let collectedKind: PowerupKind | null = null;
   let shieldBlocked = false;
   let rampBoosts = 0;
+  let milestoneLabel: string | null = null;
+  let biomeCelebrate = false;
+  let objectiveLabel: string | null = null;
   if (playing) {
     // Optional micro slow-mo after a near-miss: feed the sim scaled time.
     const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
@@ -173,6 +177,9 @@ function frame(now: number): void {
       if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
       if (game.lastEvents.shieldBlocked) shieldBlocked = true;
       rampBoosts += game.lastEvents.rampBoosts ?? 0;
+      if (game.lastEvents.milestone) milestoneLabel = game.lastEvents.milestone;
+      if (game.lastEvents.biomeChanged) biomeCelebrate = true;
+      if (game.lastEvents.objectiveDone) objectiveLabel = game.lastEvents.objectiveDone;
       accumulator -= TIMESTEP;
     }
   } else {
@@ -210,6 +217,24 @@ function frame(now: number): void {
     if (nearMisses > 0) audio.playNearMiss();
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
+  }
+
+  // Milestone / biome / objective celebration: a brief, non-intrusive toast plus
+  // a fanfare (milestones + biome) or a lighter chime (objectives). Priority:
+  // milestone > biome > objective — only one toast shows per frame.
+  const toast = milestoneLabel
+    ? { text: milestoneLabel, color: PALETTE.magenta, fanfare: true }
+    : biomeCelebrate
+      ? { text: 'NEW BIOME', color: PALETTE.cyan, fanfare: true }
+      : objectiveLabel
+        ? { text: objectiveLabel, color: PALETTE.cyan, fanfare: false }
+        : null;
+  if (toast) {
+    hud.showToast(toast.text, cssHex(toast.color));
+    if (audio.started) {
+      if (toast.fanfare) audio.playMilestone();
+      else audio.playPickup();
+    }
   }
   prevPhase = game.phase;
 

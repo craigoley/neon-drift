@@ -9,8 +9,8 @@ personal data. High-score data is stored locally in the visitor's own
 browser (localStorage) and is never transmitted.
 
 The realistic security surface is therefore limited to third-party
-dependency vulnerabilities, which are monitored via OSV-Scanner, CodeQL,
-and Dependabot in this repository.
+dependency vulnerabilities, which are monitored via OSV-Scanner and
+CodeQL in this repository.
 
 ## Supported versions
 

@@ -7,7 +7,14 @@
 import { describe, expect, it } from 'vitest';
 import { createVehicleState, updateVehicle, type VehicleState } from '../Vehicle';
 import { createIntent, type InputIntent } from '../Input';
-import { BASE_HANDLING, handlingFor, CARS, TIMESTEP, type CarHandling } from '../../utils/constants';
+import {
+  BASE_HANDLING,
+  carStats,
+  handlingFor,
+  CARS,
+  TIMESTEP,
+  type CarHandling,
+} from '../../utils/constants';
 
 /** Drive a fresh vehicle for `steps` frames under fixed intent/distance/handling. */
 function drive(

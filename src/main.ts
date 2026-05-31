@@ -151,7 +151,7 @@ function frame(now: number): void {
   shards.update(realDt);
   screenFx.update(realDt);
   hud.sync(game, bestStore.best);
-  debug.update(game, telemetry);
+  debug.update(game, telemetry, hud.comboText());
 
   post.render();
   requestAnimationFrame(frame);

@@ -40,11 +40,11 @@ export class HUD {
   }
 
   sync(game: GameState, best: BestDisplay): void {
-    // Only show the stats bar while actually playing; the shell overlays cover
-    // the menu / crash states.
-    const playing = game.phase === Phase.Playing;
-    this.stats.style.display = playing ? 'flex' : 'none';
-    if (!playing) return;
+    // Show the stats bar only while playing (the shell overlays cover the menu /
+    // crash states). The text is updated EVERY frame regardless of visibility so
+    // it always mirrors the internal combo — including the crash frame where the
+    // combo resets (locked by hud_combo_funnel.test.ts).
+    this.stats.style.display = game.phase === Phase.Playing ? 'flex' : 'none';
 
     this.speedEl.textContent = `${Math.round(game.vehicle.speed)} km/s`;
     this.distEl.textContent = `${Math.round(game.distance)} m`;
@@ -52,6 +52,12 @@ export class HUD {
     this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
     this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
     this.bestEl.textContent = `best ${Math.round(best.score)}`;
+  }
+
+  /** The exact text currently shown by the combo element — for the ?debug=1
+   *  funnel panel (step 6: what the HUD multiplier is actually bound to). */
+  comboText(): string {
+    return this.comboEl.textContent ?? '';
   }
 }
 

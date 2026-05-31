@@ -79,6 +79,12 @@ export function isCollision(
 export interface TrafficEvents {
   crashed: boolean;
   nearMisses: number;
+  /** Instrumentation (surfaced in ?debug=1): active obstacles checked this frame. */
+  evaluated?: number;
+  /** Instrumentation: lateral gap to the nearest obstacle (by |longitudinal|). */
+  closestLateral?: number;
+  /** Instrumentation: that obstacle's longitudinal gap (o.distance - player). */
+  closestLongitudinal?: number;
 }
 
 /**
@@ -86,6 +92,10 @@ export interface TrafficEvents {
  * Mutates `score` (near-miss combo), each obstacle's `passed` flag, and writes
  * the outcome into the caller-supplied `events` object (mutate-in-place — no
  * per-frame allocation). A collision takes precedence over a near-miss.
+ *
+ * Also records per-frame proximity diagnostics on `events` (evaluated count +
+ * the nearest obstacle's gaps) for the ?debug=1 funnel panel — pure telemetry,
+ * no effect on the scoring logic.
  */
 export function resolveTraffic(
   events: TrafficEvents,
@@ -96,9 +106,22 @@ export function resolveTraffic(
 ): void {
   events.crashed = false;
   events.nearMisses = 0;
+  events.evaluated = 0;
+  events.closestLateral = Infinity;
+  events.closestLongitudinal = Infinity;
+  let nearestAbsLong = Infinity;
 
   for (const o of traffic.pool) {
     if (!o.active) continue;
+    events.evaluated++;
+
+    // Diagnostics: track the obstacle nearest the player longitudinally.
+    const longitudinal = o.distance - playerDistance;
+    if (Math.abs(longitudinal) < nearestAbsLong) {
+      nearestAbsLong = Math.abs(longitudinal);
+      events.closestLateral = Math.abs(playerLateral - o.lateral);
+      events.closestLongitudinal = longitudinal;
+    }
 
     if (isCollision(playerLateral, playerDistance, o)) {
       events.crashed = true;

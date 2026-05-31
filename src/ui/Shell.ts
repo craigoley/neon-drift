@@ -16,7 +16,7 @@
 import type { SettingsStore } from '../state/Settings';
 import type { BestStore, BestRun } from '../storage/BestStore';
 import type { AudioEngine } from '../audio/AudioEngine';
-import { CARS, cssHex, UI } from '../utils/constants';
+import { CARS, cssHex, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
 type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | null;
@@ -114,7 +114,8 @@ export class Shell {
     // The live combo resets on crash, so the WIPEOUT screen is where the player
     // sees how daring the run was. Dimmed when the run never built a combo.
     this.crashComboEl.textContent = `MAX COMBO x${peakCombo.toFixed(1)}`;
-    this.crashComboEl.style.opacity = peakCombo > 1 ? '1' : '0.45';
+    // Dim when the run never rose above the base combo (a daring run pops).
+    this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
     this.crashBestEl.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
     this.go('crash');
   }

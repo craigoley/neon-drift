@@ -297,6 +297,8 @@ export const SUN = {
   bandThinningCurve: 2.6,
   /** Each band's carved thickness as a fraction of its local gap to the next. */
   bandThicknessRatio: 0.5,
+  /** Minimum visible band thickness (canvas px) — thinner bands are skipped. */
+  bandMinThickness: 0.25,
   /** Background render order (drawn before all gameplay geometry). */
   renderOrder: -1,
   /**

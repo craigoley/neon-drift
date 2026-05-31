@@ -20,6 +20,7 @@ export class Environment {
   // Sun canvas state, kept for the optional per-frame scanline drift (Phase 3).
   private readonly sunCtx: CanvasRenderingContext2D;
   private readonly sunTexture: THREE.CanvasTexture;
+  private readonly sunGradient: CanvasGradient;
   private sunScroll = 0;
 
   constructor(scene: THREE.Scene, seed: number) {
@@ -39,6 +40,9 @@ export class Environment {
     this.sunCtx = canvas.getContext('2d')!;
     this.sunTexture = new THREE.CanvasTexture(canvas);
     this.sunTexture.colorSpace = THREE.SRGBColorSpace;
+    const grad = this.sunCtx.createLinearGradient(0, 0, 0, SUN.textureSize);
+    for (const stop of SUN.gradient) grad.addColorStop(stop.at, stop.color);
+    this.sunGradient = grad;
 
     this.backdrop.add(this.makeSun());
     this.backdrop.add(this.makeMountains(seed));
@@ -69,6 +73,18 @@ export class Environment {
   }
 
   /**
+   * Map a band index u to a canvas y coordinate. With curve > 1 the gaps widen
+   * at the top and bunch toward the bottom.
+   */
+  private bandY(u: number): number {
+    const size = SUN.textureSize;
+    const yStart = size * SUN.bandStartFraction;
+    const span = size - yStart;
+    const q = Math.min(Math.max(u / SUN.bandCount, 0), 1);
+    return yStart + (1 - Math.pow(1 - q, SUN.bandThinningCurve)) * span;
+  }
+
+  /**
    * Paint the gradient disc and carve its scanline bands at the given scroll
    * phase (0..1 of one band-spacing). Bands begin partway down the disc and
    * tighten toward the bottom via a power curve, so the lower edge reads as
@@ -79,32 +95,18 @@ export class Environment {
     const ctx = this.sunCtx;
     ctx.clearRect(0, 0, size, size);
 
-    // Vertical gradient fill, clipped to the disc.
     ctx.globalCompositeOperation = 'source-over';
-    const grad = ctx.createLinearGradient(0, 0, 0, size);
-    for (const stop of SUN.gradient) grad.addColorStop(stop.at, stop.color);
-    ctx.fillStyle = grad;
+    ctx.fillStyle = this.sunGradient;
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
     ctx.fill();
 
-    // Carve graduated scanline bands: punch transparent gaps (the dark sky
-    // shows through) whose spacing and thickness shrink toward the bottom.
     ctx.globalCompositeOperation = 'destination-out';
-    const yStart = size * SUN.bandStartFraction;
-    const span = size - yStart;
-    // Map a band index u → canvas y. With curve > 1 the gaps widen at the top
-    // and bunch toward the bottom. (Cuts outside the disc hit already-transparent
-    // pixels, so they have no effect — the circular silhouette is preserved.)
-    const bandY = (u: number): number => {
-      const q = Math.min(Math.max(u / SUN.bandCount, 0), 1);
-      return yStart + (1 - Math.pow(1 - q, SUN.bandThinningCurve)) * span;
-    };
     for (let i = 0; i <= SUN.bandCount; i++) {
       const u = i + phase;
-      const y = bandY(u);
-      const thickness = (bandY(u + 1) - y) * SUN.bandThicknessRatio;
-      if (thickness <= 0.25) continue;
+      const y = this.bandY(u);
+      const thickness = (this.bandY(u + 1) - y) * SUN.bandThicknessRatio;
+      if (thickness <= SUN.bandMinThickness) continue;
       ctx.fillRect(0, y - thickness / 2, size, thickness);
     }
     ctx.globalCompositeOperation = 'source-over';

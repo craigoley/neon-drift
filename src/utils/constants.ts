@@ -668,6 +668,14 @@ export interface BiomeDef {
   fog: number;
   /** Wireframe mountain colour (0xRRGGBB). */
   mountain: number;
+  /** Star-field brightness in this biome, 0 (none) .. 1 (full night sky). */
+  starIntensity: number;
+  /** Signature accent the traffic picks up a FAINT cast of (0xRRGGBB) — kept
+   *  subtle (see BIOME_CYCLE.accentTintStrength) so threat intent-coding still
+   *  reads. */
+  accent: number;
+  /** Engine-tone voicing 0 (dark) .. 1 (bright) for biome-aware audio. */
+  audioTone: number;
 }
 
 export const BIOMES: readonly BiomeDef[] = [
@@ -680,6 +688,9 @@ export const BIOMES: readonly BiomeDef[] = [
     gridLine: PALETTE.cyan,
     fog: PALETTE.deepPurple,
     mountain: PALETTE.cyan,
+    starIntensity: 0.0, // dusk — sun still up, no stars
+    accent: 0xff66ff,
+    audioTone: 0.7,
   },
   {
     id: 'midnight',
@@ -696,6 +707,9 @@ export const BIOMES: readonly BiomeDef[] = [
     gridLine: 0x2b6fff,
     fog: 0x05001a,
     mountain: 0x3a66cc,
+    starIntensity: 1.0, // full night sky
+    accent: 0x6688ff,
+    audioTone: 0.15, // darkest voicing
   },
   {
     id: 'toxic',
@@ -712,6 +726,9 @@ export const BIOMES: readonly BiomeDef[] = [
     gridLine: 0x00ff88,
     fog: 0x041a0c,
     mountain: 0x33ff99,
+    starIntensity: 0.35, // a few stars through the haze
+    accent: 0x88ff66,
+    audioTone: 0.5,
   },
   {
     id: 'dawn',
@@ -728,6 +745,9 @@ export const BIOMES: readonly BiomeDef[] = [
     gridLine: 0xffac66,
     fog: 0x2a0a24,
     mountain: 0xff99cc,
+    starIntensity: 0.1, // last few stars fading at first light
+    accent: 0xffaa88,
+    audioTone: 0.85, // brightest voicing
   },
 ] as const;
 
@@ -743,6 +763,31 @@ export const BIOME_CYCLE = {
    *  ~1/this times instead of every frame (mobile GPU headroom). The grid/fog
    *  recolour is cheap; idle frames (no transition) do nothing at all. */
   repaintBlendStep: 0.02,
+  /** How strongly the traffic picks up the biome accent: 0 = none (pure intent
+   *  colours), 1 = full accent. Kept LOW so threats stay clearly orange/red and
+   *  ramps clearly green — a faint biome cast, not a recolour. */
+  accentTintStrength: 0.18,
+} as const;
+
+/** Star-field backdrop (procedural points high in the night sky). Brightness is
+ *  biome-driven (BiomeDef.starIntensity); positions are seeded + static. */
+export const STARFIELD = {
+  /** Number of stars (fixed buffer — never grows). */
+  count: 420,
+  /** Half-width of the star box around the camera (world units). */
+  halfWidth: 1200,
+  /** Vertical band the stars occupy (world units above the horizon). */
+  yMin: 60,
+  yMax: 520,
+  /** Depth ahead of the camera the star box is centred (matches the backdrop). */
+  depth: 900,
+  /** Half-depth of the star box. */
+  halfDepth: 600,
+  /** Point size (world units) and base (full-intensity) opacity. */
+  size: 2.4,
+  baseOpacity: 0.9,
+  /** Render order — behind the sun + mountains (most-negative background layer). */
+  renderOrder: -3,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
@@ -842,6 +887,11 @@ export const AUDIO = {
   engineLowpassHz: 800,
   engineDetune: 1.01,
   enginePitchGlide: 0.08,
+  /** Biome tone: engine lowpass cutoff (Hz) at biome tone 0 (dark) → 1 (bright),
+   *  and the glide time constant (s) so biome transitions never click. */
+  biomeToneLowHz: 520,
+  biomeToneHighHz: 1200,
+  biomeToneGlide: 0.4,
   /** Tyre-screech filtered-noise gain on handbrake, bandpass centre (Hz), Q,
    *  gain ramp time constant (s), and the min speed at which it's audible. */
   screechGain: 0.05,

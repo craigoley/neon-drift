@@ -4,7 +4,7 @@ import { createGameState, Phase, startRun, update } from '../GameState';
 import { activeObstacleCount } from '../Traffic';
 import { activePickupCount } from '../Powerups';
 import { createIntent } from '../Input';
-import { mixHex } from '../../utils/math';
+import { lerp, mixHex } from '../../utils/math';
 import { BIOMES, BIOME_CYCLE, POWERUPS, TIMESTEP, TRAFFIC } from '../../utils/constants';
 
 const SPAN = BIOME_CYCLE.span;
@@ -116,6 +116,47 @@ describe('Biome — transition lerp produces no invalid colours', () => {
             mixHex(parseInt(a.gradient[i].color.slice(1), 16), parseInt(b.gradient[i].color.slice(1), 16), t),
           );
         }
+      }
+    }
+  });
+});
+
+describe('Biome — polish fields (stars / accent / audio tone) are valid + lerp cleanly', () => {
+  it('every biome has in-range starIntensity, audioTone, and a valid accent hex', () => {
+    for (const b of BIOMES) {
+      expect(b.starIntensity).toBeGreaterThanOrEqual(0);
+      expect(b.starIntensity).toBeLessThanOrEqual(1);
+      expect(b.audioTone).toBeGreaterThanOrEqual(0);
+      expect(b.audioTone).toBeLessThanOrEqual(1);
+      expect(Number.isInteger(b.accent)).toBe(true);
+      expect(b.accent).toBeGreaterThanOrEqual(0);
+      expect(b.accent).toBeLessThanOrEqual(0xffffff);
+    }
+  });
+
+  it('Midnight is the darkest/starriest and the brightest biome has the most stars off', () => {
+    const midnight = BIOMES.find((b) => b.id === 'midnight')!;
+    const sunset = BIOMES.find((b) => b.id === 'sunset')!;
+    expect(midnight.starIntensity).toBeGreaterThan(sunset.starIntensity);
+    expect(midnight.audioTone).toBeLessThan(sunset.audioTone); // darker voicing at night
+  });
+
+  it('lerping the polish fields across adjacent biomes stays in range', () => {
+    for (let from = 0; from < BIOMES.length; from++) {
+      const a = BIOMES[from];
+      const b = BIOMES[(from + 1) % BIOMES.length];
+      for (let t = 0; t <= 1.00001; t += 0.1) {
+        const star = lerp(a.starIntensity, b.starIntensity, t);
+        const tone = lerp(a.audioTone, b.audioTone, t);
+        expect(star).toBeGreaterThanOrEqual(0);
+        expect(star).toBeLessThanOrEqual(1);
+        expect(tone).toBeGreaterThanOrEqual(0);
+        expect(tone).toBeLessThanOrEqual(1);
+        // The faint traffic tint stays a valid colour at every blend.
+        const accent = mixHex(a.accent, b.accent, t);
+        const tint = mixHex(0xffffff, accent, BIOME_CYCLE.accentTintStrength);
+        expect(tint).toBeGreaterThanOrEqual(0);
+        expect(tint).toBeLessThanOrEqual(0xffffff);
       }
     }
   });

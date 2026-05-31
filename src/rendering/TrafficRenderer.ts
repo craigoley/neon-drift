@@ -56,10 +56,14 @@ export class TrafficRenderer {
   private readonly cMover = new THREE.Color(OBSTACLE_DEFS.mover.color);
   private readonly cGate = new THREE.Color(OBSTACLE_DEFS.gate.color);
   private readonly cRamp = new THREE.Color(OBSTACLE_DEFS.ramp.color);
+  /** Shared material across all three meshes; its `color` is a global multiplier
+   *  used for a faint biome tint (default white = no tint). */
+  private readonly material: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene) {
     const geo = greyscaleEdgeBox();
     const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
+    this.material = mat;
 
     // Boxes: at most one per pool slot. Gates: up to two bars per slot.
     this.boxMesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
@@ -70,6 +74,12 @@ export class TrafficRenderer {
       m.frustumCulled = false;
       scene.add(m);
     }
+  }
+
+  /** Faint biome cast applied to ALL obstacles (multiplies their intent colours).
+   *  Kept subtle by the caller so threats stay orange/red, ramps green. */
+  setTint(color: THREE.Color): void {
+    this.material.color.copy(color);
   }
 
   /** Position active obstacles by kind; collapse unused instances. Car at z = 0,

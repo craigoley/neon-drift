@@ -17,11 +17,14 @@ export class Environment {
   private readonly backdrop = new THREE.Group();
   private readonly cellSize: number;
 
-  // Sun canvas state, kept for the optional per-frame scanline drift (Phase 3).
+  // Sun canvas state, kept for the optional scanline drift (Phase 3).
   private readonly sunCtx: CanvasRenderingContext2D;
   private readonly sunTexture: THREE.CanvasTexture;
   private readonly sunGradient: CanvasGradient;
   private sunScroll = 0;
+  // Time since the drifting scanlines were last re-rasterised, for throttling
+  // the canvas redraw + texture upload below the frame rate.
+  private sunRepaintAccum = 0;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.cellSize = GRID.size / GRID.divisions;
@@ -156,12 +159,19 @@ export class Environment {
     this.grid.position.z = distance % this.cellSize;
     this.backdrop.position.set(cameraX, 0, cameraZ - ENV.distance);
 
-    // Phase 3: drift the scanlines slowly downward. Only repaints (and re-uploads
-    // the texture) when motion is enabled, so it costs nothing when disabled.
+    // Phase 3: drift the scanlines slowly downward. Costs nothing when disabled
+    // (scrollSpeed 0). The phase advances on real time every frame, but the
+    // canvas is only re-rasterised + re-uploaded at scrollRepaintHz — the drift
+    // is slow enough that this is visually identical to a per-frame repaint
+    // while keeping the GPU texture upload cheap on mobile.
     if ((SUN.scrollSpeed as number) !== 0) {
       this.sunScroll = (this.sunScroll + SUN.scrollSpeed * dt) % 1;
-      this.drawSun(this.sunScroll);
-      this.sunTexture.needsUpdate = true;
+      this.sunRepaintAccum += dt;
+      if (this.sunRepaintAccum >= 1 / SUN.scrollRepaintHz) {
+        this.sunRepaintAccum = 0;
+        this.drawSun(this.sunScroll);
+        this.sunTexture.needsUpdate = true;
+      }
     }
   }
 }

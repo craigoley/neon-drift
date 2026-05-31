@@ -307,6 +307,14 @@ export const SUN = {
    * work). Subtle by design; tune during playtest.
    */
   scrollSpeed: 0.03,
+  /**
+   * Repaint rate (Hz) for the drifting scanlines. The phase advances on real
+   * time every frame, but the canvas is only re-rasterised + re-uploaded this
+   * often — the drift is slow enough that ~20 Hz is visually identical to 60
+   * Hz while cutting the per-frame GPU texture upload to a third (mobile is a
+   * hard requirement). Ignored when scrollSpeed is 0.
+   */
+  scrollRepaintHz: 20,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */

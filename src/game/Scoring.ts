@@ -17,6 +17,10 @@ export interface ScoreState {
   score: number;
   /** Current combo multiplier (>= baseCombo). */
   combo: number;
+  /** Highest combo reached this run — survives the crash reset so the WIPEOUT
+   *  screen can show the run's best multiplier even though `combo` resets.
+   *  (Distinct from SCORING.maxCombo, which is the cap.) */
+  peakCombo: number;
   /** Seconds remaining before the combo decays back to base. */
   comboTimer: number;
   /** Telemetry / HUD: total near-misses this run. */
@@ -24,7 +28,7 @@ export interface ScoreState {
 }
 
 export function createScoreState(): ScoreState {
-  return { score: 0, combo: SCORING.baseCombo, comboTimer: 0, nearMisses: 0 };
+  return { score: 0, combo: SCORING.baseCombo, peakCombo: SCORING.baseCombo, comboTimer: 0, nearMisses: 0 };
 }
 
 /**
@@ -46,6 +50,7 @@ export function integrateScore(state: ScoreState, speed: number, dt: number): Sc
 /** Register a near-miss: bump the combo (capped) and refresh its timer. */
 export function registerNearMiss(state: ScoreState): ScoreState {
   state.combo = Math.min(state.combo + SCORING.comboStep, SCORING.maxCombo);
+  if (state.combo > state.peakCombo) state.peakCombo = state.combo;
   state.comboTimer = SCORING.comboTimeout;
   state.nearMisses++;
   return state;

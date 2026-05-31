@@ -4,6 +4,7 @@ import {
   integrateScore,
   isCollision,
   registerNearMiss,
+  resetCombo,
   resolveTraffic,
 } from '../Scoring';
 import { createTrafficState, type Obstacle } from '../Traffic';
@@ -159,6 +160,33 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
     expect(events.crashed).toBe(false);
     expect(events.nearMisses).toBe(1);
     expect(s.combo).toBeGreaterThan(before);
+  });
+});
+
+describe('Scoring — peak combo (WIPEOUT display)', () => {
+  it('tracks the highest combo reached and survives the crash reset', () => {
+    const s = createScoreState();
+    expect(s.peakCombo).toBe(SCORING.baseCombo);
+    registerNearMiss(s);
+    registerNearMiss(s);
+    registerNearMiss(s);
+    const peak = s.combo;
+    expect(s.peakCombo).toBeCloseTo(peak);
+    expect(peak).toBeGreaterThan(1);
+
+    // Crash resets the live combo but the peak is retained for the wipeout screen.
+    resetCombo(s);
+    expect(s.combo).toBe(SCORING.baseCombo);
+    expect(s.peakCombo).toBeCloseTo(peak);
+  });
+
+  it('peak never drops as the live combo decays', () => {
+    const s = createScoreState();
+    registerNearMiss(s); // combo 1.5, peak 1.5
+    const peak = s.peakCombo;
+    for (let i = 0; i < 1000; i++) integrateScore(s, 100, 1 / 60); // combo decays to 1
+    expect(s.combo).toBe(SCORING.baseCombo);
+    expect(s.peakCombo).toBeCloseTo(peak);
   });
 });
 

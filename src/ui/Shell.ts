@@ -16,7 +16,7 @@
 import type { SettingsStore } from '../state/Settings';
 import type { BestStore, BestRun } from '../storage/BestStore';
 import type { AudioEngine } from '../audio/AudioEngine';
-import { CARS, cssHex, UI } from '../utils/constants';
+import { CARS, cssHex, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
 type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | null;
@@ -45,6 +45,7 @@ export class Shell {
   // Dynamic nodes.
   private readonly startBest: HTMLElement;
   private readonly crashScoreEl: HTMLElement;
+  private readonly crashComboEl: HTMLElement;
   private readonly crashBestEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carPreviewEl: HTMLElement;
@@ -83,6 +84,7 @@ export class Shell {
     // Cache nodes that update at runtime.
     this.startBest = this.startScreen.querySelector('.shell-best')!;
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
+    this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carPreviewEl = this.carScreen.querySelector('.shell-car-preview')!;
@@ -107,8 +109,13 @@ export class Shell {
     this.go('start');
   }
 
-  showCrash(score: number, distance: number, best: BestRun): void {
+  showCrash(score: number, distance: number, best: BestRun, peakCombo: number): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
+    // The live combo resets on crash, so the WIPEOUT screen is where the player
+    // sees how daring the run was. Dimmed when the run never built a combo.
+    this.crashComboEl.textContent = `MAX COMBO x${peakCombo.toFixed(1)}`;
+    // Dim when the run never rose above the base combo (a daring run pops).
+    this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
     this.crashBestEl.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
     this.go('crash');
   }
@@ -264,6 +271,7 @@ export class Shell {
     s.innerHTML =
       `<h1 class="shell-title shell-wipeout">WIPEOUT</h1>` +
       `<p class="shell-crash-line shell-crash-score"></p>` +
+      `<p class="shell-crash-combo"></p>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
       `<button class="shell-btn shell-btn--ghost shell-share" type="button">SHARE</button>` +

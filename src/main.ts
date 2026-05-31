@@ -121,7 +121,7 @@ function frame(now: number): void {
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
     bestStore.submit(game.distance, game.score.score); // update best before showing it
-    shell.showCrash(game.score.score, game.distance, bestStore.best);
+    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));

@@ -293,6 +293,17 @@ body,
   box-shadow: 0 0 10px #00ffff;
 }
 
+/* Peak combo for the run — the headline reward on the WIPEOUT screen. */
+.shell-crash-combo {
+  font-size: clamp(20px, 6vw, 40px);
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  color: #ff8a3d;
+  text-shadow:
+    0 0 10px #ff6600,
+    0 0 28px #ff00ff;
+}
+
 /* "Link copied" toast (share clipboard fallback). */
 .ui-toast {
   position: absolute;

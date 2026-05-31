@@ -248,8 +248,11 @@ export const JUICE = {
   shakeDecay: 4,
   /** Crash freeze-frame duration in seconds. */
   freezeFrame: 0.12,
-  /** Neon-shard burst count on crash. */
+  /** Crash white-flash duration as a multiple of the freeze frame. */
+  crashFlashMultiplier: 2,
+  /** Neon-shard burst count on crash and the burst's vertical (y) origin. */
   shardCount: 36,
+  shardBurstY: 1,
   /** Shard initial speed, lifetime (s), gravity, per-second drag and point size. */
   shardSpeed: 26,
   shardLifetime: 0.9,
@@ -276,10 +279,11 @@ export const AUDIO = {
   engineDetune: 1.01,
   enginePitchGlide: 0.08,
   /** Tyre-screech filtered-noise gain on handbrake, bandpass centre (Hz), Q,
-   *  and gain ramp time constant (s). */
+   *  gain ramp time constant (s), and the min speed at which it's audible. */
   screechGain: 0.05,
   screechBandHz: 2200,
   screechQ: 2,
+  screechMinSpeed: 1,
   screechRamp: 0.05,
   /** Near-miss whoosh + combo-tick blip. */
   whooshHz: 520,

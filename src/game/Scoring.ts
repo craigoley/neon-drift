@@ -83,23 +83,25 @@ export interface TrafficEvents {
 
 /**
  * Resolve collisions and near-misses against the active traffic for this step.
- * Mutates `score` (near-miss combo) and each obstacle's `passed` flag; reports
- * whether a collision occurred. A collision takes precedence over a near-miss.
+ * Mutates `score` (near-miss combo), each obstacle's `passed` flag, and writes
+ * the outcome into the caller-supplied `events` object (mutate-in-place — no
+ * per-frame allocation). A collision takes precedence over a near-miss.
  */
 export function resolveTraffic(
+  events: TrafficEvents,
   score: ScoreState,
   playerLateral: number,
   playerDistance: number,
   traffic: TrafficState,
-): TrafficEvents {
-  let crashed = false;
-  let nearMisses = 0;
+): void {
+  events.crashed = false;
+  events.nearMisses = 0;
 
   for (const o of traffic.pool) {
     if (!o.active) continue;
 
     if (isCollision(playerLateral, playerDistance, o)) {
-      crashed = true;
+      events.crashed = true;
       continue;
     }
 
@@ -109,10 +111,8 @@ export function resolveTraffic(
       const gap = Math.abs(playerLateral - o.lateral);
       if (gap < SCORING.nearMissLateral) {
         registerNearMiss(score);
-        nearMisses++;
+        events.nearMisses++;
       }
     }
   }
-
-  return { crashed, nearMisses };
 }

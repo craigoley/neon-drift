@@ -90,7 +90,9 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   }
 
   if (state.phase !== Phase.Playing) {
-    state.lastEvents = { crashed: false, nearMisses: 0 };
+    // Mutate in place — no per-frame allocation while on menu / crash screen.
+    state.lastEvents.crashed = false;
+    state.lastEvents.nearMisses = 0;
     return state;
   }
 
@@ -101,11 +103,11 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   updateRoad(state.road, state.distance);
   updateTraffic(state.traffic, state.rng, state.distance, dt);
 
-  const events = resolveTraffic(state.score, state.vehicle.lateral, state.distance, state.traffic);
+  // Writes into the pre-allocated lastEvents object (no per-frame allocation).
+  resolveTraffic(state.lastEvents, state.score, state.vehicle.lateral, state.distance, state.traffic);
   integrateScore(state.score, state.vehicle.speed, dt);
-  state.lastEvents = events;
 
-  if (events.crashed) {
+  if (state.lastEvents.crashed) {
     state.phase = Phase.Crashed;
     resetCombo(state.score);
   }

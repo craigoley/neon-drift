@@ -93,7 +93,10 @@ export class Controls {
 
   private onTouchMove(e: TouchEvent): void {
     if (this.steerTouchId === null) return;
-    for (const t of Array.from(e.changedTouches)) {
+    // Index loop over the indexable TouchList — avoids Array.from allocating on
+    // every touch-move (~60 Hz during drag steering on mobile).
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
       if (t.identifier !== this.steerTouchId) continue;
       e.preventDefault();
       const dx = t.clientX - this.steerOriginX;
@@ -104,7 +107,8 @@ export class Controls {
   }
 
   private onTouchEnd(e: TouchEvent): void {
-    for (const t of Array.from(e.changedTouches)) {
+    for (let i = 0; i < e.changedTouches.length; i++) {
+      const t = e.changedTouches[i];
       if (t.identifier !== this.steerTouchId) continue;
       this.steerTouchId = null;
       this.touchActive = false;

@@ -25,7 +25,7 @@ import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { BestStore } from './storage/BestStore';
 import { Telemetry } from './utils/Telemetry';
-import { JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
+import { AUDIO, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -97,14 +97,16 @@ function frame(now: number): void {
   }
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
-    shards.burst(game.vehicle.lateral, 1, 0);
+    shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
     bestStore.submit(game.distance, game.score.score);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
     audio.setScreech(
-      game.phase === Phase.Playing && controls.intent.handbrake && game.vehicle.speed > 1,
+      game.phase === Phase.Playing &&
+        controls.intent.handbrake &&
+        game.vehicle.speed > AUDIO.screechMinSpeed,
     );
     if (nearMisses > 0) audio.playNearMiss();
     if (crashed) audio.playCrash();

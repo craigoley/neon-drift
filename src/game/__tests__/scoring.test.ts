@@ -56,7 +56,8 @@ describe('Scoring — near-miss combo increment', () => {
     slot.lateral = gap;
     slot.distance = 99; // just behind player at 100
     slot.passed = false;
-    const events = resolveTraffic(s, 0, 100, traffic);
+    const events = { crashed: false, nearMisses: 0 };
+    resolveTraffic(events, s, 0, 100, traffic);
     expect(events.crashed).toBe(false);
     expect(events.nearMisses).toBe(1);
     expect(s.combo).toBeGreaterThan(SCORING.baseCombo);

@@ -26,7 +26,7 @@ export class ScreenFx {
 
   /** Trigger the white crash flash. */
   flashCrash(): void {
-    this.flashTimer = JUICE.freezeFrame * 2;
+    this.flashTimer = JUICE.freezeFrame * JUICE.crashFlashMultiplier;
   }
 
   update(dt: number): void {
@@ -39,7 +39,9 @@ export class ScreenFx {
 
     if (this.flashTimer > 0) {
       this.flashTimer -= dt;
-      this.flash.style.opacity = String(Math.max(0, this.flashTimer / (JUICE.freezeFrame * 2)));
+      this.flash.style.opacity = String(
+        Math.max(0, this.flashTimer / (JUICE.freezeFrame * JUICE.crashFlashMultiplier)),
+      );
     } else if (this.flash.style.opacity !== '0') {
       this.flash.style.opacity = '0';
     }

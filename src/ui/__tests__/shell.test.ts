@@ -117,6 +117,56 @@ describe('Shell — menu return + pause routing', () => {
   });
 });
 
+describe('Shell — locked cars cannot be selected', () => {
+  it('cycling to a locked car previews it but does NOT change the selection, and shows its requirement', () => {
+    const parent = document.createElement('div');
+    const audio = { setEnabled() {}, setMuted() {} } as unknown as AudioEngine;
+    const settings = new SettingsStore(null); // in-memory; default selected = starter (pulse)
+    const applied: string[] = [];
+    // Lock everything except the starter (pulse).
+    const shell = new Shell(parent, settings, new BestStore(), audio, {
+      isTouch: false,
+      shareUrl: 'https://neon.example/',
+      onPlay: () => {},
+      onPause: () => {},
+      onResume: () => {},
+      onMenu: () => {},
+      applyCar: (id: string) => void applied.push(id),
+      onCarPickerEnter: () => {},
+      onCarPickerCar: () => {},
+      onCarPickerExit: () => {},
+      carLock: (carId: string) =>
+        carId === 'pulse' ? null : { label: 'Drive 2,500m total', have: 0, need: 2500 },
+    });
+    shell.showStart();
+    (parent.querySelector('.shell-cars') as HTMLButtonElement).click(); // open picker at pulse
+    expect(settings.get('selectedCarId')).toBe('pulse');
+
+    (parent.querySelector('.shell-next') as HTMLButtonElement).click(); // → vapor (locked)
+    // Selection unchanged; the locked car never became the chosen car.
+    expect(settings.get('selectedCarId')).toBe('pulse');
+    expect(applied).not.toContain('vapor');
+    // The picker shows the requirement and marks itself locked.
+    const lockText = parent.querySelector('.shell-car-lock')?.textContent ?? '';
+    expect(lockText).toContain('Drive 2,500m total');
+    expect(lockText).toContain('0/2500');
+    expect((parent.querySelector('.shell-carpicker') as HTMLElement).classList.contains('locked')).toBe(true);
+  });
+});
+
+describe('Shell — WIPEOUT unlock celebration', () => {
+  it('shows an UNLOCKED line only when a car was unlocked this run', () => {
+    const { shell, parent } = makeShell();
+    shell.showCrash(1000, 1000, { distance: 1000, score: 1000 }, 2, ['Vapor']);
+    const el = parent.querySelector('.shell-crash-unlock') as HTMLElement;
+    expect(el.textContent).toBe('UNLOCKED: Vapor!');
+    expect(el.style.display).not.toBe('none');
+
+    shell.showCrash(500, 500, { distance: 500, score: 500 }, 1); // nothing unlocked
+    expect((parent.querySelector('.shell-crash-unlock') as HTMLElement).style.display).toBe('none');
+  });
+});
+
 describe('Shell — car picker preview lifecycle + stat bars', () => {
   it('entering the picker spins up the 3D preview; DONE tears it down', () => {
     const { shell, parent, calls } = makeShell();

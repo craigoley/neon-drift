@@ -40,6 +40,9 @@ export interface ShellOptions {
   onCarPickerEnter: (container: HTMLElement, carId: string) => void;
   onCarPickerCar: (carId: string) => void;
   onCarPickerExit: () => void;
+  /** Lock state for a car: `null` when unlocked, else the requirement + live
+   *  progress for the picker. Absent → everything unlocked (used by tests). */
+  carLock?: (carId: string) => { label: string; have: number; need: number } | null;
 }
 
 export class Shell {
@@ -61,10 +64,12 @@ export class Shell {
   private readonly crashScoreEl: HTMLElement;
   private readonly crashComboEl: HTMLElement;
   private readonly crashBestEl: HTMLElement;
+  private readonly crashUnlockEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carCanvasEl: HTMLElement;
   private readonly carStatsEl: HTMLElement;
   private readonly carDotsEl: HTMLElement;
+  private readonly carLockEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
@@ -102,10 +107,12 @@ export class Shell {
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
+    this.crashUnlockEl = this.crashScreen.querySelector('.shell-crash-unlock')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carCanvasEl = this.carScreen.querySelector('.shell-car-canvas')!;
     this.carStatsEl = this.carScreen.querySelector('.shell-car-stats')!;
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
+    this.carLockEl = this.carScreen.querySelector('.shell-car-lock')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
 
     // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
@@ -142,7 +149,13 @@ export class Shell {
     this.go('start');
   }
 
-  showCrash(score: number, distance: number, best: BestRun, peakCombo: number): void {
+  showCrash(
+    score: number,
+    distance: number,
+    best: BestRun,
+    peakCombo: number,
+    unlockedNames: string[] = [],
+  ): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
     // The live combo resets on crash, so the WIPEOUT screen is where the player
     // sees how daring the run was. Dimmed when the run never built a combo.
@@ -150,6 +163,27 @@ export class Shell {
     // Dim when the run never rose above the base combo (a daring run pops).
     this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
     this.crashBestEl.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
+
+    // Unlock moment: celebrate anything earned this run (else stay hidden).
+    if (unlockedNames.length > 0) {
+      const label = unlockedNames.length === 1 ? unlockedNames[0] : unlockedNames.join(' + ');
+      this.crashUnlockEl.textContent = `UNLOCKED: ${label}!`;
+      this.crashUnlockEl.style.display = '';
+      if (typeof this.crashUnlockEl.animate === 'function') {
+        this.crashUnlockEl.animate(
+          [
+            { opacity: 0, transform: 'scale(0.9)' },
+            { opacity: 1, transform: 'scale(1.06)', offset: 0.6 },
+            { opacity: 1, transform: 'scale(1)' },
+          ],
+          { duration: 700, easing: 'ease-out' },
+        );
+      }
+    } else {
+      this.crashUnlockEl.textContent = '';
+      this.crashUnlockEl.style.display = 'none';
+    }
+
     this.go('crash');
   }
 
@@ -281,6 +315,7 @@ export class Shell {
       `<button class="shell-btn shell-arrow shell-next" type="button" aria-label="next car">›</button>` +
       `</div>` +
       `<p class="shell-car-name"></p>` +
+      `<p class="shell-car-lock"></p>` +
       `<div class="shell-car-stats">` +
       this.statRow('SPEED', 'speed') +
       this.statRow('GRIP', 'grip') +
@@ -323,26 +358,37 @@ export class Shell {
   private cycleCar(dir: number): void {
     this.carIndex = (this.carIndex + dir + CARS.length) % CARS.length;
     const car = CARS[this.carIndex];
-    this.settings.set('selectedCarId', car.id); // persist
-    this.opts.applyCar(car.id); // live update the rendered car behind the menu
-    this.opts.onCarPickerCar(car.id); // update the 3D preview
+    // Always preview the browsed car (so the player can see what they're working
+    // toward), but only SELECT it — persist + apply the cosmetic behind the menu
+    // — when it's unlocked. A locked car can't become the chosen car.
+    if (!this.opts.carLock?.(car.id)) {
+      this.settings.set('selectedCarId', car.id);
+      this.opts.applyCar(car.id);
+    }
+    this.opts.onCarPickerCar(car.id); // update the 3D preview either way
     this.renderCar();
   }
 
   private renderCar(): void {
     const car = CARS[this.carIndex];
+    const lock = this.opts.carLock?.(car.id) ?? null;
     this.carNameEl.textContent = car.displayName;
 
+    // Locked cars show their requirement + live progress; unlocked ones clear it.
+    this.carScreen.classList.toggle('locked', !!lock);
+    this.carLockEl.textContent = lock ? `🔒 ${lock.label} · ${Math.floor(lock.have)}/${lock.need}` : '';
+
     // Stat bars — DERIVED from the same handling multipliers the sim uses
-    // (carStats), tinted with the car's glow so they read with the preview.
+    // (carStats), tinted with the car's glow so they read with the preview. A
+    // locked car dims its bars (greyed) so it reads as not-yet-available.
     const stats = carStats(handlingFor(car.id));
-    const glow = cssHex(car.cosmetic.glow);
+    const glow = lock ? '#6a6a7a' : cssHex(car.cosmetic.glow);
     const setBar = (key: keyof typeof stats) => {
       const fill = this.carStatsEl.querySelector(`[data-stat="${key}"]`) as HTMLElement | null;
       if (!fill) return;
       fill.style.width = `${Math.round(stats[key] * 100)}%`;
       fill.style.background = glow;
-      fill.style.boxShadow = `0 0 8px ${glow}`;
+      fill.style.boxShadow = lock ? 'none' : `0 0 8px ${glow}`;
     };
     setBar('speed');
     setBar('grip');
@@ -362,6 +408,7 @@ export class Shell {
       `<h1 class="shell-title shell-wipeout">WIPEOUT</h1>` +
       `<p class="shell-crash-line shell-crash-score"></p>` +
       `<p class="shell-crash-combo"></p>` +
+      `<p class="shell-crash-unlock"></p>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
       `<div class="shell-row">` +

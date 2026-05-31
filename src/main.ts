@@ -30,6 +30,9 @@ import { DebugOverlay } from './rendering/DebugOverlay';
 import { Shell } from './ui/Shell';
 import { BestStore } from './storage/BestStore';
 import { SettingsStore } from './state/Settings';
+import { ProgressStore } from './state/Progress';
+import { unlockProgress } from './state/Unlocks';
+import { biomesSeenForDistance } from './game/Biome';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
 import {
@@ -45,6 +48,7 @@ import {
   PALETTE,
   POWERUP_DEFS,
   PowerupKind,
+  STARTER_CAR_ID,
   TIMESTEP,
 } from './utils/constants';
 
@@ -65,6 +69,9 @@ controls.attachKeyboard(window);
 // Player settings (sound, selected car) — persisted to localStorage.
 const settings = new SettingsStore();
 
+// Cross-run progression: lifetime stats + unlocked cars (resilient store).
+const progress = new ProgressStore();
+
 // Synthesized audio — resumed on the first user gesture (autoplay policy).
 const audio = new AudioEngine();
 audio.setEnabled(settings.get('soundEnabled')); // honour persisted sound setting
@@ -80,7 +87,13 @@ const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
-vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted cosmetic
+// Resolve the persisted car against the unlock state: a returning player whose
+// saved selection is now locked (re-gated since they last played) snaps back to
+// the always-free starter — so the menu/picker never open on a locked car.
+if (!progress.isUnlocked(settings.get('selectedCarId'))) {
+  settings.set('selectedCarId', STARTER_CAR_ID);
+}
+vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted (validated) cosmetic
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic
@@ -112,7 +125,15 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // settings/UI itself.
   onPlay: () => {
     audio.setMuted(false); // a fresh run is never muted (defensive)
-    startRun(game, handlingFor(settings.get('selectedCarId')));
+    // Defensive: never start a run in a locked car (e.g. a retuned threshold
+    // re-gated the persisted selection) — fall back to the always-free starter.
+    let carId = settings.get('selectedCarId');
+    if (!progress.isUnlocked(carId)) {
+      carId = STARTER_CAR_ID;
+      settings.set('selectedCarId', carId);
+      vehicle.applyCar(carById(carId));
+    }
+    startRun(game, handlingFor(carId));
   },
   onPause: () => {
     pause(game);
@@ -139,6 +160,9 @@ const shell = new Shell(app, settings, bestStore, audio, {
     carPreview?.dispose();
     carPreview = null;
   },
+  // Picker lock state: a persisted-unlocked car is null (selectable); otherwise
+  // show its requirement + live progress. Monotonic — once earned, never locked.
+  carLock: (carId) => (progress.isUnlocked(carId) ? null : unlockProgress(carId, progress.getStats())),
 });
 shell.showStart();
 
@@ -153,6 +177,7 @@ let last = performance.now();
 let accumulator = 0;
 let prevPhase = game.phase;
 let slowmo = 0;
+const NO_UNLOCKS: string[] = [];
 
 function frame(now: number): void {
   const ms = now - last;
@@ -206,12 +231,21 @@ function frame(now: number): void {
   if (shieldBlocked) screenFx.pulsePickup(cssHex(POWERUP_DEFS[PowerupKind.Shield].color));
   // Ramp boost juice: a green flash in the ramp's "go" colour.
   if (rampBoosts > 0) screenFx.pulsePickup(cssHex(OBSTACLE_DEFS[ObstacleKind.Ramp].color));
+  let unlockedNames = NO_UNLOCKS;
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
     bestStore.submit(game.distance, game.score.score); // update best before showing it
-    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo);
+    // Fold this run into the lifetime totals and surface anything newly unlocked.
+    const result = progress.recordRun({
+      distance: game.distance,
+      bestCombo: game.score.peakCombo,
+      powerupsCollected: game.powerups.collected,
+      biomesSeen: biomesSeenForDistance(game.distance),
+    });
+    unlockedNames = result.newlyUnlocked.map((id) => carById(id).displayName);
+    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo, unlockedNames);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
@@ -225,6 +259,8 @@ function frame(now: number): void {
     if (nearMisses > 0) audio.playNearMiss();
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
+    // Unlock fanfare over the WIPEOUT (reuses the milestone three-note chime).
+    if (unlockedNames.length > 0) audio.playMilestone();
   }
 
   // Milestone / biome / objective celebration: a brief, non-intrusive toast plus

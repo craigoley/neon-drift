@@ -2,3 +2,5 @@
 Synthwave endless racing game — TypeScript + Three.js + Vite. Part of OleyArcade.com
 
 <!-- automerge pipeline probe: safe to revert -->
+
+<!-- draft-gate check: should NOT auto-merge while draft -->

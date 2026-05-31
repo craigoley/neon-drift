@@ -87,7 +87,13 @@ const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
-vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted cosmetic
+// Resolve the persisted car against the unlock state: a returning player whose
+// saved selection is now locked (re-gated since they last played) snaps back to
+// the always-free starter — so the menu/picker never open on a locked car.
+if (!progress.isUnlocked(settings.get('selectedCarId'))) {
+  settings.set('selectedCarId', STARTER_CAR_ID);
+}
+vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted (validated) cosmetic
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic

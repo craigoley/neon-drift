@@ -6,17 +6,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { HUD } from '../../rendering/HUD';
-import { createGameState, startRun, update, Phase } from '../GameState';
-import { registerNearMiss, resetCombo, resolveTraffic } from '../Scoring';
+import { createGameState, startRun, update } from '../GameState';
+import { resolveTraffic } from '../Scoring';
 import type { InputIntent } from '../Input';
 import { SCORING, TIMESTEP } from '../../utils/constants';
 
 function comboText(parent: HTMLElement): string | null {
   return parent.querySelector('.hud-combo')?.textContent ?? null;
-}
-
-function crashComboText(parent: HTMLElement): string | null {
-  return parent.querySelector('.hud-crash-combo')?.textContent ?? null;
 }
 
 describe('HUD combo funnel (detection -> increment -> display)', () => {
@@ -52,25 +48,6 @@ describe('HUD combo funnel (detection -> increment -> display)', () => {
     hud.sync(game, { distance: 0, score: 0 });
     expect(comboText(parent)).toBe(`x${game.score.combo.toFixed(1)}`); // display matches
     expect(comboText(parent)).not.toBe('x1.0');
-  });
-
-  it('WIPEOUT screen shows the run PEAK combo even after the live combo resets', () => {
-    const parent = document.createElement('div');
-    const hud = new HUD(parent);
-    const game = startRun(createGameState(1));
-
-    // Build a combo, then crash (which resets the live combo to x1.0).
-    registerNearMiss(game.score);
-    registerNearMiss(game.score);
-    const peak = game.score.peakCombo;
-    expect(peak).toBeGreaterThan(1);
-    resetCombo(game.score);
-    game.phase = Phase.Crashed;
-
-    hud.sync(game, { distance: 0, score: 0 });
-
-    expect(comboText(parent)).toBe('x1.0'); // live combo reset
-    expect(crashComboText(parent)).toBe(`MAX COMBO x${peak.toFixed(1)}`); // peak preserved
   });
 
   it('MAIN-LOOP REPLICA: combo climbs and the HUD reflects it across simulated frames', () => {

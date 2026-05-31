@@ -329,6 +329,8 @@ export const JUICE = {
 /** Synthesized audio tuning (Web Audio API — no files). */
 export const AUDIO = {
   masterGain: 0.5,
+  /** Ramp time (s) for muting/unmuting the master bus on the sound toggle. */
+  muteRamp: 0.05,
   /** Noise-buffer duration in seconds (how long before the pattern repeats). */
   noiseBufferSeconds: 2,
   /** Engine oscillator pitch range mapped from normalised speed. */
@@ -376,6 +378,14 @@ export const AUDIO = {
   crashThumpStop: 0.62,
 } as const;
 
+/** Front-end shell / overlay UI tuning. */
+export const UI = {
+  /** How long the "link copied" toast stays visible (ms). */
+  toastDurationMs: 1800,
+  /** Horizontal swipe distance (px) to cycle cars in the picker. */
+  carSwipeThresholdPx: 40,
+} as const;
+
 /** Touch-control tuning. */
 export const TOUCH = {
   /** Horizontal drag (px) from the touch origin that maps to full steer lock. */
@@ -387,5 +397,75 @@ export const TOUCH = {
 /** localStorage key for the persisted best run. */
 export const STORAGE_KEY = 'neon-drift.best';
 
+/** localStorage key for player settings (sound, selected car, future toggles). */
+export const SETTINGS_STORAGE_KEY = 'neon-drift.settings';
+
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
+
+/**
+ * Cosmetic-only car definitions. COSMETIC for now — `body`/`glow`/`accent` are
+ * 0xRRGGBB colors the VehicleRenderer applies. The type carries an OPTIONAL
+ * `handling` block so a follow-up PR can add speed/grip/drift stats per car
+ * WITHOUT touching the picker UI or the selection plumbing (both read only
+ * id/displayName/cosmetic). All cars handle identically until that lands.
+ */
+export interface CarHandling {
+  /** Multipliers on the shared VEHICLE tuning; added in a follow-up PR. */
+  speed: number;
+  grip: number;
+  drift: number;
+}
+
+export interface CarCosmetic {
+  /** Dark body color (kept deep so the emissive edges read as neon). */
+  body: number;
+  /** Edge / wireframe glow color — the car's signature. */
+  glow: number;
+  /** Headlight / accent color. */
+  accent: number;
+}
+
+export interface CarDef {
+  id: string;
+  displayName: string;
+  cosmetic: CarCosmetic;
+  /** Optional — absent this PR; all cars share VEHICLE physics for now. */
+  handling?: CarHandling;
+}
+
+export const CARS: readonly CarDef[] = [
+  {
+    id: 'pulse',
+    displayName: 'Pulse',
+    cosmetic: { body: 0x1a0033, glow: 0x00ffff, accent: 0xff00ff },
+  },
+  {
+    id: 'vapor',
+    displayName: 'Vapor',
+    cosmetic: { body: 0x1a0033, glow: 0xff00ff, accent: 0x00ffff },
+  },
+  {
+    id: 'ember',
+    displayName: 'Ember',
+    cosmetic: { body: 0x1a0033, glow: 0xff6600, accent: 0xff00ff },
+  },
+  {
+    id: 'ghost',
+    displayName: 'Ghost',
+    cosmetic: { body: 0x1a0033, glow: 0xffffff, accent: 0x00ffff },
+  },
+] as const;
+
+/** Default selected car — the first in the list. */
+export const DEFAULT_CAR_ID = CARS[0].id;
+
+/** Resolve a car by id, falling back to the default if the id is unknown. */
+export function carById(id: string): CarDef {
+  return CARS.find((c) => c.id === id) ?? CARS[0];
+}
+
+/** CSS hex string for a 0xRRGGBB color (for HTML/CSS previews of car colors). */
+export function cssHex(color: number): string {
+  return '#' + color.toString(16).padStart(6, '0');
+}

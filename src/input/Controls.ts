@@ -50,7 +50,8 @@ export class Controls {
       default:
         break;
     }
-    if (down) this.intent.restart = true; // "press any key" to start/restart
+    // NOTE: start/restart is driven by the shell (PLAY / crash screens), NOT by
+    // raw key/tap here — otherwise tapping a menu button would start a run.
     this.resolveSteer();
   }
 
@@ -80,7 +81,7 @@ export class Controls {
 
   private onTouchStart(e: TouchEvent): void {
     e.preventDefault();
-    this.intent.restart = true; // tap to start/restart
+    // start/restart is shell-driven (see onKey note); a canvas tap only steers.
     if (this.steerTouchId === null) {
       const t = e.changedTouches[0];
       this.steerTouchId = t.identifier;

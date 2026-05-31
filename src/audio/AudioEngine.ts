@@ -23,8 +23,28 @@ export class AudioEngine {
   private screechSource: AudioBufferSourceNode | null = null;
   private screechGain: GainNode | null = null;
 
+  /** Master mute state (the sound on/off setting). Remembered before the
+   *  context exists so it can be applied the moment it's unlocked. */
+  private enabled = true;
+
   get started(): boolean {
     return this.ctx !== null;
+  }
+
+  /**
+   * Sound on/off. Mutes/unmutes the master bus immediately (no restart needed):
+   * the engine drone keeps running silently when off, so toggling back on is
+   * instant. Remembered even before the context is unlocked.
+   */
+  setEnabled(enabled: boolean): void {
+    this.enabled = enabled;
+    if (this.master && this.ctx) {
+      this.master.gain.setTargetAtTime(
+        enabled ? AUDIO.masterGain : 0,
+        this.ctx.currentTime,
+        AUDIO.muteRamp,
+      );
+    }
   }
 
   /**
@@ -35,7 +55,8 @@ export class AudioEngine {
     if (!this.ctx) {
       this.ctx = new AudioContext();
       this.master = this.ctx.createGain();
-      this.master.gain.value = AUDIO.masterGain;
+      // Honour the persisted sound setting from the very first sample.
+      this.master.gain.value = this.enabled ? AUDIO.masterGain : 0;
       this.master.connect(this.ctx.destination);
       this.noiseBuffer = this.makeNoiseBuffer();
       this.startEngine();

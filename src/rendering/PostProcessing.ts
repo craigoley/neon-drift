@@ -20,6 +20,7 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { BLOOM } from '../utils/constants';
 
 export class PostProcessing {
+  private readonly renderer: THREE.WebGLRenderer;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly resScale: number;
@@ -30,6 +31,7 @@ export class PostProcessing {
     renderer: THREE.WebGLRenderer,
     isTouch: boolean,
   ) {
+    this.renderer = renderer;
     this.resScale = isTouch ? BLOOM.mobileResolutionScale : 1;
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -40,8 +42,14 @@ export class PostProcessing {
 
     this.composer.addPass(new RenderPass(scene, camera));
 
+    // Size the bloom from the DEVICE resolution (CSS px * pixelRatio), not raw
+    // CSS px. The composer renders at device resolution, so a CSS-px-sized bloom
+    // buffer is undersized on any DPR>1 screen — its coarse blur then smears
+    // bright neon along the screen edges/corners (the cyan edge glow + orange
+    // corner wedge). mobileResolutionScale still trims it for GPU headroom, but
+    // proportionally to the actual framebuffer so the kernel stays aligned.
     this.bloom = new UnrealBloomPass(
-      new THREE.Vector2(w * this.resScale, h * this.resScale),
+      this.bloomResolution(w, h),
       BLOOM.strength,
       BLOOM.radius,
       BLOOM.threshold,
@@ -52,12 +60,26 @@ export class PostProcessing {
     this.composer.addPass(new OutputPass());
   }
 
+  /** Bloom internal-buffer size: device pixels (CSS * pixelRatio) * resScale. */
+  private bloomResolution(width: number, height: number): THREE.Vector2 {
+    const pr = this.renderer.getPixelRatio();
+    return new THREE.Vector2(
+      Math.max(1, Math.round(width * pr * this.resScale)),
+      Math.max(1, Math.round(height * pr * this.resScale)),
+    );
+  }
+
   render(): void {
     this.composer.render();
   }
 
   setSize(width: number, height: number): void {
+    // Re-sync ALL three on resize (and on DPR changes): renderer (done by the
+    // caller via SceneManager.resize), composer pixel ratio + size, and the
+    // bloom resolution — kept proportional to the device framebuffer.
+    this.composer.setPixelRatio(this.renderer.getPixelRatio());
     this.composer.setSize(width, height);
-    this.bloom.setSize(width * this.resScale, height * this.resScale);
+    const res = this.bloomResolution(width, height);
+    this.bloom.setSize(res.x, res.y);
   }
 }

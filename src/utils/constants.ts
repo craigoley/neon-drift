@@ -399,6 +399,8 @@ export const UI = {
   toastDurationMs: 1800,
   /** Horizontal swipe distance (px) to cycle cars in the picker. */
   carSwipeThresholdPx: 40,
+  /** Car-picker 3D preview: gentle auto-rotate speed (radians/second). */
+  carPreviewSpinPerSec: 0.6,
 } as const;
 
 /** Touch-control tuning. */
@@ -492,14 +494,14 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'pulse',
     displayName: 'Pulse',
-    cosmetic: { body: 0x1a0033, glow: 0x00ffff, accent: 0xff00ff },
+    cosmetic: { body: 0x140a2e, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The reference point.
     handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
   },
   {
     id: 'vapor',
     displayName: 'Vapor',
-    cosmetic: { body: 0x1a0033, glow: 0xff00ff, accent: 0x00ffff },
+    cosmetic: { body: 0x2e0a24, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
     handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
@@ -507,7 +509,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ember',
     displayName: 'Ember',
-    cosmetic: { body: 0x1a0033, glow: 0xff6600, accent: 0xff00ff },
+    cosmetic: { body: 0x2e1605, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
     handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
@@ -515,7 +517,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ghost',
     displayName: 'Ghost',
-    cosmetic: { body: 0x1a0033, glow: 0xffffff, accent: 0x00ffff },
+    cosmetic: { body: 0x06261f, glow: 0xffffff, accent: 0x00ffff },
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
     handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },

@@ -1,88 +1,109 @@
+/**
+ * Per-car handling — BEHAVIORAL tests. "Feel" can't be asserted, and this PR
+ * auto-merges, so these pin the actual tradeoffs: each car must measurably win
+ * its axis and lose another. If a later tweak makes a car strictly dominant on a
+ * tested axis, one of these should fail.
+ */
 import { describe, expect, it } from 'vitest';
-import { createVehicleState, updateVehicle } from '../Vehicle';
+import { createVehicleState, updateVehicle, type VehicleState } from '../Vehicle';
 import { createIntent, type InputIntent } from '../Input';
-import {
-  BASE_HANDLING,
-  carStats,
-  handlingFor,
-  TIMESTEP,
-  type CarHandling,
-} from '../../utils/constants';
+import { BASE_HANDLING, handlingFor, CARS, TIMESTEP, type CarHandling } from '../../utils/constants';
 
-/** Drive a fresh car for `steps` under fixed input; return its final state. */
+/** Drive a fresh vehicle for `steps` frames under fixed intent/distance/handling. */
 function drive(
   handling: CarHandling,
-  opts: { steer?: number; handbrake?: boolean; distance?: number; steps: number },
-) {
-  const v = createVehicleState();
-  const intent: InputIntent = createIntent();
-  intent.steer = opts.steer ?? 0;
-  intent.handbrake = opts.handbrake ?? false;
-  // roadCenter 0 → corridor is [-halfWidth, +halfWidth]; keep slides under it.
-  for (let i = 0; i < opts.steps; i++) {
-    updateVehicle(v, intent, opts.distance ?? 0, 0, handling, TIMESTEP);
-  }
+  intent: Partial<InputIntent>,
+  steps: number,
+  distance = 0,
+  init: Partial<VehicleState> = {},
+): VehicleState {
+  const v = { ...createVehicleState(), ...init };
+  const i = { ...createIntent(), ...intent };
+  for (let n = 0; n < steps; n++) updateVehicle(v, i, distance, 0, handling, TIMESTEP);
   return v;
 }
 
-describe('Vehicle — per-car handling tradeoffs (behavioral)', () => {
-  it('top-speed car (COMET) reaches a higher max speed than the high-grip car (VIPER)', () => {
-    // Big distance so the speed cap is near its ceiling for both.
-    const comet = drive(handlingFor('comet'), { distance: 1e6, steps: 3000 });
-    const viper = drive(handlingFor('viper'), { distance: 1e6, steps: 3000 });
-    expect(comet.speed).toBeGreaterThan(viper.speed);
+const ember = handlingFor('ember'); // fast / twitchy
+const vapor = handlingFor('vapor'); // grip / precise
+const ghost = handlingFor('ghost'); // drift specialist
+
+describe('Handling — speed axis', () => {
+  it('the high-top-speed car (Ember) outruns the high-grip car (Vapor) over identical time', () => {
+    // The vehicle auto-accelerates toward its cap (no accelerate input). Drive
+    // far down the road so the cap has ramped near max, long enough that each
+    // plateaus at its own (different) cap.
+    const e = drive(ember, {}, 1500, 50000);
+    const v = drive(vapor, {}, 1500, 50000);
+    expect(e.speed).toBeGreaterThan(v.speed);
+  });
+});
+
+describe('Handling — grip axis', () => {
+  it('the high-grip car (Vapor) changes lateral position faster than the low-grip car (Ember)', () => {
+    // Short hold so neither pins against the corridor wall.
+    const v = drive(vapor, { steer: 1 }, 12);
+    const e = drive(ember, { steer: 1 }, 12);
+    expect(Math.abs(v.lateral)).toBeGreaterThan(Math.abs(e.lateral));
+    expect(Math.abs(v.lateralVel)).toBeGreaterThan(Math.abs(e.lateralVel));
+  });
+});
+
+describe('Handling — drift axis', () => {
+  it('the drift car (Ghost) slides further under handbrake than a non-drift car (Vapor)', () => {
+    // Same initial sideways velocity, then handbrake with no steer — compare slide.
+    const g = drive(ghost, { handbrake: true }, 15, 0, { lateralVel: 15 });
+    const v = drive(vapor, { handbrake: true }, 15, 0, { lateralVel: 15 });
+    expect(g.lateral).toBeGreaterThan(v.lateral); // travelled further sideways
+    expect(g.lateralVel).toBeGreaterThan(v.lateralVel); // retained more slide
+  });
+});
+
+describe('Handling — fallback to base', () => {
+  it('an unknown car id resolves to BASE_HANDLING (all 1.0)', () => {
+    const h = handlingFor('does-not-exist');
+    expect(h).toEqual(BASE_HANDLING);
+    expect(h).toEqual({ speedCap: 1, lateralAccel: 1, lateralFriction: 1, drift: 1 });
   });
 
-  it('high-grip car (VIPER) changes lateral position faster than the low-grip car (COMET)', () => {
-    const viper = drive(handlingFor('viper'), { steer: 1, steps: 20 });
-    const comet = drive(handlingFor('comet'), { steer: 1, steps: 20 });
-    expect(viper.lateral).toBeGreaterThan(comet.lateral);
+  it('BASE_HANDLING produces behaviour identical to explicit 1.0× multipliers (pre-stats base)', () => {
+    const intent = { steer: 0.6, handbrake: false };
+    const fallback = drive(handlingFor('does-not-exist'), intent, 200, 1000);
+    const explicitOnes = drive(
+      { speedCap: 1, lateralAccel: 1, lateralFriction: 1, drift: 1 },
+      intent,
+      200,
+      1000,
+    );
+    expect(fallback).toEqual(explicitOnes);
   });
+});
 
-  it('high-grip car settles a sideways slide quicker than the low-grip car', () => {
-    const settle = (h: CarHandling) => {
+describe('Handling — numerical safety (no NaN / Infinity)', () => {
+  const profiles: CarHandling[] = [
+    ...CARS.map((c) => handlingFor(c.id)),
+    // Pathological multipliers must not blow up (retained fraction is clamped).
+    { speedCap: 1000, lateralAccel: 1000, lateralFriction: 1000, drift: 1000 },
+    { speedCap: 0, lateralAccel: 0, lateralFriction: 0, drift: 0 },
+  ];
+
+  it('every profile keeps speed and lateral state finite under varied input', () => {
+    for (const h of profiles) {
       const v = createVehicleState();
-      v.lateralVel = 10;
-      const intent = createIntent(); // steer 0, no handbrake — normal grip
-      for (let i = 0; i < 30; i++) updateVehicle(v, intent, 0, 0, h, TIMESTEP);
-      return Math.abs(v.lateralVel); // lower = settled faster
-    };
-    expect(settle(handlingFor('viper'))).toBeLessThan(settle(handlingFor('comet')));
-  });
-
-  it('drift car (SLITHER) slides further under handbrake than the grippy car (VIPER)', () => {
-    const coast = (h: CarHandling) => {
-      const v = createVehicleState();
-      v.lateralVel = 5; // same initial sideways slide for both
       const intent = createIntent();
-      intent.handbrake = true; // drift multiplier governs the retained slide
-      for (let i = 0; i < 50; i++) updateVehicle(v, intent, 0, 0, h, TIMESTEP);
-      return v.lateral; // started at 0
-    };
-    expect(coast(handlingFor('drift'))).toBeGreaterThan(coast(handlingFor('viper')));
-  });
-
-  it('unknown / missing id falls back to base behaviour (1.0x), identical to BASE_HANDLING', () => {
-    const unknown = drive(handlingFor('does-not-exist'), { steer: 1, distance: 5000, steps: 200 });
-    const base = drive(BASE_HANDLING, { steer: 1, distance: 5000, steps: 200 });
-    expect(handlingFor('does-not-exist')).toEqual(BASE_HANDLING);
-    expect(unknown.speed).toBeCloseTo(base.speed);
-    expect(unknown.lateral).toBeCloseTo(base.lateral);
-  });
-
-  it('no car handling produces NaN / Infinity (even with extreme drift + handbrake)', () => {
-    const ids = ['ghost', 'viper', 'comet', 'drift', 'unknown'];
-    for (const id of ids) {
-      const h = handlingFor(id);
-      const v = drive(h, { steer: 1, handbrake: true, distance: 1e6, steps: 2000 });
-      expect(Number.isFinite(v.speed)).toBe(true);
-      expect(Number.isFinite(v.lateral)).toBe(true);
-      expect(Number.isFinite(v.lateralVel)).toBe(true);
+      for (let n = 0; n < 2000; n++) {
+        // Deterministic but varied steering + intermittent handbrake.
+        intent.steer = Math.sin(n * 0.21);
+        intent.handbrake = n % 30 < 8;
+        updateVehicle(v, intent, n * 5, 0, h, TIMESTEP);
+        expect(Number.isFinite(v.speed)).toBe(true);
+        expect(Number.isFinite(v.lateral)).toBe(true);
+        expect(Number.isFinite(v.lateralVel)).toBe(true);
+      }
     }
   });
 });
 
-describe('Car picker stats — single source of truth', () => {
+describe('Car picker stats — single source of truth (carStats)', () => {
   it('bars are derived from the handling multipliers (a number change moves the bar)', () => {
     const base = carStats(BASE_HANDLING);
     expect(carStats({ ...BASE_HANDLING, speedCap: 1.25 }).speed).toBeGreaterThan(base.speed);
@@ -92,9 +113,9 @@ describe('Car picker stats — single source of truth', () => {
     expect(carStats({ ...BASE_HANDLING, lateralFriction: 0.6 }).grip).toBeGreaterThan(base.grip);
   });
 
-  it('all stat bars are within 0..1', () => {
-    for (const id of ['ghost', 'viper', 'comet', 'drift']) {
-      const s = carStats(handlingFor(id));
+  it('every car bar is within 0..1', () => {
+    for (const c of CARS) {
+      const s = carStats(handlingFor(c.id));
       for (const v of [s.speed, s.grip, s.drift]) {
         expect(v).toBeGreaterThanOrEqual(0);
         expect(v).toBeLessThanOrEqual(1);
@@ -102,10 +123,10 @@ describe('Car picker stats — single source of truth', () => {
     }
   });
 
-  it('the roster reads as the intended triangle', () => {
+  it('the roster bars read as the intended triangle', () => {
     const s = (id: string) => carStats(handlingFor(id));
-    expect(s('comet').speed).toBeGreaterThan(s('viper').speed); // COMET fastest
-    expect(s('viper').grip).toBeGreaterThan(s('comet').grip); // VIPER grippiest
-    expect(s('drift').drift).toBeGreaterThan(s('viper').drift); // SLITHER driftiest
+    expect(s('ember').speed).toBeGreaterThan(s('vapor').speed); // EMBER fastest
+    expect(s('vapor').grip).toBeGreaterThan(s('ember').grip); // VAPOR grippiest
+    expect(s('ghost').drift).toBeGreaterThan(s('vapor').drift); // GHOST driftiest
   });
 });

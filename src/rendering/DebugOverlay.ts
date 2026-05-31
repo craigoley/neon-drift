@@ -13,7 +13,7 @@ import { activeObstacleCount, activeObstacleCountByKind } from '../game/Traffic'
 import { activePickupCount } from '../game/Powerups';
 import type { GameState } from '../game/GameState';
 import type { Telemetry } from '../utils/Telemetry';
-import { CSS_PALETTE, ObstacleKind, SCORING } from '../utils/constants';
+import { BIOMES, CSS_PALETTE, ObstacleKind, SCORING } from '../utils/constants';
 
 export class DebugOverlay {
   private readonly el: HTMLElement;
@@ -81,6 +81,8 @@ export class DebugOverlay {
       `NEON DRIFT · debug (\` to toggle)\n` +
       `fps ${telemetry.fps.toFixed(0).padStart(3)}  frame ${telemetry.lastMs.toFixed(1)}ms  avg ${telemetry.avgMs.toFixed(1)}ms\n` +
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
+      `biome ${BIOMES[game.biome.from].displayName}` +
+      `${game.biome.blend > 0 ? ` → ${BIOMES[game.biome.to].displayName} ${(game.biome.blend * 100).toFixed(0)}%` : ''}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +
       `traf  active ${activeObstacleCount(traffic)}/${traffic.pool.length}  spawned ${traffic.spawned}  culled ${traffic.culled}\n` +
       `  mix  S${activeObstacleCountByKind(traffic, ObstacleKind.Static)} ` +

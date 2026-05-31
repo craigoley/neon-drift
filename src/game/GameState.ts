@@ -34,6 +34,7 @@ import {
   updatePickups,
   type PowerupState,
 } from './Powerups';
+import { createBiomeState, updateBiome, type BiomeState } from './Biome';
 import { POWERUPS, RAMP, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
@@ -57,6 +58,9 @@ export interface GameState {
   road: RoadState;
   traffic: TrafficState;
   powerups: PowerupState;
+  /** Active biome + transition progress, driven by distance (see Biome.ts).
+   *  Pure indices + a blend scalar; the rendering layer maps it to a palette. */
+  biome: BiomeState;
   score: ScoreState;
   /** Active car handling profile for this run (resolved from the selected car
    *  by the composition root and passed in — the pure layer never reaches into
@@ -77,6 +81,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     road: createRoadState(seed),
     traffic: createTrafficState(),
     powerups: createPowerupState(seed),
+    biome: createBiomeState(),
     score: createScoreState(),
     handling: BASE_HANDLING,
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
@@ -102,6 +107,7 @@ export function startRun(
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
   state.powerups = createPowerupState(seed);
+  state.biome = createBiomeState();
   state.score = createScoreState();
   state.handling = handling;
   state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
@@ -123,6 +129,7 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
   state.powerups = createPowerupState(seed);
+  state.biome = createBiomeState();
   state.score = createScoreState();
   state.lastEvents.crashed = false;
   state.lastEvents.nearMisses = 0;
@@ -180,6 +187,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   state.time += simDt;
 
   updateRoad(state.road, state.distance);
+  updateBiome(state.biome, state.distance); // environment progression (pure)
   updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt);
   updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
 

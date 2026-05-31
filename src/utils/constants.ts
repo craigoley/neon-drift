@@ -638,6 +638,113 @@ export const SUN = {
   scrollRepaintHz: 20,
 } as const;
 
+/**
+ * BIOMES — environmental variety so long runs feel like progress. A biome is a
+ * pure palette + environment override; which one is active is driven by distance
+ * in the pure layer (see game/Biome.ts), and the rendering layer lerps between
+ * the current and next biome's palette for a SMOOTH transition (no hard pop).
+ *
+ * Each biome reuses the existing retrosun pipeline — it only swaps the gradient
+ * STOPS (same `at` positions across all biomes so the transition lerps stop by
+ * stop). Obstacle + powerup colours are deliberately NOT themed: threats stay
+ * orange/red and pickups keep their hues in every biome, so intent-coding
+ * readability is constant.
+ */
+export interface BiomeGradientStop {
+  at: number;
+  color: string;
+}
+export interface BiomeDef {
+  id: string;
+  displayName: string;
+  /** Sun vertical gradient stops (top → base). SAME `at` positions in every
+   *  biome so a transition is a per-stop colour lerp. */
+  gradient: ReadonlyArray<BiomeGradientStop>;
+  /** Ground-grid centre-cross colour (0xRRGGBB). */
+  gridCenter: number;
+  /** Ground-grid line colour (0xRRGGBB). */
+  gridLine: number;
+  /** Scene fog + background colour (0xRRGGBB). */
+  fog: number;
+  /** Wireframe mountain colour (0xRRGGBB). */
+  mountain: number;
+}
+
+export const BIOMES: readonly BiomeDef[] = [
+  {
+    id: 'sunset',
+    displayName: 'Sunset',
+    // The signature look — reuses the retrosun's own gradient verbatim.
+    gradient: SUN.gradient,
+    gridCenter: PALETTE.magenta,
+    gridLine: PALETTE.cyan,
+    fog: PALETTE.deepPurple,
+    mountain: PALETTE.cyan,
+  },
+  {
+    id: 'midnight',
+    displayName: 'Midnight',
+    // Deep blue/purple, a dim cool glow instead of a hot core.
+    gradient: [
+      { at: 0.0, color: '#9fb6ff' },
+      { at: 0.3, color: '#5566cc' },
+      { at: 0.58, color: '#3a3a8a' },
+      { at: 0.82, color: '#241a5a' },
+      { at: 1.0, color: '#03001a' },
+    ],
+    gridCenter: 0x6a4cff,
+    gridLine: 0x2b6fff,
+    fog: 0x05001a,
+    mountain: 0x3a66cc,
+  },
+  {
+    id: 'toxic',
+    displayName: 'Toxic',
+    // Acid neon-green wasteland.
+    gradient: [
+      { at: 0.0, color: '#eaff8a' },
+      { at: 0.3, color: '#9bff3a' },
+      { at: 0.58, color: '#22e07a' },
+      { at: 0.82, color: '#0a9f55' },
+      { at: 1.0, color: '#02180a' },
+    ],
+    gridCenter: 0xccff33,
+    gridLine: 0x00ff88,
+    fog: 0x041a0c,
+    mountain: 0x33ff99,
+  },
+  {
+    id: 'dawn',
+    displayName: 'Dawn',
+    // Warm orange/pink first light.
+    gradient: [
+      { at: 0.0, color: '#fff0c0' },
+      { at: 0.3, color: '#ffb86b' },
+      { at: 0.58, color: '#ff8aa6' },
+      { at: 0.82, color: '#ff5e9c' },
+      { at: 1.0, color: '#2a0a2a' },
+    ],
+    gridCenter: 0xff6aa8,
+    gridLine: 0xffac66,
+    fog: 0x2a0a24,
+    mountain: 0xff99cc,
+  },
+] as const;
+
+/** Biome cycling cadence + transition tuning. */
+export const BIOME_CYCLE = {
+  /** World-units each biome holds before the set advances (then it cycles). */
+  span: 2600,
+  /** Fraction of a span (at its end) spent smoothly blending into the next
+   *  biome — the make-or-break feel detail. 0.27 ≈ a ~700-unit blend zone. */
+  transitionFraction: 0.27,
+  /** Rendering throttle: re-apply the blended palette only once `blend` advances
+   *  by at least this much, so the sun-texture repaint during a transition fires
+   *  ~1/this times instead of every frame (mobile GPU headroom). The grid/fog
+   *  recolour is cheap; idle frames (no transition) do nothing at all. */
+  repaintBlendStep: 0.02,
+} as const;
+
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */
 export const BLOOM = {
   // Tamed from the original (strength 0.9 / threshold 0.2 / exposure 1.1) which

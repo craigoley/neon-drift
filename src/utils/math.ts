@@ -35,6 +35,26 @@ export function smoothFollow(rate: number, dt: number): number {
 }
 
 /**
+ * Per-channel linear blend of two 0xRRGGBB colours by `t` (clamped to [0, 1]).
+ * Returns a valid 0xRRGGBB integer — every channel stays in [0, 255], so the
+ * result is always a well-formed colour (used for smooth biome transitions).
+ * Pure; no three / no DOM.
+ */
+export function mixHex(a: number, b: number, t: number): number {
+  const u = clamp(t, 0, 1);
+  const ar = (a >> 16) & 0xff;
+  const ag = (a >> 8) & 0xff;
+  const ab = a & 0xff;
+  const br = (b >> 16) & 0xff;
+  const bg = (b >> 8) & 0xff;
+  const bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * u);
+  const g = Math.round(ag + (bg - ag) * u);
+  const bl = Math.round(ab + (bb - ab) * u);
+  return (r << 16) | (g << 8) | bl;
+}
+
+/**
  * 1-D axis-aligned overlap test between two centred intervals. Returns true if
  * the intervals [a - aHalf, a + aHalf] and [b - bHalf, b + bHalf] overlap.
  */

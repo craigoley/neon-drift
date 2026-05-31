@@ -204,8 +204,16 @@ export const ENV = {
   mountainSpread: 1400,
   mountainMaxHeight: 140,
   mountainBaseY: 0,
-  /** Fraction of `distance` the mountains sit in front of the backdrop origin. */
+  /** Fraction of `distance` the mountains sit behind the backdrop origin (the
+   *  sun), so the silhouette reads clearly behind the sun's framing. */
   mountainDepthFactor: 0.4,
+  /**
+   * Backdrop render order. Sun + mountains are drawn as a guaranteed-background
+   * layer (depthTest/Write off) BEFORE all gameplay geometry, so they can never
+   * paint over the car or traffic. Mountains sit behind the sun (drawn first).
+   */
+  sunRenderOrder: -1,
+  mountainRenderOrder: -2,
 } as const;
 
 /** Bloom / post-processing (see Step 1 findings: RenderPass -> Bloom -> OutputPass). */

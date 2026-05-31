@@ -76,6 +76,10 @@ export const VEHICLE = {
   /** Vehicle collision box half-extents (lateral, forward). */
   halfWidth: 1.1,
   halfLength: 2.0,
+  /** Extra speed (world units/s) a RAMP boost adds on top of the distance cap
+   *  while the boost timer is live, so a boosted car can briefly out-run its
+   *  normal top speed before settling back. */
+  boostBonus: 55,
 } as const;
 
 /** Traffic spawning + recycled-obstacle-pool tuning. */
@@ -109,13 +113,13 @@ export const TRAFFIC = {
   /** Fraction of the road half-width obstacles may occupy. */
   lateralSpread: 0.85,
   /**
-   * Lane-changing "movers": a fraction of obstacles sway laterally (sine) about
+   * Lane-changing "movers": a subset of obstacles sway laterally (sine) about
    * their spawn lane instead of holding a fixed line, so dodging requires
    * reading movement. Amplitude (world units) is randomised per mover; swayRate
    * is the phase advance (radians/second). Kept subtle so it reads as drifting
-   * traffic, not teleporting.
+   * traffic, not teleporting. The spawn MIX (which kinds appear) is driven by
+   * per-kind weights in OBSTACLE_DEFS, not a flat fraction.
    */
-  moverFraction: 0.35,
   swayAmplitudeMin: 1.5,
   swayAmplitudeMax: 3.0,
   swayRate: 1.1,
@@ -145,6 +149,135 @@ export const SCORING = {
    * still earns nothing.
    */
   nearMissLateral: 6.5,
+  /** Combo weight for threading a MOVER (a lane-changing obstacle) — threading a
+   *  moving target is harder, so it pays more than a static near-miss. */
+  moverNearMissWeight: 2,
+  /** Combo weight for threading a GATE's opening. */
+  gateThreadWeight: 1.5,
+} as const;
+
+/**
+ * Obstacle BEHAVIOR types. Erasable const-object (same style as Phase /
+ * PowerupKind). The traffic pool is a single recycled pool whose slots each
+ * carry a `kind`; per-type logic lives in Traffic/Scoring, never a forked pool.
+ */
+export const ObstacleKind = {
+  /** Holds its lane — the classic obstacle. */
+  Static: 'static',
+  /** Drifts laterally (sine sway) — you must read its path. */
+  Mover: 'mover',
+  /** Full-width barrier with one passable opening — steer to the gap. */
+  Gate: 'gate',
+  /** Beneficial boost-strip — hit it on purpose for a speed + score burst. */
+  Ramp: 'ramp',
+} as const;
+export type ObstacleKind = (typeof ObstacleKind)[keyof typeof ObstacleKind];
+
+/**
+ * Obstacle colours, COLOUR-CODED BY INTENT (consistent with powerups): warm
+ * hues = THREAT, green = BENEFICIAL. Static is the classic orange; movers run a
+ * hotter red so a moving threat reads as more urgent; gate bars are orange (the
+ * gap is the safe cue); the ramp is spring-green like a "go" signal.
+ */
+export const OBSTACLE_COLORS = {
+  static: PALETTE.accent, // 0xff6600 — classic orange threat
+  mover: 0xff2d55, // hot red — a moving threat reads hotter / more urgent
+  gate: PALETTE.accent, // 0xff6600 — barrier; the opening is the safe cue
+  ramp: 0x00ff9f, // spring green — beneficial, "drive over this"
+} as const;
+
+export interface ObstacleDef {
+  id: ObstacleKind;
+  displayName: string;
+  /** Render colour (0xRRGGBB). */
+  color: number;
+  /** True for THREATS (collidable), false for BENEFICIAL terrain (ramps). */
+  threat: boolean;
+  /**
+   * Spawn-MIX weighting that ramps with distance. The kind is unavailable until
+   * `startDistance`; past it the weight is
+   *   clamp(weightBase + weightPerUnit * (distance - startDistance), 0, weightMax).
+   * Density (how OFTEN anything spawns) is separate — see spawnInterval.
+   */
+  startDistance: number;
+  weightBase: number;
+  weightPerUnit: number;
+  weightMax: number;
+}
+
+/** Per-kind obstacle configuration (single source of truth for spawn mix). */
+export const OBSTACLE_DEFS: Readonly<Record<ObstacleKind, ObstacleDef>> = {
+  static: {
+    id: ObstacleKind.Static,
+    displayName: 'Static',
+    color: OBSTACLE_COLORS.static,
+    threat: true,
+    startDistance: 0,
+    weightBase: 6,
+    weightPerUnit: 0,
+    weightMax: 6,
+  },
+  mover: {
+    id: ObstacleKind.Mover,
+    displayName: 'Mover',
+    color: OBSTACLE_COLORS.mover,
+    threat: true,
+    startDistance: 0,
+    weightBase: 2,
+    weightPerUnit: 0.0008,
+    weightMax: 6,
+  },
+  gate: {
+    id: ObstacleKind.Gate,
+    displayName: 'Gate',
+    color: OBSTACLE_COLORS.gate,
+    threat: true,
+    startDistance: 1500,
+    weightBase: 1.5,
+    weightPerUnit: 0.0006,
+    weightMax: 4,
+  },
+  ramp: {
+    id: ObstacleKind.Ramp,
+    displayName: 'Ramp',
+    color: OBSTACLE_COLORS.ramp,
+    threat: false,
+    startDistance: 1000,
+    weightBase: 1.0,
+    weightPerUnit: 0.00025,
+    weightMax: 2,
+  },
+} as const;
+
+/** Stable kind ordering (weighted-pick iteration + renderer dispatch). */
+export const OBSTACLE_ORDER: readonly ObstacleKind[] = [
+  ObstacleKind.Static,
+  ObstacleKind.Mover,
+  ObstacleKind.Gate,
+  ObstacleKind.Ramp,
+] as const;
+
+/** GATE (barrier-with-opening) tuning. */
+export const GATE = {
+  /** Half-width (world units) of the passable opening — must clear the car
+   *  (VEHICLE.halfWidth 1.1) with margin. Randomised per gate in this range. */
+  openingHalfWidthMin: 2.6,
+  openingHalfWidthMax: 3.6,
+  /** Forward half-thickness of the barrier band (collision + render depth). */
+  halfLength: 1.4,
+} as const;
+
+/** RAMP (beneficial boost-strip) tuning. */
+export const RAMP = {
+  /** Contact box half-extents (lateral, forward) — generous so it's easy to hit
+   *  on purpose. */
+  halfWidth: 2.4,
+  halfLength: 3.2,
+  /** Flat score burst granted on contact (added once per ramp). */
+  scoreBurst: 250,
+  /** Seconds the over-cap speed boost stays live after a ramp (see
+   *  VEHICLE.boostBonus). */
+  boostDuration: 2.0,
 } as const;
 
 /**
@@ -392,16 +525,21 @@ export const TRAFFIC_VIS = {
   /** Obstacle mesh height and its y-centre above the ground. */
   meshHeight: 1.2,
   meshY: 0.6,
-  /** Obstacle body colour (orange threat). */
-  bodyColor: 0xff6600,
   /**
-   * Bright highlight baked onto the obstacle's top + leading faces (vertex
-   * colours). Readability lever: a hot rim that separates an obstacle from the
-   * background it sits against — including the sun's orange/magenta bands at the
-   * horizon, where a flat-orange box would camouflage. Kept warm so threats stay
-   * "orange", just with a brighter edge that always reads as foreground.
+   * Per-instance colouring (moving + typed obstacles) is done by tinting a
+   * GREYSCALE box via instanceColor: body faces sit at `bodyShade`, the top +
+   * leading edge at 1.0, so the hot-rim readability survives while each kind
+   * gets its own colour (static orange, mover red, gate orange, ramp green).
    */
-  edgeColor: 0xffe08a,
+  bodyShade: 0.62,
+  /** GATE barrier bars: full height + y-centre (taller than cars → reads as a
+   *  wall); a bar thinner than this in world units is skipped (opening at edge). */
+  gateHeight: 2.4,
+  gateY: 1.2,
+  gateMinBarWidth: 0.1,
+  /** RAMP boost-strip: a low, wide flat slab on the road surface. */
+  rampHeight: 0.35,
+  rampY: 0.18,
 } as const;
 
 /** Horizon backdrop placement + wireframe mountains (procedural, fog-excluded). */

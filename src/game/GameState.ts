@@ -34,7 +34,7 @@ import {
   updatePickups,
   type PowerupState,
 } from './Powerups';
-import { POWERUPS } from '../utils/constants';
+import { POWERUPS, RAMP, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -79,7 +79,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     powerups: createPowerupState(seed),
     score: createScoreState(),
     handling: BASE_HANDLING,
-    lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false },
+    lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
   };
 }
 
@@ -104,7 +104,7 @@ export function startRun(
   state.powerups = createPowerupState(seed);
   state.score = createScoreState();
   state.handling = handling;
-  state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false };
+  state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
   return state;
 }
 
@@ -128,6 +128,7 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.lastEvents.nearMisses = 0;
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
+  state.lastEvents.rampBoosts = 0;
   return state;
 }
 
@@ -160,6 +161,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents.nearMisses = 0;
     state.lastEvents.collected = null;
     state.lastEvents.shieldBlocked = false;
+    state.lastEvents.rampBoosts = 0;
     return state;
   }
 
@@ -186,6 +188,14 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
   collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);
+
+  // RAMP hook: a contacted boost-strip grants a flat score burst and a brief
+  // over-cap speed boost (the raised cap lives on the vehicle's boostTimer).
+  if (state.lastEvents.rampBoosts && state.lastEvents.rampBoosts > 0) {
+    state.score.score += RAMP.scoreBurst * state.lastEvents.rampBoosts;
+    state.vehicle.boostTimer = RAMP.boostDuration;
+    state.vehicle.speed += VEHICLE.boostBonus;
+  }
 
   // SCORE-BOOST hook: an external multiplier stacked on top of the combo.
   integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));

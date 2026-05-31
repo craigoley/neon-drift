@@ -17,10 +17,14 @@ export interface VehicleState {
   lateralVel: number;
   /** Forward speed (world units / second). */
   speed: number;
+  /** Seconds remaining on a RAMP speed boost. While > 0 the speed cap is raised
+   *  by VEHICLE.boostBonus so the car can briefly ride above its normal top
+   *  speed; 0 = no boost. */
+  boostTimer: number;
 }
 
 export function createVehicleState(): VehicleState {
-  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed };
+  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed, boostTimer: 0 };
 }
 
 /**
@@ -53,9 +57,13 @@ export function updateVehicle(
   dt: number,
 ): VehicleState {
   // Forward: auto-accelerate toward the distance-dependent cap, scaled by the
-  // car's top-speed multiplier.
-  const cap = speedCap(distance) * handling.speedCap;
+  // car's top-speed multiplier. A live RAMP boost raises the cap by boostBonus
+  // so the car can briefly out-run its normal top speed, then settles when the
+  // boost expires.
+  const baseCap = speedCap(distance) * handling.speedCap;
+  const cap = state.boostTimer > 0 ? baseCap + VEHICLE.boostBonus : baseCap;
   state.speed = clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
+  if (state.boostTimer > 0) state.boostTimer = Math.max(0, state.boostTimer - dt);
 
   // Lateral: steer applies acceleration (scaled by grip); friction bleeds
   // velocity. The handbrake retains far more lateral velocity (drift) — the

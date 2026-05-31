@@ -36,6 +36,8 @@ import {
   handlingFor,
   JUICE,
   MAX_FRAME_DT,
+  OBSTACLE_DEFS,
+  ObstacleKind,
   POWERUP_DEFS,
   PowerupKind,
   TIMESTEP,
@@ -157,6 +159,7 @@ function frame(now: number): void {
   let nearMisses = 0;
   let collectedKind: PowerupKind | null = null;
   let shieldBlocked = false;
+  let rampBoosts = 0;
   if (playing) {
     // Optional micro slow-mo after a near-miss: feed the sim scaled time.
     const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
@@ -167,6 +170,7 @@ function frame(now: number): void {
       nearMisses += game.lastEvents.nearMisses;
       if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
       if (game.lastEvents.shieldBlocked) shieldBlocked = true;
+      rampBoosts += game.lastEvents.rampBoosts ?? 0;
       accumulator -= TIMESTEP;
     }
   } else {
@@ -185,6 +189,8 @@ function frame(now: number): void {
   // absorbing a crash flashes the shield colour ("saved!").
   if (collectedKind) screenFx.pulsePickup(cssHex(POWERUP_DEFS[collectedKind].color));
   if (shieldBlocked) screenFx.pulsePickup(cssHex(POWERUP_DEFS[PowerupKind.Shield].color));
+  // Ramp boost juice: a green flash in the ramp's "go" colour.
+  if (rampBoosts > 0) screenFx.pulsePickup(cssHex(OBSTACLE_DEFS[ObstacleKind.Ramp].color));
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
@@ -200,7 +206,7 @@ function frame(now: number): void {
         game.vehicle.speed > AUDIO.screechMinSpeed,
     );
     if (nearMisses > 0) audio.playNearMiss();
-    if (collectedKind || shieldBlocked) audio.playPickup();
+    if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
   }
   prevPhase = game.phase;

@@ -8,8 +8,8 @@
  * the run.
  */
 
-import { aabbOverlap } from '../utils/math';
-import { SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
+import { aabbOverlap, intervalsOverlap } from '../utils/math';
+import { GATE, ObstacleKind, RAMP, SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
 import type { Obstacle, TrafficState } from './Traffic';
 
 export interface ScoreState {
@@ -50,9 +50,13 @@ export function integrateScore(state: ScoreState, speed: number, dt: number, mul
   return state;
 }
 
-/** Register a near-miss: bump the combo (capped) and refresh its timer. */
-export function registerNearMiss(state: ScoreState): ScoreState {
-  state.combo = Math.min(state.combo + SCORING.comboStep, SCORING.maxCombo);
+/**
+ * Register a near-miss: bump the combo (capped) and refresh its timer. `weight`
+ * scales the combo step — threading a MOVER or a GATE pays more than a static
+ * pass (defaults to 1 so existing callers are unchanged).
+ */
+export function registerNearMiss(state: ScoreState, weight = 1): ScoreState {
+  state.combo = Math.min(state.combo + SCORING.comboStep * weight, SCORING.maxCombo);
   if (state.combo > state.peakCombo) state.peakCombo = state.combo;
   state.comboTimer = SCORING.comboTimeout;
   state.nearMisses++;
@@ -66,7 +70,7 @@ export function resetCombo(state: ScoreState): ScoreState {
   return state;
 }
 
-/** True if the player box overlaps the obstacle box (AABB). Pure predicate. */
+/** True if the player box overlaps a STATIC/MOVER obstacle box (AABB). Pure. */
 export function isCollision(
   playerLateral: number,
   playerDistance: number,
@@ -84,6 +88,35 @@ export function isCollision(
   );
 }
 
+/** True if the car is fully inside a GATE's opening (so it would pass safely).
+ *  The opening is centred on `gate.lateral` with half-width `openingHalfWidth`. */
+export function withinGateOpening(playerLateral: number, gate: Obstacle): boolean {
+  return Math.abs(playerLateral - gate.lateral) + VEHICLE.halfWidth <= gate.openingHalfWidth;
+}
+
+/**
+ * True if the car hits a GATE's barrier: it overlaps the gate's forward band AND
+ * is NOT fully within the opening. Pure predicate.
+ */
+export function gateBlocks(playerLateral: number, playerDistance: number, gate: Obstacle): boolean {
+  const forwardOverlap = intervalsOverlap(playerDistance, VEHICLE.halfLength, gate.distance, GATE.halfLength);
+  return forwardOverlap && !withinGateOpening(playerLateral, gate);
+}
+
+/** True if the car is touching a RAMP's contact box (beneficial — never a crash). */
+export function isRampContact(playerLateral: number, playerDistance: number, ramp: Obstacle): boolean {
+  return aabbOverlap(
+    playerLateral,
+    playerDistance,
+    VEHICLE.halfWidth,
+    VEHICLE.halfLength,
+    ramp.lateral,
+    ramp.distance,
+    RAMP.halfWidth,
+    RAMP.halfLength,
+  );
+}
+
 export interface TrafficEvents {
   crashed: boolean;
   nearMisses: number;
@@ -91,6 +124,8 @@ export interface TrafficEvents {
   collected?: PowerupKind | null;
   /** True on the step a held SHIELD absorbed a crash — for juice/audio. */
   shieldBlocked?: boolean;
+  /** Number of RAMPs contacted this step (each grants a speed + score burst). */
+  rampBoosts?: number;
   /** Instrumentation (surfaced in ?debug=1): active obstacles checked this frame. */
   evaluated?: number;
   /** Instrumentation: lateral gap to the nearest obstacle (by |longitudinal|). */
@@ -118,6 +153,7 @@ export function resolveTraffic(
 ): void {
   events.crashed = false;
   events.nearMisses = 0;
+  events.rampBoosts = 0;
   events.evaluated = 0;
   events.closestLateral = Infinity;
   events.closestLongitudinal = Infinity;
@@ -135,18 +171,48 @@ export function resolveTraffic(
       events.closestLongitudinal = longitudinal;
     }
 
-    if (isCollision(playerLateral, playerDistance, o)) {
-      events.crashed = true;
-      continue;
-    }
-
-    // The player has just drawn level with / overtaken this obstacle.
-    if (!o.passed && o.distance <= playerDistance) {
-      o.passed = true;
-      const gap = Math.abs(playerLateral - o.lateral);
-      if (gap < SCORING.nearMissLateral) {
-        registerNearMiss(score);
-        events.nearMisses++;
+    switch (o.kind) {
+      case ObstacleKind.Static:
+      case ObstacleKind.Mover: {
+        if (isCollision(playerLateral, playerDistance, o)) {
+          events.crashed = true;
+          break;
+        }
+        // The player has just drawn level with / overtaken this obstacle.
+        if (!o.passed && o.distance <= playerDistance) {
+          o.passed = true;
+          const gap = Math.abs(playerLateral - o.lateral);
+          if (gap < SCORING.nearMissLateral) {
+            // Threading a MOVER pays more than a static pass.
+            const weight = o.kind === ObstacleKind.Mover ? SCORING.moverNearMissWeight : 1;
+            registerNearMiss(score, weight);
+            events.nearMisses++;
+          }
+        }
+        break;
+      }
+      case ObstacleKind.Gate: {
+        if (gateBlocks(playerLateral, playerDistance, o)) {
+          events.crashed = true;
+          break;
+        }
+        // Threading the opening (only reachable without a crash) rewards combo.
+        if (!o.passed && o.distance <= playerDistance) {
+          o.passed = true;
+          if (withinGateOpening(playerLateral, o)) {
+            registerNearMiss(score, SCORING.gateThreadWeight);
+            events.nearMisses++;
+          }
+        }
+        break;
+      }
+      case ObstacleKind.Ramp: {
+        // Beneficial: contact applies its boost exactly once, never a crash.
+        if (!o.consumed && isRampContact(playerLateral, playerDistance, o)) {
+          o.consumed = true;
+          events.rampBoosts = (events.rampBoosts ?? 0) + 1;
+        }
+        break;
       }
     }
   }

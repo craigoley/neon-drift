@@ -10,7 +10,7 @@ import { createTrafficState, type Obstacle } from '../Traffic';
 import { SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
 
 function obstacleAt(lateral: number, distance: number): Obstacle {
-  return { active: true, id: 1, lateral, distance, speed: 0, passed: false };
+  return { active: true, id: 1, lateral, baseLateral: lateral, sway: 0, swayPhase: 0, distance, speed: 0, passed: false };
 }
 
 describe('Scoring — collision detection', () => {

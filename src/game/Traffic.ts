@@ -11,14 +11,21 @@
 
 import { clamp } from '../utils/math';
 import { ROAD, TRAFFIC } from '../utils/constants';
+import { roadCenterAt } from './Road';
 import type { Rng } from '../utils/rng';
 
 export interface Obstacle {
   active: boolean;
   /** Unique id within a run (stable while active; for renderer pooling). */
   id: number;
-  /** Lateral position, 0 = centre. */
+  /** Lateral position, 0 = centre (the live value, after any sway). */
   lateral: number;
+  /** Lane centre this obstacle was spawned on; movers sway about it. */
+  baseLateral: number;
+  /** Sway amplitude (world units); 0 = a static obstacle holding its line. */
+  sway: number;
+  /** Current sway phase (radians); advanced each frame for movers. */
+  swayPhase: number;
   /** Forward distance from the run start (world units). */
   distance: number;
   /** Forward speed (world units / second) — slower than the player. */
@@ -43,15 +50,27 @@ export interface TrafficState {
 export function createTrafficState(): TrafficState {
   const pool: Obstacle[] = [];
   for (let i = 0; i < TRAFFIC.poolSize; i++) {
-    pool.push({ active: false, id: -1, lateral: 0, distance: 0, speed: 0, passed: false });
+    pool.push({
+      active: false,
+      id: -1,
+      lateral: 0,
+      baseLateral: 0,
+      sway: 0,
+      swayPhase: 0,
+      distance: 0,
+      speed: 0,
+      passed: false,
+    });
   }
   return { pool, sinceSpawn: 0, nextId: 0, spawned: 0, culled: 0 };
 }
 
-/** Spawn interval (seconds) for a given distance — shrinks toward a floor. */
+/** Spawn interval (seconds) for a given distance — flat through the grace
+ *  period, then shrinks toward a floor as difficulty ramps. */
 export function spawnInterval(distance: number): number {
+  const ramped = Math.max(0, distance - TRAFFIC.rampStartDistance);
   return clamp(
-    TRAFFIC.baseSpawnInterval - distance * TRAFFIC.spawnRampPerUnit,
+    TRAFFIC.baseSpawnInterval - ramped * TRAFFIC.spawnRampPerUnit,
     TRAFFIC.minSpawnInterval,
     TRAFFIC.baseSpawnInterval,
   );
@@ -77,14 +96,20 @@ function firstInactive(state: TrafficState): Obstacle | null {
 export function updateTraffic(
   state: TrafficState,
   rng: Rng,
+  seed: number,
   playerDistance: number,
   dt: number,
 ): TrafficState {
-  // Move + cull.
+  // Move + cull + sway.
   const cullLine = playerDistance - TRAFFIC.cullBehind;
   for (const o of state.pool) {
     if (!o.active) continue;
     o.distance += o.speed * dt;
+    // Movers drift laterally about their lane; static obstacles hold their line.
+    if (o.sway > 0) {
+      o.swayPhase += TRAFFIC.swayRate * dt;
+      o.lateral = o.baseLateral + Math.sin(o.swayPhase) * o.sway;
+    }
     if (o.distance < cullLine) {
       o.active = false;
       state.culled++;
@@ -97,11 +122,24 @@ export function updateTraffic(
     const slot = firstInactive(state);
     if (slot) {
       const spread = ROAD.halfWidth * TRAFFIC.lateralSpread;
+      const spawnDistance = playerDistance + TRAFFIC.spawnAhead;
+      // Spawn relative to the curved road centre so traffic sits on the road
+      // through bends, not in a fixed absolute lane.
+      const center = roadCenterAt(seed, spawnDistance);
       slot.active = true;
       slot.id = state.nextId++;
-      slot.lateral = rng.range(-spread, spread);
+      slot.baseLateral = clamp(center + rng.range(-spread, spread), -ROAD.halfWidth, ROAD.halfWidth);
+      // A fraction become lane-changing movers.
+      if (rng.next() < TRAFFIC.moverFraction) {
+        slot.sway = rng.range(TRAFFIC.swayAmplitudeMin, TRAFFIC.swayAmplitudeMax);
+        slot.swayPhase = rng.range(0, Math.PI * 2);
+      } else {
+        slot.sway = 0;
+        slot.swayPhase = 0;
+      }
+      slot.lateral = slot.baseLateral + Math.sin(slot.swayPhase) * slot.sway;
       slot.speed = rng.range(TRAFFIC.minSpeed, TRAFFIC.maxSpeed);
-      slot.distance = playerDistance + TRAFFIC.spawnAhead;
+      slot.distance = spawnDistance;
       slot.passed = false;
       state.spawned++;
       state.sinceSpawn = 0;

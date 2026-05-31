@@ -14,7 +14,7 @@ import { Rng } from '../utils/rng';
 import { DEFAULT_SEED } from '../utils/constants';
 import type { InputIntent } from './Input';
 import { createVehicleState, updateVehicle, type VehicleState } from './Vehicle';
-import { createRoadState, updateRoad, type RoadState } from './Road';
+import { createRoadState, roadCenterAt, updateRoad, type RoadState } from './Road';
 import { createTrafficState, updateTraffic, type TrafficState } from './Traffic';
 import {
   createScoreState,
@@ -96,12 +96,14 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     return state;
   }
 
-  updateVehicle(state.vehicle, intent, state.distance, dt);
+  // The drivable corridor follows the road's curve at the player's position.
+  const roadCenter = roadCenterAt(state.seed, state.distance);
+  updateVehicle(state.vehicle, intent, state.distance, roadCenter, dt);
   state.distance += state.vehicle.speed * dt;
   state.time += dt;
 
   updateRoad(state.road, state.distance);
-  updateTraffic(state.traffic, state.rng, state.distance, dt);
+  updateTraffic(state.traffic, state.rng, state.seed, state.distance, dt);
 
   // Writes into the pre-allocated lastEvents object (no per-frame allocation).
   resolveTraffic(state.lastEvents, state.score, state.vehicle.lateral, state.distance, state.traffic);

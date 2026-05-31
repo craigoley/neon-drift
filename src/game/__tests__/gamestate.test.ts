@@ -31,7 +31,7 @@ describe('GameState — full-loop integration & bounded pools', () => {
     for (let i = 0; i < steps; i++) {
       distance += speed * TIMESTEP;
       updateRoad(road, distance);
-      updateTraffic(traffic, rng, distance, TIMESTEP);
+      updateTraffic(traffic, rng, seed, distance, TIMESTEP);
       // Pool ARRAYS never grow — this is the bounded-memory guarantee.
       expect(road.segments.length).toBe(roadLen);
       expect(traffic.pool.length).toBe(trafficLen);

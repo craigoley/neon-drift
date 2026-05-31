@@ -85,8 +85,16 @@ export const TRAFFIC = {
   baseSpawnInterval: 1.4,
   /** Lowest spawn interval as difficulty ramps. */
   minSpawnInterval: 0.35,
-  /** How much the interval shrinks per world-unit travelled. */
-  spawnRampPerUnit: 0.00006,
+  /**
+   * Difficulty ramp (spawn density). For the first `rampStartDistance` world
+   * units the interval stays at `baseSpawnInterval` — a grace period (~the
+   * first 15s at starting speed) to let the player learn. Past that, the
+   * interval shrinks by `spawnRampPerUnit` per unit toward `minSpawnInterval`,
+   * so traffic meaningfully escalates the further you get.
+   */
+  rampStartDistance: 850,
+  /** How much the interval shrinks per world-unit travelled past the grace. */
+  spawnRampPerUnit: 0.0001,
   /** Obstacle forward-speed range (slower than the player, so they're overtaken). */
   minSpeed: 25,
   maxSpeed: 60,
@@ -95,6 +103,17 @@ export const TRAFFIC = {
   halfLength: 2.2,
   /** Fraction of the road half-width obstacles may occupy. */
   lateralSpread: 0.85,
+  /**
+   * Lane-changing "movers": a fraction of obstacles sway laterally (sine) about
+   * their spawn lane instead of holding a fixed line, so dodging requires
+   * reading movement. Amplitude (world units) is randomised per mover; swayRate
+   * is the phase advance (radians/second). Kept subtle so it reads as drifting
+   * traffic, not teleporting.
+   */
+  moverFraction: 0.35,
+  swayAmplitudeMin: 1.5,
+  swayAmplitudeMax: 3.0,
+  swayRate: 1.1,
 } as const;
 
 /** Scoring, combo, and near-miss / collision thresholds. */

@@ -8,6 +8,7 @@
 
 import type { GameState } from '../game/GameState';
 import { Phase } from '../game/GameState';
+import { JUICE } from '../utils/constants';
 
 /** Minimal shape the HUD needs for the best run (kept local to avoid coupling). */
 export interface BestDisplay {
@@ -22,6 +23,8 @@ export class HUD {
   private readonly scoreEl: HTMLElement;
   private readonly comboEl: HTMLElement;
   private readonly bestEl: HTMLElement;
+  /** Last combo shown, to detect tier-ups for the celebration pulse. */
+  private lastCombo = 1;
 
   constructor(parent: HTMLElement) {
     const root = document.createElement('div');
@@ -51,7 +54,24 @@ export class HUD {
     this.scoreEl.textContent = `${Math.round(game.score.score)}`;
     this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
     this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
+    // Tier-up celebration: a brief scale/glow pulse when the multiplier climbs.
+    if (game.score.combo > this.lastCombo + 1e-6) this.pulseCombo();
+    this.lastCombo = game.score.combo;
     this.bestEl.textContent = `best ${Math.round(best.score)}`;
+  }
+
+  /** Brief scale + glow pulse on the combo readout when it tiers up. Uses the
+   *  Web Animations API (guarded — not present in jsdom/tests). */
+  private pulseCombo(): void {
+    if (typeof this.comboEl.animate !== 'function') return;
+    this.comboEl.animate(
+      [
+        { transform: 'scale(1)' },
+        { transform: `scale(${JUICE.comboPulseScale})`, filter: 'brightness(1.6)' },
+        { transform: 'scale(1)' },
+      ],
+      { duration: JUICE.comboPulseMs, easing: 'ease-out' },
+    );
   }
 
   /** The exact text currently shown by the combo element — for the ?debug=1

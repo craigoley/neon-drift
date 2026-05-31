@@ -328,6 +328,10 @@ export const JUICE = {
   /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
   nearMissSlowmo: 0.12,
   slowmoScale: 0.45,
+  /** Combo tier-up celebration: a brief scale/glow pulse on the in-run HUD
+   *  multiplier when it climbs a tier. Duration (ms) + peak scale. Subtle. */
+  comboPulseMs: 280,
+  comboPulseScale: 1.35,
   /**
    * Minimum fraction of the full magnitude for randomised spreads (shard speed,
    * speed-line radius): value = spreadMinFraction + (1 - spreadMinFraction)*rand.

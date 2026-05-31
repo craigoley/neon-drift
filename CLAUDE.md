@@ -17,7 +17,7 @@ Loop: input -> game.update() -> render -> repeat.
 - Palette: #ff00ff magenta, #00ffff cyan, #1a0033 deep purple,
   #ff6600 accent
 - `npm run build` must pass before any PR
-- Node pinned to 22.x (engines + .nvmrc)
+- Node pinned to 24.x (engines + .nvmrc)
 
 ## Testing
 Vitest on the pure src/game/ layer. Tests in src/game/__tests__/.

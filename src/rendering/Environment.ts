@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { ENV, GRID, PALETTE, SUN } from '../utils/constants';
+import { ENV, GRID, HORIZON_SCRIM, PALETTE, SUN } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 export class Environment {
@@ -49,6 +49,7 @@ export class Environment {
 
     this.backdrop.add(this.makeSun());
     this.backdrop.add(this.makeMountains(seed));
+    if (HORIZON_SCRIM.peakOpacity > 0) this.backdrop.add(this.makeHorizonScrim());
     this.group.add(this.backdrop);
 
     scene.add(this.group);
@@ -150,6 +151,48 @@ export class Environment {
     lines.position.set(0, ENV.mountainBaseY, -ENV.distance * ENV.mountainDepthFactor);
     lines.renderOrder = ENV.mountainRenderOrder;
     return lines;
+  }
+
+  /**
+   * Soft dark belt across the horizon / spawn zone. A vertical alpha gradient
+   * (deep purple, transparent → peak at the centre → transparent) so the sun's
+   * lower rim and the mountains recede into the night without a hard edge.
+   * Depth-tested so only the far backdrop is darkened — nearer gameplay occludes
+   * it and is never dimmed.
+   */
+  private makeHorizonScrim(): THREE.Mesh {
+    const h = HORIZON_SCRIM.textureSize;
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d')!;
+    const c = new THREE.Color(PALETTE.deepPurple);
+    const rgb = `${Math.round(c.r * 255)},${Math.round(c.g * 255)},${Math.round(c.b * 255)}`;
+    const grad = ctx.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, `rgba(${rgb},0)`);
+    grad.addColorStop(0.5, `rgba(${rgb},${HORIZON_SCRIM.peakOpacity})`);
+    grad.addColorStop(1, `rgba(${rgb},0)`);
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1, h);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      fog: false,
+      // Depth-tested (so nearer gameplay occludes it) but writes no depth (so it
+      // never blocks other transparents). Drawn after the sun, before gameplay.
+      depthTest: true,
+      depthWrite: false,
+    });
+    const mesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(HORIZON_SCRIM.width, HORIZON_SCRIM.halfHeight * 2),
+      mat,
+    );
+    mesh.position.y = HORIZON_SCRIM.centerY;
+    mesh.renderOrder = HORIZON_SCRIM.renderOrder;
+    return mesh;
   }
 
   /** Scroll the grid toward the camera and keep the backdrop on the horizon. */

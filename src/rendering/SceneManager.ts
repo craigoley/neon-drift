@@ -52,16 +52,16 @@ export class SceneManager {
     parent.appendChild(this.renderer.domElement);
   }
 
-  /**
-   * Follow the car: lerp the camera laterally toward the player, widen FOV with
-   * speed, and apply any transient shake. The car sits at world z = 0; objects
-   * ahead are rendered at negative z (see the renderers).
-   */
   /** Kick the camera shake (e.g. on crash). */
   addShake(magnitude: number): void {
     this.shakeAmount = Math.max(this.shakeAmount, magnitude);
   }
 
+  /**
+   * Follow the car: lerp the camera laterally toward the player, widen FOV with
+   * speed, and apply any transient shake. The car sits at world z = 0; objects
+   * ahead are rendered at negative z (see the renderers).
+   */
   updateCamera(game: GameState, dt: number): void {
     // Decay shake and derive a fresh jitter offset for this frame.
     this.shakeAmount = Math.max(0, this.shakeAmount - JUICE.shakeDecay * dt * this.shakeAmount);

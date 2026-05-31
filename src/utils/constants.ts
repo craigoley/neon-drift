@@ -389,6 +389,14 @@ export const AUDIO = {
   crashThumpStop: 0.62,
 } as const;
 
+/** Front-end shell / overlay UI tuning. */
+export const UI = {
+  /** How long the "link copied" toast stays visible (ms). */
+  toastDurationMs: 1800,
+  /** Horizontal swipe distance (px) to cycle cars in the picker. */
+  carSwipeThresholdPx: 40,
+} as const;
+
 /** Touch-control tuning. */
 export const TOUCH = {
   /** Horizontal drag (px) from the touch origin that maps to full steer lock. */

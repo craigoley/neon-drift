@@ -8,7 +8,7 @@
  */
 
 import './style.css';
-import { createGameState, Phase, update } from './game/GameState';
+import { createGameState, Phase, startRun, update } from './game/GameState';
 import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
 import { AudioEngine } from './audio/AudioEngine';
@@ -23,10 +23,11 @@ import { CrashShards } from './rendering/CrashShards';
 import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
+import { Shell } from './ui/Shell';
 import { BestStore } from './storage/BestStore';
 import { SettingsStore } from './state/Settings';
 import { Telemetry } from './utils/Telemetry';
-import { AUDIO, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
+import { AUDIO, carById, JUICE, MAX_FRAME_DT, TIMESTEP } from './utils/constants';
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -37,9 +38,10 @@ const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart'
 const game = createGameState();
 
 // Device input. Keyboard always; touch additionally on touch devices (parity).
+// Touch steering binds to the CANVAS (not `app`) so taps on the shell overlays
+// reach their buttons instead of being captured as steering.
 const controls = new Controls();
 controls.attachKeyboard(window);
-if (isTouch) controls.attachTouch(app, app);
 
 // Player settings (sound, selected car) — persisted to localStorage.
 const settings = new SettingsStore();
@@ -58,6 +60,7 @@ const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTou
 const environment = new Environment(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
+vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted cosmetic
 const traffic = new TrafficRenderer(scene.scene);
 const speedLines = new SpeedLines(scene.scene);
 const shards = new CrashShards(scene.scene);
@@ -66,8 +69,21 @@ const hud = new HUD(app);
 const debug = new DebugOverlay(app);
 const telemetry = new Telemetry();
 
+// Touch steering on the canvas; DRIFT button in `app` (shown only while playing).
+if (isTouch) controls.attachTouch(scene.renderer.domElement, app);
+
 // Persisted best run (localStorage).
 const bestStore = new BestStore();
+
+// Front-end shell (start / settings / car picker / crash overlays).
+const canonicalUrl = window.location.origin + window.location.pathname;
+const shell = new Shell(app, settings, bestStore, audio, {
+  isTouch,
+  shareUrl: canonicalUrl,
+  onPlay: () => startRun(game),
+  applyCar: (carId) => vehicle.applyCar(carById(carId)),
+});
+shell.showStart();
 
 let last = performance.now();
 let accumulator = 0;
@@ -104,7 +120,8 @@ function frame(now: number): void {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
-    bestStore.submit(game.distance, game.score.score);
+    bestStore.submit(game.distance, game.score.score); // update best before showing it
+    shell.showCrash(game.score.score, game.distance, bestStore.best);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));

@@ -113,13 +113,13 @@ export const TRAFFIC = {
   /** Fraction of the road half-width obstacles may occupy. */
   lateralSpread: 0.85,
   /**
-   * Lane-changing "movers": a fraction of obstacles sway laterally (sine) about
+   * Lane-changing "movers": a subset of obstacles sway laterally (sine) about
    * their spawn lane instead of holding a fixed line, so dodging requires
    * reading movement. Amplitude (world units) is randomised per mover; swayRate
    * is the phase advance (radians/second). Kept subtle so it reads as drifting
-   * traffic, not teleporting.
+   * traffic, not teleporting. The spawn MIX (which kinds appear) is driven by
+   * per-kind weights in OBSTACLE_DEFS, not a flat fraction.
    */
-  moverFraction: 0.35,
   swayAmplitudeMin: 1.5,
   swayAmplitudeMax: 3.0,
   swayRate: 1.1,
@@ -525,16 +525,6 @@ export const TRAFFIC_VIS = {
   /** Obstacle mesh height and its y-centre above the ground. */
   meshHeight: 1.2,
   meshY: 0.6,
-  /** Obstacle body colour (orange threat). */
-  bodyColor: 0xff6600,
-  /**
-   * Bright highlight baked onto the obstacle's top + leading faces (vertex
-   * colours). Readability lever: a hot rim that separates an obstacle from the
-   * background it sits against — including the sun's orange/magenta bands at the
-   * horizon, where a flat-orange box would camouflage. Kept warm so threats stay
-   * "orange", just with a brighter edge that always reads as foreground.
-   */
-  edgeColor: 0xffe08a,
   /**
    * Per-instance colouring (moving + typed obstacles) is done by tinting a
    * GREYSCALE box via instanceColor: body faces sit at `bodyShade`, the top +

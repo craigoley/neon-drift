@@ -79,7 +79,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     powerups: createPowerupState(seed),
     score: createScoreState(),
     handling: BASE_HANDLING,
-    lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false },
+    lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
   };
 }
 
@@ -104,7 +104,7 @@ export function startRun(
   state.powerups = createPowerupState(seed);
   state.score = createScoreState();
   state.handling = handling;
-  state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false };
+  state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
   return state;
 }
 
@@ -128,6 +128,7 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.lastEvents.nearMisses = 0;
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
+  state.lastEvents.rampBoosts = 0;
   return state;
 }
 

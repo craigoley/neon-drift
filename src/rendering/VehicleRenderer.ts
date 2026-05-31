@@ -11,8 +11,10 @@ import { CAR_VIS, PALETTE } from '../utils/constants';
 
 export class VehicleRenderer {
   readonly group = new THREE.Group();
+  private readonly isDebug: boolean;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, isDebug = false) {
+    this.isDebug = isDebug;
     const { width, height, length } = CAR_VIS;
 
     // Dark body so the emissive edges read as neon wireframe.
@@ -44,6 +46,19 @@ export class VehicleRenderer {
    * Intensity (headlightOpacity) and length (headlightLength) live in CAR_VIS.
    */
   private makeHeadlight(x: number, length: number): THREE.Mesh {
+    // ?debug=1: render the cones as flat, fully-opaque BRIGHT GREEN so the
+    // "orange triangles" can be identified with certainty (if they turn green,
+    // they ARE these headlight cones; if they stay orange/turn blue, they're not).
+    const material = this.isDebug
+      ? new THREE.MeshBasicMaterial({ color: 0x00ff00, side: THREE.DoubleSide })
+      : new THREE.MeshBasicMaterial({
+          color: PALETTE.accent,
+          transparent: true,
+          opacity: CAR_VIS.headlightOpacity,
+          side: THREE.DoubleSide,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+        });
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(
         CAR_VIS.headlightConeRadius,
@@ -52,14 +67,7 @@ export class VehicleRenderer {
         1,
         true,
       ),
-      new THREE.MeshBasicMaterial({
-        color: PALETTE.accent,
-        transparent: true,
-        opacity: CAR_VIS.headlightOpacity,
-        side: THREE.DoubleSide,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-      }),
+      material,
     );
     cone.renderOrder = CAR_VIS.headlightRenderOrder; // draw after opaque geometry
     // Point the cone forward (-z) and sit it at the car's nose.

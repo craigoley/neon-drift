@@ -12,7 +12,7 @@ import { activeSegmentCount } from '../game/Road';
 import { activeObstacleCount } from '../game/Traffic';
 import type { GameState } from '../game/GameState';
 import type { Telemetry } from '../utils/Telemetry';
-import { CSS_PALETTE } from '../utils/constants';
+import { CSS_PALETTE, SCORING } from '../utils/constants';
 
 export class DebugOverlay {
   private readonly el: HTMLElement;
@@ -52,20 +52,42 @@ export class DebugOverlay {
     this.el.style.display = this.visible ? 'block' : 'none';
   }
 
-  /** Refresh the readout from current state. No-op work when hidden. */
-  update(game: GameState, telemetry: Telemetry): void {
+  /**
+   * Refresh the readout from current state. No-op work when hidden.
+   * `hudComboText` is the LIVE text of the HUD's combo element (funnel step 6).
+   */
+  update(game: GameState, telemetry: Telemetry, hudComboText: string): void {
     if (!this.visible) return;
     const road = game.road;
     const traffic = game.traffic;
     const score = game.score;
-    // Scoring funnel: if combo stays 1.00 and score==dist, near-misses never fire.
+    const ev = game.lastEvents;
     const scoreRatio = game.distance > 0 ? score.score / game.distance : 1;
+
+    // Raw combo funnel — print each step so the exact break point is visible.
+    const closeLat =
+      ev.closestLateral === undefined || ev.closestLateral === Infinity
+        ? '--'
+        : ev.closestLateral.toFixed(2);
+    const closeLon =
+      ev.closestLongitudinal === undefined || ev.closestLongitudinal === Infinity
+        ? '--'
+        : ev.closestLongitudinal.toFixed(1);
+
     this.el.textContent =
       `NEON DRIFT · debug (\` to toggle)\n` +
       `fps ${telemetry.fps.toFixed(0).padStart(3)}  frame ${telemetry.lastMs.toFixed(1)}ms  avg ${telemetry.avgMs.toFixed(1)}ms\n` +
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +
       `traf  active ${activeObstacleCount(traffic)}/${traffic.pool.length}  spawned ${traffic.spawned}  culled ${traffic.culled}\n` +
-      `score ${score.score.toFixed(0)}  combo x${score.combo.toFixed(2)}  near-miss ${score.nearMisses}  score/dist ${scoreRatio.toFixed(2)}`;
+      `-- COMBO FUNNEL (raw) ----------------\n` +
+      `1 evaluated/frame   ${ev.evaluated ?? 0}\n` +
+      `2 closest lat/lon    ${closeLat} / ${closeLon}\n` +
+      `3 near-miss thresh   ${SCORING.nearMissLateral.toFixed(2)} (lat gap < this = hit)\n` +
+      `4 near-miss events   ${score.nearMisses}\n` +
+      `5 combo INTERNAL     ${score.combo.toFixed(3)}\n` +
+      `6 combo HUD-bound    ${hudComboText}\n` +
+      `7 combo timer        ${score.comboTimer.toFixed(2)}s\n` +
+      `  score ${score.score.toFixed(0)}  score/dist ${scoreRatio.toFixed(2)}`;
   }
 }

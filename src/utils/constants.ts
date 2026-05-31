@@ -131,13 +131,15 @@ export const SCORING = {
   /**
    * Lateral gap (centre-to-centre) below which a pass counts as a near-miss.
    * Must exceed the summed collision half-widths (2.2) or nothing would ever
-   * be a near-miss without also colliding. Tuned generously: with the road
-   * 18 units wide, the old 3.2 window almost never fired in normal play (a
-   * pass had to thread a 1-unit band), so combos never formed and score
-   * tracked distance exactly. 4.8 gives a ~2.6-unit-of-clear-space window so
-   * daring passes reliably reward the player.
+   * be a near-miss without also colliding. Tuned generously: traces showed the
+   * 4.8 window only fired for players who threaded within ~2.6 units of clear
+   * space — a cautious player giving obstacles a normal berth almost never
+   * triggered one, so the combo sat at x1.0 the whole run despite the loop
+   * working. 6.5 (~4.3 units of clear space) makes a normal close pass register,
+   * so the multiplier visibly climbs in ordinary play while hugging the far wall
+   * still earns nothing.
    */
-  nearMissLateral: 4.8,
+  nearMissLateral: 6.5,
 } as const;
 
 /** Camera + chase-cam tuning (rendering layer). */
@@ -176,11 +178,14 @@ export const FOG = {
 /** Synthwave grid ground plane. */
 export const GRID = {
   size: 4000,
-  divisions: 160,
+  // Fewer divisions = wider line spacing, so the lines don't stack into a dense
+  // bright band where they converge at the horizon (was 160).
+  divisions: 120,
   /** Y offset below the road surface. */
   y: -0.05,
-  /** Opacity of the grid lines (how prominent the ground plane reads). */
-  opacity: 0.55,
+  /** Opacity of the grid lines. Lowered (was 0.55) so the grid reads as a depth
+   *  cue that fades back into the fog rather than competing at the horizon. */
+  opacity: 0.4,
 } as const;
 
 /** Road visual tuning (rendering only — geometry is reused per pool slot). */
@@ -199,13 +204,13 @@ export const ROAD_VIS = {
 
 /** Player car visual tuning. */
 export const CAR_VIS = {
-  // Slightly sleeker than before (was 1.9 x 0.8) to reduce on-screen bulk; the
-  // bulk of the shrink comes from the raised/pulled-back camera. Length is kept
-  // equal to the collision box (VEHICLE.halfLength*2 = 4.0) so the visible car
-  // matches its hitbox and collisions stay fair.
-  width: 1.7,
+  // The rendered car IS its collision box: width/length are derived from the
+  // VEHICLE half-extents so the neon wireframe the player sees is exactly what
+  // collides. Previously the mesh (1.7 wide) was narrower than the hitbox (2.2),
+  // causing deaths with a visible gap and obstacles clipping the body at impact.
+  width: VEHICLE.halfWidth * 2,
   height: 0.7,
-  length: 4.0,
+  length: VEHICLE.halfLength * 2,
   /** Roll (radians) at full lateral velocity, for steering feel. */
   maxRoll: 0.25,
   /** Lateral velocity that maps to maxRoll. */
@@ -213,10 +218,14 @@ export const CAR_VIS = {
   /** Headlight cone length + offset. */
   headlightLength: 8,
   headlightInset: 0.6,
-  /** Headlight cone radius, opacity and radial segment count. */
+  /** Headlight cone radius, additive-glow intensity and radial segment count.
+   *  Opacity is low because the beam uses additive blending (reads as light). */
   headlightConeRadius: 0.5,
-  headlightOpacity: 0.35,
+  headlightOpacity: 0.18,
   headlightConeSegments: 8,
+  /** Render order for the additive headlight glow — drawn after opaque geometry
+   *  (sits alongside ENV.sunRenderOrder / mountainRenderOrder in the stack). */
+  headlightRenderOrder: 1,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */
@@ -236,8 +245,12 @@ export const ENV = {
   sunBands: 9,
   mountainCount: 28,
   mountainSpread: 1400,
-  mountainMaxHeight: 140,
+  // Lowered (was 140) so the ridge sits below the sun's banded core instead of
+  // spiking up through it.
+  mountainMaxHeight: 110,
   mountainBaseY: 0,
+  /** Opacity of the waveform-mountain line — faint so it doesn't fight the sun. */
+  mountainOpacity: 0.5,
   /** Fraction of `distance` the mountains sit behind the backdrop origin (the
    *  sun), so the silhouette reads clearly behind the sun's framing. */
   mountainDepthFactor: 0.4,

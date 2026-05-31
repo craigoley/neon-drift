@@ -7,7 +7,7 @@ import {
   resolveTraffic,
 } from '../Scoring';
 import { createTrafficState, type Obstacle } from '../Traffic';
-import { SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
+import { CAR_VIS, SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
 
 function obstacleAt(lateral: number, distance: number): Obstacle {
   return { active: true, id: 1, lateral, laneOffset: lateral, sway: 0, swayPhase: 0, distance, speed: 0, passed: false };
@@ -26,6 +26,21 @@ describe('Scoring — collision detection', () => {
   it('no collision when far apart in distance', () => {
     const farDistance = 100 + VEHICLE.halfLength + TRAFFIC.halfLength + 1;
     expect(isCollision(0, 100, obstacleAt(0, farDistance))).toBe(false);
+  });
+});
+
+describe('Scoring — hitbox matches the rendered car (Phase 3)', () => {
+  it('the collision box equals the rendered car footprint — what you see is what hits', () => {
+    expect(CAR_VIS.width).toBeCloseTo(VEHICLE.halfWidth * 2);
+    expect(CAR_VIS.length).toBeCloseTo(VEHICLE.halfLength * 2);
+  });
+
+  it('contact at the rendered car edge collides; a sliver beyond does not', () => {
+    // Edge-to-edge lateral contact occurs at gap = car halfWidth + obstacle
+    // halfWidth; the rendered car edge sits at exactly VEHICLE.halfWidth.
+    const touch = VEHICLE.halfWidth + TRAFFIC.halfWidth;
+    expect(isCollision(0, 100, obstacleAt(touch - 0.05, 100))).toBe(true);
+    expect(isCollision(0, 100, obstacleAt(touch + 0.05, 100))).toBe(false);
   });
 });
 
@@ -124,6 +139,26 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
     resolveTraffic(events, s, 0, 100, traffic);
     expect(events.crashed).toBe(false);
     expect(events.nearMisses).toBe(1);
+  });
+
+  it('a normal-berth close pass (5.5 units) bumps the combo', () => {
+    // Pins Phase-1 (pass 2): a pass at a normal dodging distance must register,
+    // so the multiplier engages in ordinary play. This fails if nearMissLateral
+    // regresses below 5.5 (e.g. back to the old 4.8 that only rewarded experts).
+    const s = createScoreState();
+    const traffic = createTrafficState();
+    const slot = traffic.pool[0];
+    slot.active = true;
+    slot.lateral = 5.5; // clear of the 2.2 collision box; a real near-miss
+    slot.laneOffset = 5.5;
+    slot.distance = 99; // just behind the player at 100
+    slot.passed = false;
+    const events = { crashed: false, nearMisses: 0 };
+    const before = s.combo;
+    resolveTraffic(events, s, 0, 100, traffic);
+    expect(events.crashed).toBe(false);
+    expect(events.nearMisses).toBe(1);
+    expect(s.combo).toBeGreaterThan(before);
   });
 });
 

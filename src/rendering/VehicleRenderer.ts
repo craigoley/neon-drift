@@ -35,7 +35,14 @@ export class VehicleRenderer {
     scene.add(this.group);
   }
 
-  /** A bright forward-pointing cone standing in for a headlight beam. */
+  /**
+   * A soft forward-pointing light beam. Additive blending (not normal) is what
+   * makes the open cone read as *light* rather than a flat orange triangle: it
+   * ADDS its colour to the scene, brightest where the beam is densest and
+   * fading into nothing at the edges. depthWrite off + a render order after the
+   * opaque geometry keeps it from ever punching a solid hole over the car.
+   * Intensity (headlightOpacity) and length (headlightLength) live in CAR_VIS.
+   */
   private makeHeadlight(x: number, length: number): THREE.Mesh {
     const cone = new THREE.Mesh(
       new THREE.ConeGeometry(
@@ -51,8 +58,10 @@ export class VehicleRenderer {
         opacity: CAR_VIS.headlightOpacity,
         side: THREE.DoubleSide,
         depthWrite: false,
+        blending: THREE.AdditiveBlending,
       }),
     );
+    cone.renderOrder = CAR_VIS.headlightRenderOrder; // draw after opaque geometry
     // Point the cone forward (-z) and sit it at the car's nose.
     cone.rotation.x = -Math.PI / 2;
     cone.position.set(x, CAR_VIS.height / 2, -length / 2 - CAR_VIS.headlightLength / 2);

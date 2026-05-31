@@ -539,6 +539,45 @@ export function handlingFor(id: string): CarHandling {
   return CARS.find((c) => c.id === id)?.handling ?? BASE_HANDLING;
 }
 
+/**
+ * Normalisation ranges for the picker's Speed / Grip / Drift bars. The bars are
+ * DERIVED from the same `handling` multipliers the sim uses (see carStats) — the
+ * single source of truth — so they can never be hand-authored out of sync with
+ * the physics. Chosen to span the roster's spread with a little headroom.
+ */
+export const CAR_STAT_RANGE = {
+  speed: { min: 0.85, max: 1.25 },
+  /** Grip = steering authority / how loose the car is = lateralAccel / lateralFriction. */
+  grip: { min: 0.6, max: 2.0 },
+  drift: { min: 0.8, max: 1.5 },
+} as const;
+
+export interface CarStats {
+  /** 0..1 bar fills. */
+  speed: number;
+  grip: number;
+  drift: number;
+}
+
+function norm01(v: number, min: number, max: number): number {
+  return Math.max(0, Math.min(1, (v - min) / (max - min)));
+}
+
+/**
+ * Derive the 0..1 Speed / Grip / Drift bars from a car's handling multipliers.
+ * The picker MUST read its bars from here so a change to a handling number moves
+ * both the physics and the displayed bar together. Grip combines steering
+ * authority (lateralAccel) with how fast the car settles (lower lateralFriction
+ * = grippier), i.e. lateralAccel / lateralFriction.
+ */
+export function carStats(h: CarHandling): CarStats {
+  return {
+    speed: norm01(h.speedCap, CAR_STAT_RANGE.speed.min, CAR_STAT_RANGE.speed.max),
+    grip: norm01(h.lateralAccel / h.lateralFriction, CAR_STAT_RANGE.grip.min, CAR_STAT_RANGE.grip.max),
+    drift: norm01(h.drift, CAR_STAT_RANGE.drift.min, CAR_STAT_RANGE.drift.max),
+  };
+}
+
 /** CSS hex string for a 0xRRGGBB color (for HTML/CSS previews of car colors). */
 export function cssHex(color: number): string {
   return '#' + color.toString(16).padStart(6, '0');

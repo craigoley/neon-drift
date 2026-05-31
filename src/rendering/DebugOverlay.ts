@@ -9,11 +9,11 @@
  */
 
 import { activeSegmentCount } from '../game/Road';
-import { activeObstacleCount } from '../game/Traffic';
+import { activeObstacleCount, activeObstacleCountByKind } from '../game/Traffic';
 import { activePickupCount } from '../game/Powerups';
 import type { GameState } from '../game/GameState';
 import type { Telemetry } from '../utils/Telemetry';
-import { CSS_PALETTE, SCORING } from '../utils/constants';
+import { CSS_PALETTE, ObstacleKind, SCORING } from '../utils/constants';
 
 export class DebugOverlay {
   private readonly el: HTMLElement;
@@ -83,6 +83,10 @@ export class DebugOverlay {
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +
       `traf  active ${activeObstacleCount(traffic)}/${traffic.pool.length}  spawned ${traffic.spawned}  culled ${traffic.culled}\n` +
+      `  mix  S${activeObstacleCountByKind(traffic, ObstacleKind.Static)} ` +
+      `M${activeObstacleCountByKind(traffic, ObstacleKind.Mover)} ` +
+      `G${activeObstacleCountByKind(traffic, ObstacleKind.Gate)} ` +
+      `R${activeObstacleCountByKind(traffic, ObstacleKind.Ramp)}  boost ${game.vehicle.boostTimer.toFixed(1)}s\n` +
       `pup   active ${activePickupCount(powerups)}/${powerups.pool.length}  spawned ${powerups.spawned}  got ${powerups.collected}  culled ${powerups.culled}\n` +
       `fx    shield ${fx.shield ? 'Y' : 'n'}${fx.invulnTimer > 0 ? `(iv ${fx.invulnTimer.toFixed(1)})` : ''}  slow ${fx.slowMoTimer.toFixed(1)}  x2 ${fx.scoreBoostTimer.toFixed(1)}  mag ${fx.magnetTimer.toFixed(1)}\n` +
       `-- COMBO FUNNEL (raw) ----------------\n` +

@@ -8,10 +8,23 @@ import {
   resolveTraffic,
 } from '../Scoring';
 import { createTrafficState, type Obstacle } from '../Traffic';
-import { CAR_VIS, SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
+import { CAR_VIS, ObstacleKind, SCORING, VEHICLE, TRAFFIC } from '../../utils/constants';
 
 function obstacleAt(lateral: number, distance: number): Obstacle {
-  return { active: true, id: 1, lateral, laneOffset: lateral, sway: 0, swayPhase: 0, distance, speed: 0, passed: false };
+  return {
+    active: true,
+    id: 1,
+    kind: ObstacleKind.Static,
+    lateral,
+    laneOffset: lateral,
+    sway: 0,
+    swayPhase: 0,
+    openingHalfWidth: 0,
+    consumed: false,
+    distance,
+    speed: 0,
+    passed: false,
+  };
 }
 
 describe('Scoring — collision detection', () => {

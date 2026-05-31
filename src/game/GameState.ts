@@ -34,7 +34,7 @@ import {
   updatePickups,
   type PowerupState,
 } from './Powerups';
-import { POWERUPS } from '../utils/constants';
+import { POWERUPS, RAMP, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -160,6 +160,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents.nearMisses = 0;
     state.lastEvents.collected = null;
     state.lastEvents.shieldBlocked = false;
+    state.lastEvents.rampBoosts = 0;
     return state;
   }
 
@@ -186,6 +187,14 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
   collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);
+
+  // RAMP hook: a contacted boost-strip grants a flat score burst and a brief
+  // over-cap speed boost (the raised cap lives on the vehicle's boostTimer).
+  if (state.lastEvents.rampBoosts && state.lastEvents.rampBoosts > 0) {
+    state.score.score += RAMP.scoreBurst * state.lastEvents.rampBoosts;
+    state.vehicle.boostTimer = RAMP.boostDuration;
+    state.vehicle.speed += VEHICLE.boostBonus;
+  }
 
   // SCORE-BOOST hook: an external multiplier stacked on top of the combo.
   integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));

@@ -51,7 +51,7 @@ export class CrashShards {
       this.positions[o + 2] = z;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
-      const s = SPEED * (0.4 + 0.6 * Math.random());
+      const s = SPEED * (JUICE.spreadMinFraction + (1 - JUICE.spreadMinFraction) * Math.random());
       this.vx[i] = Math.sin(phi) * Math.cos(theta) * s;
       this.vy[i] = Math.abs(Math.cos(phi)) * s;
       this.vz[i] = Math.sin(phi) * Math.sin(theta) * s;

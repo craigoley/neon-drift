@@ -100,8 +100,11 @@ export class Controls {
       if (t.identifier !== this.steerTouchId) continue;
       e.preventDefault();
       const dx = t.clientX - this.steerOriginX;
-      const mag = Math.abs(dx) < TOUCH.deadzonePx ? 0 : dx;
-      this.touchSteer = clamp(mag / TOUCH.maxDragPx, -1, 1);
+      // Subtract the deadzone and rescale so steer ramps continuously from 0 at
+      // the deadzone edge to full lock at maxDragPx (no jump at the boundary).
+      const sign = dx < 0 ? -1 : 1;
+      const adjusted = Math.max(0, Math.abs(dx) - TOUCH.deadzonePx);
+      this.touchSteer = clamp((sign * adjusted) / (TOUCH.maxDragPx - TOUCH.deadzonePx), -1, 1);
       this.resolveSteer();
     }
   }

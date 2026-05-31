@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { ENV, GRID, PALETTE } from '../utils/constants';
+import { CSS_PALETTE, ENV, GRID, PALETTE } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 export class Environment {
@@ -42,9 +42,9 @@ export class Environment {
     const ctx = canvas.getContext('2d')!;
 
     const grad = ctx.createLinearGradient(0, 0, 0, size);
-    grad.addColorStop(0, '#ff66ff');
-    grad.addColorStop(0.5, '#ff00ff');
-    grad.addColorStop(1, '#ff6600');
+    grad.addColorStop(0, CSS_PALETTE.magentaLight);
+    grad.addColorStop(0.5, CSS_PALETTE.magenta);
+    grad.addColorStop(1, CSS_PALETTE.accent);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);

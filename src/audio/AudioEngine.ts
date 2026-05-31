@@ -46,7 +46,7 @@ export class AudioEngine {
 
   private makeNoiseBuffer(): AudioBuffer {
     const ctx = this.ctx!;
-    const buffer = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
+    const buffer = ctx.createBuffer(1, ctx.sampleRate * AUDIO.noiseBufferSeconds, ctx.sampleRate);
     const data = buffer.getChannelData(0);
     // Deterministic-ish noise; randomness here is cosmetic, not gameplay.
     let seed = 22222;

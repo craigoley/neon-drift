@@ -18,6 +18,8 @@ export const PALETTE = {
 /** Same palette as CSS hex strings for the HTML HUD overlay. */
 export const CSS_PALETTE = {
   magenta: '#ff00ff',
+  /** Lighter magenta tint used for the top of the horizon-sun gradient. */
+  magentaLight: '#ff66ff',
   cyan: '#00ffff',
   deepPurple: '#1a0033',
   accent: '#ff6600',
@@ -264,11 +266,19 @@ export const JUICE = {
   /** Optional near-miss micro slow-mo: duration (s) and simulation time scale. */
   nearMissSlowmo: 0.12,
   slowmoScale: 0.45,
+  /**
+   * Minimum fraction of the full magnitude for randomised spreads (shard speed,
+   * speed-line radius): value = spreadMinFraction + (1 - spreadMinFraction)*rand.
+   * Shared so both particle systems stay visually consistent.
+   */
+  spreadMinFraction: 0.4,
 } as const;
 
 /** Synthesized audio tuning (Web Audio API — no files). */
 export const AUDIO = {
   masterGain: 0.5,
+  /** Noise-buffer duration in seconds (how long before the pattern repeats). */
+  noiseBufferSeconds: 2,
   /** Engine oscillator pitch range mapped from normalised speed. */
   engineBaseHz: 60,
   engineTopHz: 220,

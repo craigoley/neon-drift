@@ -47,7 +47,7 @@ export class SpeedLines {
 
   private respawn(i: number, depthFromFar: number): void {
     const angle = Math.random() * Math.PI * 2;
-    const r = FIELD_RADIUS * (0.4 + 0.6 * Math.random());
+    const r = FIELD_RADIUS * (JUICE.spreadMinFraction + (1 - JUICE.spreadMinFraction) * Math.random());
     this.bx[i] = Math.cos(angle) * r;
     this.by[i] = Math.sin(angle) * r + JUICE.speedLineHeightOffset;
     // Place ahead of the camera (-z), streaming back toward it (+z).

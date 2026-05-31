@@ -45,7 +45,6 @@ describe('GameState — full-loop integration & bounded pools', () => {
         );
       }
     }
-    // eslint-disable-next-line no-console
     console.log('[pool telemetry]\n' + samples.join('\n'));
 
     // Active counts are bounded by their pools (plateau, not climb).

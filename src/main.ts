@@ -65,6 +65,14 @@ const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart'
 // Pure game layer.
 const game = createGameState();
 
+// A fresh 32-bit run seed per PLAY so every run generates a DIFFERENT course.
+// (The generator is fully seeded/deterministic; without this the seed stayed at
+// the fixed default and every run replayed the identical course — the root cause
+// of "every run feels the same".) The pure layer stays deterministic — the
+// impurity (Math.random) lives only here in the composition root; tests pass
+// explicit seeds.
+const randomSeed = (): number => (Math.random() * 0x1_0000_0000) >>> 0;
+
 // Device input. Keyboard always; touch additionally on touch devices (parity).
 // Touch steering binds to the CANVAS (not `app`) so taps on the shell overlays
 // reach their buttons instead of being captured as steering.
@@ -149,7 +157,8 @@ const shell = new Shell(app, settings, bestStore, audio, {
       vehicle.applyCar(carById(carId));
     }
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
-    startRun(game, handlingFor(carId), missions.startBiome());
+    // Fresh random seed each run → a genuinely different course every time.
+    startRun(game, handlingFor(carId), missions.startBiome(), randomSeed());
   },
   onPause: () => {
     pause(game);

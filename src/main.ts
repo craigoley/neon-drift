@@ -294,7 +294,7 @@ function frame(now: number): void {
   // OPP-14 tie-in: a tight GRAZE (very close pass) bumps the tier by +1 (capped),
   // so shaving the paint punches above its combo band even at a low combo.
   const grazeBump = nearMissClosest <= JUICE.nearMissGrazeBumpGap ? 1 : 0;
-  const nmTier = nearMisses > 0 ? Math.min(nearMissTier(game.score.combo) + grazeBump, 3) : 0;
+  const nmTier = nearMisses > 0 ? Math.min(nearMissTier(game.score.combo) + grazeBump, JUICE.nearMissTierThresholds.length) : 0;
   if (nearMisses > 0) {
     screenFx.pulseNearMiss(JUICE.nearMissEdge[nmTier]); // brighter edge at higher tier
     speedLines.burst(); // a quick whoosh streak reinforcing the near-miss/combo

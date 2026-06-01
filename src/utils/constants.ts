@@ -54,12 +54,19 @@ export const VEHICLE = {
   startSpeed: 45,
   /** Speed cap floor (cap at distance 0). */
   baseSpeedCap: 70,
-  /** Speed cap ceiling reached asymptotically with distance. */
-  maxSpeedCap: 240,
-  /** Distance scale over which the cap ramps from base toward max. */
-  speedCapRampDistance: 6000,
-  /** Forward acceleration toward the current cap. */
-  acceleration: 18,
+  /** Speed cap ceiling reached asymptotically with distance. Raised (was 240) so
+   *  long runs reach genuinely fast, reaction-testing speeds where the dodge
+   *  window is short enough that a committed DRIFT juke is required, not optional. */
+  maxSpeedCap: 280,
+  /** Distance scale over which the cap ramps from base toward max. LOWERED (was
+   *  6000) so speed escalates clearly just after the ~15s grace instead of
+   *  crawling up over ~9000m — the root "too easy / runs forever" fix. The whole
+   *  curve is `baseSpeedCap + (maxSpeedCap-baseSpeedCap)*(1-e^(-distance/this))`;
+   *  tune this single number for how fast the run gets fast. */
+  speedCapRampDistance: 3200,
+  /** Forward acceleration toward the current cap. Raised (was 18) so the car
+   *  actually reaches the higher, faster-rising cap rather than lagging it. */
+  acceleration: 24,
   /** Lateral acceleration applied by full steer input. */
   lateralAccel: 90,
   /** Per-second retained fraction of lateral velocity under normal grip. */
@@ -117,8 +124,9 @@ export const TRAFFIC = {
   cullBehind: 30,
   /** Seconds between spawns at the start of a run. */
   baseSpawnInterval: 1.4,
-  /** Lowest spawn interval as difficulty ramps. */
-  minSpawnInterval: 0.35,
+  /** Lowest spawn interval as difficulty ramps. Lowered (was 0.35) for denser
+   *  late-game traffic that, combined with the higher speed, forces sharp dodges. */
+  minSpawnInterval: 0.3,
   /**
    * Difficulty ramp (spawn density). For the first `rampStartDistance` world
    * units the interval stays at `baseSpawnInterval` — a grace period (~the
@@ -127,8 +135,11 @@ export const TRAFFIC = {
    * so traffic meaningfully escalates the further you get.
    */
   rampStartDistance: 850,
-  /** How much the interval shrinks per world-unit travelled past the grace. */
-  spawnRampPerUnit: 0.0001,
+  /** How much the interval shrinks per world-unit travelled past the grace.
+   *  STEEPENED (was 0.0001) so density reaches its floor by ~4500m instead of
+   *  ~11350m — traffic gets genuinely dense while a run is still going, so an
+   *  average run ends in a satisfying failure rather than running forever. */
+  spawnRampPerUnit: 0.0003,
   /** Obstacle forward-speed range (slower than the player, so they're overtaken). */
   minSpeed: 25,
   maxSpeed: 60,
@@ -420,14 +431,18 @@ export const POWERUPS = {
   spawnAhead: 420,
   /** Distance behind the player at which uncollected pickups are culled. */
   cullBehind: 30,
-  /** Seconds between spawns at the start of a run (much rarer than traffic). */
-  baseSpawnInterval: 5.5,
-  /** Lowest spawn interval as difficulty ramps. */
-  minSpawnInterval: 3.0,
+  /** Seconds between spawns at the start of a run (much rarer than traffic).
+   *  Slightly more available than before (was 5.5) — powerups are the pressure
+   *  valve for the steeper difficulty curve, so the harder game stays fair. */
+  baseSpawnInterval: 5.0,
+  /** Lowest spawn interval as difficulty ramps (was 3.0) — the dense, fast late
+   *  game is where the player most needs a shield / slow-mo. */
+  minSpawnInterval: 2.5,
   /** Grace distance before the cadence tightens (shared feel with traffic). */
   rampStartDistance: 850,
-  /** How much the interval shrinks per world-unit travelled past the grace. */
-  spawnRampPerUnit: 0.0002,
+  /** How much the interval shrinks per world-unit travelled past the grace.
+   *  Steepened (was 0.0002) to track the steeper traffic ramp. */
+  spawnRampPerUnit: 0.00035,
   /** Fraction of the road half-width a pickup may sit from centre. */
   lateralSpread: 0.8,
   /** Pickup collection box half-extents — generous so pickups are inviting. */

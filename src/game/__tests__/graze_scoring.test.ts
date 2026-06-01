@@ -1,7 +1,7 @@
 /**
  * GRAZE scoring gradient (OPP-14, Psyvariar model). Pins the grazeMultiplier
- * curve and proves that — within the unchanged binary near-miss window
- * (nearMissLateral 6.5, the OUTER bound) — a closer pass scores more. Pure.
+ * curve and proves that — within the binary near-miss window
+ * (nearMissLateral 4.0, the OUTER bound) — a closer pass scores more. Pure.
  */
 import { describe, expect, it } from 'vitest';
 import { grazeMultiplier, resolveTraffic, createScoreState, type TrafficEvents } from '../Scoring';
@@ -14,7 +14,7 @@ describe('grazeMultiplier — the reward gradient', () => {
   });
 
   it('just inside the outer bound is barely above 1.0', () => {
-    const m = grazeMultiplier(6.4);
+    const m = grazeMultiplier(SCORING.nearMissLateral - 0.1); // just inside the window
     expect(m).toBeGreaterThan(1);
     expect(m).toBeLessThan(1.1);
   });
@@ -67,8 +67,8 @@ function comboForGap(gap: number): number {
 
 describe('resolveTraffic — graze gradient applied to a real near-miss', () => {
   it('a tight graze earns more combo than a loose one (within the same window)', () => {
-    const tight = comboForGap(2.5); // near the paint
-    const loose = comboForGap(6.0); // near the outer edge
+    const tight = comboForGap(2.5); // near the paint (collision boundary ~2.2)
+    const loose = comboForGap(SCORING.nearMissLateral - 0.2); // near the outer edge (~3.8)
     expect(tight).toBeGreaterThan(loose);
   });
 
@@ -83,7 +83,7 @@ describe('resolveTraffic — graze gradient applied to a real near-miss', () => 
     const traffic: TrafficState = createTrafficState();
     const far = traffic.pool[0];
     const near = traffic.pool[1];
-    for (const [o, lat] of [[far, 5.5], [near, 2.2]] as const) {
+    for (const [o, lat] of [[far, 3.5], [near, 2.2]] as const) {
       o.active = true;
       o.passed = false;
       o.kind = ObstacleKind.Static;

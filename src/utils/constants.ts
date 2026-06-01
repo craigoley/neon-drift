@@ -127,13 +127,17 @@ export const TRAFFIC = {
   /** Seconds between spawns at the start of a run. */
   baseSpawnInterval: 1.5,
   /**
-   * Lowest spawn interval (the density FLOOR) as difficulty ramps. REBALANCED:
-   * was 0.3 → ~3.3 obstacles/second, which at the simultaneously-fast speed was
-   * literally undodgeable (the diagnosed "impossible by ~30s"). 0.62 → ~1.6/s is
-   * hard-but-fair — the densest the game ever gets. This is the single biggest
-   * lever on peak difficulty; raise it to make late game easier.
+   * Lowest spawn interval (the density FLOOR) as difficulty ramps. The
+   * pacedSpawnInterval clamps to this, so it sets the DENSEST the game ever gets
+   * (reached in the late game). History: 0.3 (~3.3/s, undodgeable) → 0.62 (~1.6/s).
+   *
+   * LEVER 2 (fix/near-miss-frequency-tuning): 0.62 → 0.8 (~1.25/s, ~22% fewer
+   * obstacles/sec at peak) — late-game traffic felt constant/oppressive. This is
+   * the single biggest lever on peak difficulty and ONLY affects late game (early
+   * pacing + the OPP-01 opening seed are governed by base/rampStart, untouched).
+   * Independently revertable from Lever 1.
    */
-  minSpawnInterval: 0.62,
+  minSpawnInterval: 0.8,
   /**
    * Difficulty ramp (spawn density). For the first `rampStartDistance` world
    * units the interval stays at `baseSpawnInterval` — a grace period (the first
@@ -212,16 +216,17 @@ export const SCORING = {
   comboTimeout: 5,
   /**
    * Lateral gap (centre-to-centre) below which a pass counts as a near-miss.
-   * Must exceed the summed collision half-widths (2.2) or nothing would ever
-   * be a near-miss without also colliding. Tuned generously: traces showed the
-   * 4.8 window only fired for players who threaded within ~2.6 units of clear
-   * space — a cautious player giving obstacles a normal berth almost never
-   * triggered one, so the combo sat at x1.0 the whole run despite the loop
-   * working. 6.5 (~4.3 units of clear space) makes a normal close pass register,
-   * so the multiplier visibly climbs in ordinary play while hugging the far wall
-   * still earns nothing.
+   * Must exceed the summed collision half-widths (2.2) or nothing would ever be a
+   * near-miss without also colliding.
+   *
+   * LEVER 1 (fix/near-miss-frequency-tuning): was 6.5 — a ±6.5 (13-unit) band over
+   * the player's ~15.8-unit reachable space, so ~82% of passes triggered one and
+   * near-misses felt constant/meaningless. 4.0 (±4.0 = 8-unit band ≈ HALF the
+   * prior qualifying width) means a near-miss is now a GENUINELY close pass.
+   * Shared with the graze gradient (grazeMultiplier) — grazeInner is co-adjusted
+   * below — and with the OPP-07b perk economy (fewer near-misses → see PR note).
    */
-  nearMissLateral: 6.5,
+  nearMissLateral: 4.0,
   /** Combo weight for threading a MOVER (a lane-changing obstacle) — threading a
    *  moving target is harder, so it pays more than a static near-miss. */
   moverNearMissWeight: 2,
@@ -233,14 +238,22 @@ export const SCORING = {
   driftNearMissBonus: 1.5,
   /**
    * GRAZE GRADIENT (OPP-14, Psyvariar model): within the binary near-miss window
-   * (nearMissLateral 6.5 is the OUTER bound, unchanged), the reward scales with
-   * how close the pass was. grazeMultiplier(gap) = 1.0 at the outer edge, ramping
+   * (nearMissLateral, now 4.0, is the OUTER bound), the reward scales with how
+   * close the pass was. grazeMultiplier(gap) = 1.0 at the outer edge, ramping
    * linearly up to grazeMax as the gap shrinks to grazeInner (capped at grazeMax
    * below it — no runaway). It MULTIPLIES the existing combo weight (mover/gate/
-   * drift bonuses still apply). grazeInner (2.0) sits just below the static/mover
-   * collision boundary (summed half-widths 2.2), so a true paint-shave lands
-   * near — but never past — the grazeMax cap. */
-  grazeInner: 2.0,
+   * drift bonuses still apply).
+   *
+   * LEVER 1 co-adjust: grazeInner was 2.0. With the outer bound now 4.0 the ramp
+   * band would be only 4.0-2.0 = 2.0 wide; but more importantly grazeInner MUST be
+   * >= the 2.2 collision boundary (VEHICLE.halfWidth 1.1 + TRAFFIC.halfWidth 1.1),
+   * or grazeMax is UNREACHABLE — at 2.0 the player would have to pass within 2.0
+   * units to hit the cap, which is inside the 2.2 crash band (= crash). So
+   * grazeInner is raised to 2.3, JUST above the collision boundary: grazeMax is
+   * now earned in the thin paint-shave sliver gap ∈ [2.2, 2.3) (a non-crash pass),
+   * over a 4.0-2.3 = 1.7-wide ramp. (NOTE: an earlier suggestion of 1.4 would have
+   * been WRONG — 1.4 < 2.2 leaves grazeMax permanently unreachable.) */
+  grazeInner: 2.3,
   grazeMax: 2.5,
 } as const;
 

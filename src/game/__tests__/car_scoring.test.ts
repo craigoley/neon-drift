@@ -90,7 +90,7 @@ describe('Fairness invariant — no car wins both axes', () => {
 });
 
 describe('L1 buildMul — scales the near-miss combo weight', () => {
-  const GAP = 5.5; // inside the near-miss window, a known graze value
+  const GAP = 3.5; // inside the tightened near-miss window (4.0), a known graze value
 
   it('pulse scoring is identical to the base loop (default arg + BASE_SCORING)', () => {
     const dflt = passOnce(GAP, BASE_SCORING);
@@ -126,7 +126,7 @@ describe('L1 buildMul — scales the near-miss combo weight', () => {
 describe('L1 composes WITH graze (does not replace it)', () => {
   it('a tighter pass still scores more than a looser one under a car mult', () => {
     const tight = passOnce(2.5, carScoring('ghost')).combo;
-    const loose = passOnce(6.0, carScoring('ghost')).combo;
+    const loose = passOnce(3.8, carScoring('ghost')).combo; // still inside the 4.0 window
     expect(tight).toBeGreaterThan(loose);
   });
 
@@ -149,11 +149,11 @@ describe('L2 windowMul — scales the combo survival window', () => {
   });
 
   it('a near-miss refreshes the timer to comboTimeout · car windowMul', () => {
-    expect(passOnce(5.5, carScoring('nova')).comboTimer).toBeCloseTo(
+    expect(passOnce(3.5, carScoring('nova')).comboTimer).toBeCloseTo(
       SCORING.comboTimeout * carScoring('nova').windowMul, // 0.70 — shortest window
       6,
     );
-    expect(passOnce(5.5, carScoring('onyx')).comboTimer).toBeCloseTo(
+    expect(passOnce(3.5, carScoring('onyx')).comboTimer).toBeCloseTo(
       SCORING.comboTimeout * carScoring('onyx').windowMul, // 1.35 — longest window
       6,
     );
@@ -162,8 +162,8 @@ describe('L2 windowMul — scales the combo survival window', () => {
   it('windowMul does NOT change the combo magnitude (only its lifetime)', () => {
     // Nova and Ghost differ in window but a single pass at the same gap differs
     // only by buildMul in combo — window only governs how long it survives.
-    const novaCombo = passOnce(5.5, carScoring('nova')).combo - SCORING.baseCombo;
-    const expected = SCORING.comboStep * grazeMultiplier(5.5) * carScoring('nova').buildMul;
+    const novaCombo = passOnce(3.5, carScoring('nova')).combo - SCORING.baseCombo;
+    const expected = SCORING.comboStep * grazeMultiplier(3.5) * carScoring('nova').buildMul;
     expect(novaCombo).toBeCloseTo(expected, 6);
   });
 });

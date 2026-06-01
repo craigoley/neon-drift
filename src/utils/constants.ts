@@ -1249,13 +1249,13 @@ export interface Milestone {
 }
 
 export const MILESTONES: ReadonlyArray<Milestone> = [
-  { id: 'm1000', distance: 1000, label: '1000m — SHIELD!', reward: { kind: 'powerup', powerup: PowerupKind.Shield } },
-  { id: 'm2000', distance: 2000, label: '2000m — SLOW-MO!', reward: { kind: 'powerup', powerup: PowerupKind.SlowMo } },
-  { id: 'm3000', distance: 3000, label: '3000m — SCORE ×2!', reward: { kind: 'powerup', powerup: PowerupKind.ScoreBoost } },
-  { id: 'm4000', distance: 4000, label: '4000m — MAGNET!', reward: { kind: 'powerup', powerup: PowerupKind.Magnet } },
+  { id: 'm1000', distance: 1000, label: '1000m — +1000!', reward: { kind: 'score', amount: 1000 } },
+  { id: 'm2000', distance: 2000, label: '2000m — +2000!', reward: { kind: 'score', amount: 2000 } },
+  { id: 'm3000', distance: 3000, label: '3000m — +3000!', reward: { kind: 'score', amount: 3000 } },
+  { id: 'm4000', distance: 4000, label: '4000m — +4000!', reward: { kind: 'score', amount: 4000 } },
   { id: 'm5000', distance: 5000, label: '5000m — LEGEND', reward: { kind: 'score', amount: 5000 } },
-  { id: 'm7500', distance: 7500, label: '7500m — SHIELD!', reward: { kind: 'powerup', powerup: PowerupKind.Shield } },
-  { id: 'm10000', distance: 10000, label: '10,000m — SCORE ×2!', reward: { kind: 'powerup', powerup: PowerupKind.ScoreBoost } },
+  { id: 'm7500', distance: 7500, label: '7500m — +7500!', reward: { kind: 'score', amount: 7500 } },
+  { id: 'm10000', distance: 10000, label: '10,000m — +10,000!', reward: { kind: 'score', amount: 10000 } },
 ];
 
 /**

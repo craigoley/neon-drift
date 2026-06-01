@@ -8,7 +8,7 @@
  * the run.
  */
 
-import { aabbOverlap, intervalsOverlap } from '../utils/math';
+import { aabbOverlap, clamp, intervalsOverlap } from '../utils/math';
 import { GATE, JUICE, ObstacleKind, RAMP, SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
 import type { Obstacle, TrafficState } from './Traffic';
 
@@ -77,6 +77,27 @@ export function registerNearMiss(state: ScoreState, weight = 1): ScoreState {
   return state;
 }
 
+/**
+ * GRAZE reward gradient (OPP-14). For a near-miss `gap` (lateral centre-to-centre
+ * distance, always < nearMissLateral when called), returns a reward multiplier
+ * that scales the combo weight by how CLOSE the pass was:
+ *
+ *   gap >= nearMissLateral (6.5)  → 1.0   (outer edge: ordinary near-miss)
+ *   gap == grazeInner      (2.0)  → grazeMax (2.5)  (paint-shave)
+ *   gap <  grazeInner             → grazeMax  (capped — no runaway)
+ *
+ * i.e. mult = 1 + (grazeMax-1) · clamp((outer-gap)/(outer-inner), 0, 1). Linear
+ * in the gap. Pure; multiplies the EXISTING weight (mover/gate/drift untouched).
+ */
+export function grazeMultiplier(gap: number): number {
+  const t = clamp(
+    (SCORING.nearMissLateral - gap) / (SCORING.nearMissLateral - SCORING.grazeInner),
+    0,
+    1,
+  );
+  return 1 + (SCORING.grazeMax - 1) * t;
+}
+
 /** Reset the combo to base (e.g. on crash). */
 export function resetCombo(state: ScoreState): ScoreState {
   state.combo = SCORING.baseCombo;
@@ -134,6 +155,11 @@ export function isRampContact(playerLateral: number, playerDistance: number, ram
 export interface TrafficEvents {
   crashed: boolean;
   nearMisses: number;
+  /** Smallest near-miss lateral gap this step (Infinity if none) — surfaces how
+   *  close the closest graze was, so the feedback layer can punch a tight graze
+   *  above its combo tier (OPP-14). Distinct from `closestLateral` (a nearest-
+   *  obstacle diagnostic that may not be a near-miss at all). */
+  nearMissClosest?: number;
   /** The powerup kind collected this step (last one), else null — for juice/audio. */
   collected?: PowerupKind | null;
   /** True on the step a held SHIELD absorbed a crash — for juice/audio. */
@@ -179,6 +205,7 @@ export function resolveTraffic(
   const driftMul = drifting ? SCORING.driftNearMissBonus : 1;
   events.crashed = false;
   events.nearMisses = 0;
+  events.nearMissClosest = Infinity;
   events.rampBoosts = 0;
   events.evaluated = 0;
   events.closestLateral = Infinity;
@@ -209,10 +236,12 @@ export function resolveTraffic(
           o.passed = true;
           const gap = Math.abs(playerLateral - o.lateral);
           if (gap < SCORING.nearMissLateral) {
-            // Threading a MOVER pays more than a static pass.
+            // Threading a MOVER pays more than a static pass; the GRAZE gradient
+            // scales the reward by how close the pass was (OPP-14).
             const weight = o.kind === ObstacleKind.Mover ? SCORING.moverNearMissWeight : 1;
-            registerNearMiss(score, weight * driftMul);
+            registerNearMiss(score, weight * driftMul * grazeMultiplier(gap));
             events.nearMisses++;
+            events.nearMissClosest = Math.min(events.nearMissClosest ?? Infinity, gap);
           }
         }
         break;

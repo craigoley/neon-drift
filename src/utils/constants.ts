@@ -231,6 +231,17 @@ export const SCORING = {
    *  DRIFTING. A drifted dodge is committed/risky, so it pays more — a concrete
    *  reason to drift through the tightest gaps rather than play it safe. */
   driftNearMissBonus: 1.5,
+  /**
+   * GRAZE GRADIENT (OPP-14, Psyvariar model): within the binary near-miss window
+   * (nearMissLateral 6.5 is the OUTER bound, unchanged), the reward scales with
+   * how close the pass was. grazeMultiplier(gap) = 1.0 at the outer edge, ramping
+   * linearly up to grazeMax as the gap shrinks to grazeInner (capped at grazeMax
+   * below it — no runaway). It MULTIPLIES the existing combo weight (mover/gate/
+   * drift bonuses still apply). grazeInner (2.0) sits just below the static/mover
+   * collision boundary (summed half-widths 2.2), so a true paint-shave lands
+   * near — but never past — the grazeMax cap. */
+  grazeInner: 2.0,
+  grazeMax: 2.5,
 } as const;
 
 /**
@@ -1136,6 +1147,10 @@ export const JUICE = {
   nearMissCalloutMs: 650,
   // Chromatic-aberration pulse fires only at tier >= this (the loudest channel).
   nearMissCaTier: 3,
+  // OPP-14 tie-in: a near-miss whose lateral gap is <= this (a tight GRAZE) bumps
+  // the crescendo tier by +1, so a paint-shave at a low combo still punches above
+  // its combo band. Captures roughly the tightest fifth of the 6.5 window.
+  nearMissGrazeBumpGap: 2.8,
   /** Powerup collection: brief screen glow flash (s) in the pickup's colour. */
   pickupFlash: 0.3,
   /** Milestone / objective toast: total on-screen time (ms) including fades. */

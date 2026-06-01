@@ -967,6 +967,8 @@ export const JUICE = {
   trailDriftOpacity: 1.0,
   /** Per-second ease rate for trail opacity (smooth fade in/out). */
   trailOpacityRate: 8,
+  /** Intensity below which the trail is hidden (avoids near-invisible draws). */
+  trailMinIntensity: 0.003,
   /** Trail colours: cruising (cool) vs drifting (hot). */
   trailColor: 0x00ffff,
   trailDriftColor: 0xff2db8,

@@ -110,6 +110,7 @@ const biomeView = new BiomeView(scene.scene, environment, stars, traffic);
 // touch for mobile GPU headroom.
 const speedLines = new SpeedLines(scene.scene, isTouch ? JUICE.speedLineCountTouch : JUICE.speedLineCount);
 const trail = new CarTrail(scene.scene, isTouch);
+const trailInfo = { active: 0, cap: 0 };
 const shards = new CrashShards(scene.scene);
 const screenFx = new ScreenFx(app);
 const hud = new HUD(app);
@@ -378,7 +379,9 @@ function frame(now: number): void {
   shards.update(realDt);
   screenFx.update(realDt);
   hud.sync(game, bestStore.best);
-  debug.update(game, telemetry, hud.comboText(), { active: trail.activeCount(), cap: trail.capacity() });
+  trailInfo.active = trail.activeCount();
+  trailInfo.cap = trail.capacity();
+  debug.update(game, telemetry, hud.comboText(), trailInfo);
 
   post.render();
   requestAnimationFrame(frame);

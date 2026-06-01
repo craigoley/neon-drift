@@ -83,7 +83,7 @@ export class CarTrail {
     this.intensity += (target - this.intensity) * Math.min(1, dt * JUICE.trailOpacityRate);
 
     const base = drifting ? this.hot : this.cool;
-    if (this.intensity <= 0.003) {
+    if (this.intensity <= JUICE.trailMinIntensity) {
       this.line.visible = false;
       return;
     }

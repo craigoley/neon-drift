@@ -94,6 +94,10 @@ export class PostProcessing {
   private readonly cinematic: ShaderPass;
   private readonly resScale: number;
   private elapsed = 0;
+  /** Baseline chromatic-aberration (after any touch scaling) + a transient pulse
+   *  added on top by a tier-3 near-miss, decaying back to the baseline. */
+  private aberrationBase = 0;
+  private aberrationPulse = 0;
 
   constructor(
     scene: THREE.Scene,
@@ -141,6 +145,17 @@ export class PostProcessing {
 
     // OutputPass must be last (tone mapping + sRGB conversion).
     this.composer.addPass(new OutputPass());
+
+    // Capture the effective baseline AFTER any touch scaling — the near-miss
+    // pulse is added on top of this and decays back to it.
+    this.aberrationBase = this.cinematic.uniforms.uAberration.value as number;
+  }
+
+  /** NEAR-MISS CRESCENDO (tier-3 only): add a brief chromatic-aberration pulse on
+   *  top of the baseline; it decays back in render(). Conservative by design —
+   *  see POSTFX.aberrationPulsePeak. No-op while the cinematic pass is disabled. */
+  pulseAberration(peak: number): void {
+    this.aberrationPulse = Math.max(this.aberrationPulse, peak);
   }
 
   /** Bloom internal-buffer size: device pixels (CSS * pixelRatio) * resScale. */
@@ -172,6 +187,11 @@ export class PostProcessing {
     if (this.cinematic.enabled) {
       this.elapsed = (this.elapsed + dt) % POSTFX.timeWrap;
       this.cinematic.uniforms.uTime.value = this.elapsed;
+      // Decay the near-miss aberration pulse and lay it over the baseline.
+      if (this.aberrationPulse > 0) {
+        this.aberrationPulse = Math.max(0, this.aberrationPulse - POSTFX.aberrationPulseDecay * dt * this.aberrationPulse);
+      }
+      this.cinematic.uniforms.uAberration.value = this.aberrationBase + this.aberrationPulse;
     }
     this.composer.render();
   }

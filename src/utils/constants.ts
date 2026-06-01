@@ -1037,6 +1037,13 @@ export const POSTFX = {
   /** RGB-split magnitude at the screen edge (UV units; grows with dist²). Tiny —
    *  ~1–2 px on a 1080p screen. */
   aberration: 0.0026,
+  /** NEAR-MISS CRESCENDO (OPP-13+04, tier-3 only): a brief chromatic-aberration
+   *  pulse ADDED on top of `aberration`, decaying back to baseline. Kept
+   *  CONSERVATIVE — over-driven CA causes motion discomfort. `peak` is the added
+   *  amount at impulse (≈2.5× the baseline edge split, momentary); `decay` is the
+   *  per-second exponential falloff. This is the one new/vetoable render effect. */
+  aberrationPulsePeak: 0.004,
+  aberrationPulseDecay: 6,
   /** Scanline darkening depth (0..1) and how many lines span the screen height. */
   scanlineIntensity: 0.08,
   scanlineCount: 900,
@@ -1106,6 +1113,29 @@ export const JUICE = {
   shardSize: 0.5,
   /** Near-miss screen-edge glow pulse duration in seconds. */
   nearMissPulse: 0.35,
+  /**
+   * NEAR-MISS CRESCENDO (OPP-13+04). Near-miss feedback escalates across 4 combo
+   * BANDS so a high streak reads as an event while x1-2 stays slick — NO scoring
+   * change, the combo/count logic is untouched. The band (tier 0..3) is derived
+   * from the live combo by nearMissTier() in game/Scoring (pure + tested). All
+   * arrays below are indexed by tier 0..3.
+   */
+  // combo >= threshold[i] → tier i+1 (so <3 → 0, 3-5 → 1, 6-9 → 2, >=10 → 3).
+  nearMissTierThresholds: [3, 6, 10] as readonly number[],
+  // Camera-shake impulse per tier (0 = none at low combo; all well below the
+  // crash shakeMagnitude 1.4 so a crash still hits hardest).
+  nearMissShake: [0, 0.35, 0.7, 1.1] as readonly number[],
+  // Edge-pulse intensity (0..1 opacity scale) per tier — restrained low, bright high.
+  nearMissEdge: [0.45, 0.65, 0.85, 1.0] as readonly number[],
+  // Audio whoosh/blip pitch multiplier per tier (a riser as the streak climbs).
+  nearMissPitch: [1.0, 1.12, 1.3, 1.5] as readonly number[],
+  // "CLOSE!"-style callout fires at tier >= this; text is per-tier ('' = none).
+  nearMissCalloutTier: 2,
+  nearMissCalloutText: ['', '', 'CLOSE!', 'CLUTCH!'] as readonly string[],
+  // Callout visible duration (ms) — short; near-misses fire often.
+  nearMissCalloutMs: 650,
+  // Chromatic-aberration pulse fires only at tier >= this (the loudest channel).
+  nearMissCaTier: 3,
   /** Powerup collection: brief screen glow flash (s) in the pickup's colour. */
   pickupFlash: 0.3,
   /** Milestone / objective toast: total on-screen time (ms) including fades. */

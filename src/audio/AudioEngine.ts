@@ -162,26 +162,28 @@ export class AudioEngine {
   }
 
   /** Near-miss: a short upward whoosh plus a bright combo-tick blip. */
-  playNearMiss(): void {
+  playNearMiss(pitch = 1): void {
     if (!this.ctx || !this.noiseBuffer || !this.master) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
 
+    // `pitch` (default 1 = unchanged) raises the whoosh + blip with the combo
+    // tier, so a high streak's near-miss reads as a higher, brighter riser.
     const whooshGain = ctx.createGain();
     whooshGain.gain.setValueAtTime(0, t);
     whooshGain.gain.linearRampToValueAtTime(AUDIO.whooshGain, t + AUDIO.whooshAttack);
     whooshGain.gain.exponentialRampToValueAtTime(0.0001, t + AUDIO.whooshDecay);
     const band = ctx.createBiquadFilter();
     band.type = 'bandpass';
-    band.frequency.setValueAtTime(AUDIO.whooshHz, t);
-    band.frequency.exponentialRampToValueAtTime(AUDIO.whooshHz * AUDIO.whooshSweep, t + AUDIO.whooshDecay);
+    band.frequency.setValueAtTime(AUDIO.whooshHz * pitch, t);
+    band.frequency.exponentialRampToValueAtTime(AUDIO.whooshHz * pitch * AUDIO.whooshSweep, t + AUDIO.whooshDecay);
     const src = ctx.createBufferSource();
     src.buffer = this.noiseBuffer;
     src.connect(band).connect(whooshGain).connect(this.master);
     src.start(t);
     src.stop(t + AUDIO.whooshStop);
 
-    this.blip(AUDIO.comboBlipHz, AUDIO.comboBlipGain);
+    this.blip(AUDIO.comboBlipHz * pitch, AUDIO.comboBlipGain);
   }
 
   /** Crash: white-noise burst plus a low sine thump. */

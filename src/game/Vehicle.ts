@@ -74,7 +74,10 @@ export function updateVehicle(
   // toward a floor (a fraction of the cap), so a juke costs distance/score and
   // can't just be held forever. Normal acceleration recovers it once released.
   if (state.drifting) {
-    const floor = cap * DRIFT.minSpeedFraction;
+    // Clamp the floor to the current speed so a drift can only ever REMOVE
+    // speed — never nudge it up to the floor on the rare frame speed sits just
+    // below it (the cap, and thus the floor, rises with distance).
+    const floor = Math.min(state.speed, cap * DRIFT.minSpeedFraction);
     state.speed = Math.max(floor, state.speed - DRIFT.speedDrag * dt);
   }
 

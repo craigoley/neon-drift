@@ -26,8 +26,6 @@ export class VehicleRenderer {
   private readonly baseGlow = new THREE.Color(PALETTE.cyan);
   /** Hot drift glow lerp target. */
   private readonly driftGlow = new THREE.Color(CAR_VIS.driftGlow);
-  /** Scratch colour for the per-frame drift lerp (no per-frame allocation). */
-  private readonly glowScratch = new THREE.Color();
 
   constructor(scene: THREE.Scene) {
     const { width, height, length } = CAR_VIS;
@@ -74,11 +72,17 @@ export class VehicleRenderer {
       : 0;
     this.group.rotation.y = yaw;
 
-    // Glow shifts toward the hot drift colour while drifting, back otherwise.
+    // Glow eases toward the hot drift colour while drifting, back otherwise.
+    // lerp() mutates in place, so no scratch colour is needed; snap to the
+    // target once within epsilon so the asymptotic ease settles instead of
+    // running a vanishing step on every future frame.
     const target = state.drifting ? this.driftGlow : this.baseGlow;
-    if (!this.edgesMat.color.equals(target)) {
-      this.glowScratch.copy(this.edgesMat.color).lerp(target, CAR_VIS.driftGlowLerp);
-      this.edgesMat.color.copy(this.glowScratch);
+    const glow = this.edgesMat.color;
+    if (!glow.equals(target)) {
+      glow.lerp(target, CAR_VIS.driftGlowLerp);
+      const dist =
+        Math.abs(glow.r - target.r) + Math.abs(glow.g - target.g) + Math.abs(glow.b - target.b);
+      if (dist < CAR_VIS.driftGlowSnap) glow.copy(target);
     }
   }
 }

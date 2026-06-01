@@ -4,7 +4,7 @@ import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad
 import { activeObstacleCount, createTrafficState, updateTraffic } from '../Traffic';
 import { createIntent } from '../Input';
 import { Rng } from '../../utils/rng';
-import { ObstacleKind, SCORING, SLALOM, TIMESTEP, TRAFFIC } from '../../utils/constants';
+import { DAILY_SCORING, ObstacleKind, SCORING, SLALOM, TIMESTEP, TRAFFIC } from '../../utils/constants';
 import { createScoreState, resolveTraffic, type TrafficEvents } from '../Scoring';
 
 describe('GameState — full-loop integration & bounded pools', () => {
@@ -246,6 +246,85 @@ describe('GameState — menu/pause state machine', () => {
     expect(slalom.lastEvents.gateThreaded).toBe(true);
     // Slalom: the same guard is TRUE → gate feedback fires (must NOT be broken).
     expect(isSlalom(slalom) && !!slalom.lastEvents.gateThreaded).toBe(true);
+  });
+
+  // --- Daily Slalom LIVES (PR 3) ---------------------------------------------
+  // Force a deterministic gate-WALL miss: park the player at road centre and put a
+  // gate whose opening is hard to one side just ahead, so the next update wall-hits
+  // it (gateBlocks). One update advances the player ~1 unit (constantSpeed/60) into
+  // the gate's forward band.
+  const forceWallHit = (game: ReturnType<typeof createGameState>) => {
+    const center = roadCenterAt(game.seed, game.distance);
+    game.vehicle.lateral = center; // dead centre
+    const g = game.traffic.pool.find((o) => !o.active) ?? game.traffic.pool[0];
+    g.active = true;
+    g.kind = ObstacleKind.Gate;
+    g.openingHalfWidth = 2.6;
+    g.sway = 0;
+    g.swayPhase = 0;
+    g.consumed = false;
+    g.passed = false;
+    g.speed = 0;
+    g.laneOffset = 9; // opening hard to one side → player at centre is OUTSIDE it
+    g.distance = game.distance + 0.5; // just ahead → wall-hit on the next step
+    update(game, intent, TIMESTEP);
+  };
+
+  it('a slalom wall miss costs a life, resets the streak, grants i-frames, and does NOT end the run', () => {
+    const game = startRun(createGameState(123), undefined, undefined, 123, undefined, GameMode.DailySlalom);
+    game.slalomScore.cleanMultiplier = 5; // pretend a streak is going
+    expect(game.lives).toBe(SLALOM.lives); // 3
+
+    forceWallHit(game);
+
+    expect(game.lastEvents.gateMissed).toBe(true); // non-fatal miss event (drives the sting)
+    expect(game.lives).toBe(SLALOM.lives - 1); // cost a life (3 → 2)
+    expect(game.phase).toBe(Phase.Playing); // run CONTINUES
+    expect(game.slalomScore.cleanMultiplier).toBe(DAILY_SCORING.cleanStart); // streak broken
+    expect(game.powerups.effects.invulnTimer).toBeGreaterThan(0); // i-frames granted
+  });
+
+  it('i-frames after a miss swallow the immediately-following wall (no cheap double-death)', () => {
+    const game = startRun(createGameState(123), undefined, undefined, 123, undefined, GameMode.DailySlalom);
+    forceWallHit(game); // 3 → 2, i-frames now active
+    expect(game.lives).toBe(SLALOM.lives - 1);
+    forceWallHit(game); // i-frames active → crash swallowed, NO further life lost
+    expect(game.lives).toBe(SLALOM.lives - 1); // still 2
+    expect(game.phase).toBe(Phase.Playing);
+  });
+
+  it('the 3rd miss ends the run (lives reach 0 → Crashed)', () => {
+    const game = startRun(createGameState(123), undefined, undefined, 123, undefined, GameMode.DailySlalom);
+    forceWallHit(game); // 3 → 2 (run continues)
+    expect(game.lives).toBe(2);
+    expect(game.phase).toBe(Phase.Playing);
+    game.powerups.effects.invulnTimer = 0; // clear i-frames so the next wall lands
+    forceWallHit(game); // 2 → 1
+    expect(game.lives).toBe(1);
+    expect(game.phase).toBe(Phase.Playing);
+    game.powerups.effects.invulnTimer = 0;
+    forceWallHit(game); // 1 → 0 → run ends
+    expect(game.lives).toBe(0);
+    expect(game.phase).toBe(Phase.Crashed);
+  });
+
+  it('CLASSIC is single-collision death — a hit ends the run immediately; lives inert', () => {
+    const game = startRun(createGameState(7)); // classic (default mode)
+    const center = roadCenterAt(game.seed, game.distance);
+    game.vehicle.lateral = center;
+    const o = game.traffic.pool.find((x) => !x.active) ?? game.traffic.pool[0];
+    o.active = true;
+    o.kind = ObstacleKind.Static;
+    o.sway = 0;
+    o.swayPhase = 0;
+    o.consumed = false;
+    o.passed = false;
+    o.speed = 0;
+    o.laneOffset = 0; // dead ahead → unavoidable collision
+    o.distance = game.distance + 0.5;
+    update(game, intent, TIMESTEP);
+    expect(game.phase).toBe(Phase.Crashed); // one hit ends it — NO lives system in classic
+    expect(game.lives).toBe(SLALOM.lives); // lives field untouched (inert in classic)
   });
 
   it('pause halts the sim; resume continues from the same spot', () => {

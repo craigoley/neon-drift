@@ -383,6 +383,9 @@ export const SLALOM = {
    *  DERIVED as gateSpacing / constantSpeed (≈ 1 gate/second at the values above),
    *  so the spatial spacing stays fixed regardless of the timestep. Tunable. */
   gateSpacing: 64,
+  /** Lives (Daily Slalom PR 3): a gate-WALL miss costs one; the run ends only on
+   *  the last. The "nursing a terrified streak" tension. */
+  lives: 3,
 } as const;
 
 /**
@@ -413,11 +416,11 @@ export const DAILY_SCORING = {
 } as const;
 
 /**
- * DAILY SLALOM feedback (Daily Slalom PR 2). Deliberately split: PER-GATE feedback
+ * DAILY SLALOM feedback (Daily Slalom PR 2/3). Deliberately split: PER-GATE feedback
  * is SUBTLE (it fires every ~second — heavy feedback here was the noise problem we
  * removed with gate near-misses), while STREAK MILESTONES are pronounced (rare,
- * earned). A miss is the crash sting (it ends the run this PR). No per-gate shake
- * or slow-mo.
+ * earned). A MISS (PR 3: lost a life, run continues) is a pronounced sting; the
+ * FATAL miss is the full crash. No per-gate shake or slow-mo.
  */
 export const SLALOM_FX = {
   /** Per-gate edge-glow pulse intensity (0..1), lerped by centeredness — a
@@ -431,6 +434,9 @@ export const SLALOM_FX = {
    *  pulse + a small one-off shake. This is where intensity belongs — rare/earned. */
   milestonePulse: 0.85,
   milestoneShake: 0.4,
+  /** Non-fatal MISS sting (lost a life, run continues): a pronounced shake. Below
+   *  the full crash shake (JUICE.shakeMagnitude) — the run isn't over. */
+  missShake: 0.8,
 } as const;
 
 /** RAMP (beneficial boost-strip) tuning. */

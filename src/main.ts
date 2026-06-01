@@ -291,6 +291,7 @@ function frame(now: number): void {
   let gateThreads = 0; // clean gate threads this frame (Daily Slalom feedback)
   let gateCenteredness = 0; // the latest thread's centeredness (0 edge → 1 centre)
   let gateMilestone = false; // a clean-streak milestone was crossed this frame
+  let gateMissed = false; // a slalom miss cost a life this frame but the run continued
   let collectedKind: PowerupKind | null = null;
   let shieldBlocked = false;
   let rampBoosts = 0;
@@ -311,6 +312,7 @@ function frame(now: number): void {
         gateCenteredness = game.lastEvents.gateCenteredness ?? 0;
         if (game.lastEvents.gateMilestone) gateMilestone = true;
       }
+      if (game.lastEvents.gateMissed) gateMissed = true;
       if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
       if (game.lastEvents.shieldBlocked) shieldBlocked = true;
       rampBoosts += game.lastEvents.rampBoosts ?? 0;
@@ -363,6 +365,16 @@ function frame(now: number): void {
       audio.playMilestone();
       hud.showNearMiss(`CLEAN x${game.slalomScore.cleanMultiplier}`);
     }
+  }
+  // SLALOM MISS sting (PR 3): a non-fatal gate-wall miss (lost a life, run
+  // continues) — pronounced punctuation: a flash + a notable shake (below the full
+  // crash shake; the run isn't over). The streak just reset; the FATAL miss is the
+  // crash block below instead. `gateMissed` is set only in slalom, but guard by
+  // isSlalom anyway (defensive — never let a slalom signal feed classic).
+  if (isSlalom(game) && gateMissed) {
+    screenFx.flashCrash();
+    scene.addShake(SLALOM_FX.missShake);
+    hud.showNearMiss(`MISS · ${game.lives} LEFT`);
   }
   // Powerup collection juice: a screen glow in the pickup's colour. A shield
   // absorbing a crash flashes the shield colour ("saved!").
@@ -440,6 +452,9 @@ function frame(now: number): void {
     if (nearMisses > 0) audio.playNearMiss(JUICE.nearMissPitch[nmTier]); // riser scales with tier
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
+    // A non-fatal slalom miss plays the crash sound too (the sting) — `gateMissed`
+    // and `crashed` are mutually exclusive (survived vs fatal), so never both.
+    if (isSlalom(game) && gateMissed) audio.playCrash();
     // Unlock / mission / rank fanfare over the WIPEOUT (milestone three-note chime).
     if (unlockedNames.length > 0 || missionLines.length > 0) audio.playMilestone();
   }

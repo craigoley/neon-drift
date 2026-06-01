@@ -179,6 +179,18 @@ export interface TrafficEvents {
   shieldBlocked?: boolean;
   /** Number of RAMPs contacted this step (each grants a speed + score burst). */
   rampBoosts?: number;
+  /** True on the step the player cleanly THREADED a gate (passed through the
+   *  opening without crashing). Drives Daily Slalom scoring + feedback ONLY — it
+   *  is NOT a near-miss (no combo, no crescendo); classic ignores it (gates are
+   *  pure obstacles there). */
+  gateThreaded?: boolean;
+  /** Centeredness of that thread: 0 at the opening edge, 1 dead-centre. Feeds the
+   *  slalom accuracy bonus + the per-gate feedback brightness. */
+  gateCenteredness?: number;
+  /** True on the step a clean thread pushed the slalom clean-streak across a
+   *  MILESTONE tier (DAILY_SCORING.milestoneStep) — the rare, earned escalation
+   *  cue. Set by GameState (slalom only) from the threadGate result. */
+  gateMilestone?: boolean;
   /** Label of a distance MILESTONE hit this step (last one), else null — for the
    *  celebratory toast + fanfare. See Milestones.ts. */
   milestone?: string | null;
@@ -225,6 +237,8 @@ export function resolveTraffic(
   events.nearMisses = 0;
   events.nearMissClosest = Infinity;
   events.rampBoosts = 0;
+  events.gateThreaded = false;
+  events.gateMilestone = false;
   events.evaluated = 0;
   events.closestLateral = Infinity;
   events.closestLongitudinal = Infinity;
@@ -266,12 +280,25 @@ export function resolveTraffic(
         break;
       }
       case ObstacleKind.Gate: {
-        // A gate is a PURE obstacle: thread the opening (nothing happens) or hit
-        // the wall (crash). It deliberately produces NO near-miss — no combo, no
-        // shake/slow-mo/crescendo — in either mode. (Traffic near-misses, above,
-        // are unaffected; the static/mover path is the only combo source now.)
+        // A gate is a PURE obstacle: thread the opening or hit the wall (crash).
+        // It produces NO near-miss (no combo, no crescendo) in either mode. It
+        // DOES surface a clean-thread EVENT (with centeredness) that ONLY the
+        // Daily Slalom scoring/feedback consumes — classic ignores it.
         if (gateBlocks(playerLateral, playerDistance, o)) {
           events.crashed = true;
+          break;
+        }
+        if (!o.passed && o.distance <= playerDistance) {
+          o.passed = true;
+          if (withinGateOpening(playerLateral, o)) {
+            events.gateThreaded = true;
+            // 0 at the opening edge, 1 dead-centre (clamped). Pure geometry.
+            events.gateCenteredness = clamp(
+              1 - Math.abs(playerLateral - o.lateral) / o.openingHalfWidth,
+              0,
+              1,
+            );
+          }
         }
         break;
       }

@@ -25,6 +25,12 @@ import {
   type TrafficEvents,
 } from './Scoring';
 import {
+  createSlalomScoreState,
+  missGate,
+  threadGate,
+  type SlalomScoreState,
+} from './SlalomScore';
+import {
   collectPickups,
   consumeShield,
   createPowerupState,
@@ -84,6 +90,11 @@ export interface GameState {
   /** Distance-milestone + per-run-objective progress (see Milestones.ts). */
   milestones: MilestoneState;
   score: ScoreState;
+  /** Daily Slalom score (event-driven per-gate points + clean streak). Used ONLY
+   *  in 'dailySlalom' mode; left at its fresh zero state in classic. Kept separate
+   *  from `score` (the classic ScoreState) so neither mode's scoring touches the
+   *  other. */
+  slalomScore: SlalomScoreState;
   /** Active car handling profile for this run (resolved from the selected car
    *  by the composition root and passed in — the pure layer never reaches into
    *  UI/storage). Defaults to BASE_HANDLING. */
@@ -123,6 +134,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     biome: createBiomeState(),
     milestones: createMilestoneState(),
     score: createScoreState(),
+    slalomScore: createSlalomScoreState(),
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
     mode: GameMode.Classic,
@@ -160,6 +172,7 @@ export function startRun(
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();
+  state.slalomScore = createSlalomScoreState();
   state.handling = handling;
   state.scoring = scoring;
   state.mode = mode;
@@ -302,8 +315,18 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents,
   );
 
-  // SCORE-BOOST hook: an external multiplier stacked on top of the combo.
-  integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));
+  // SCORING. CLASSIC: the continuous distance×combo integral (SCORE-BOOST stacks
+  // on top). SLALOM: EVENT-driven instead — no distance integral (would double-
+  // count); a cleanly-threaded gate scores base×accuracy×cleanMultiplier. The two
+  // paths are mutually exclusive, so classic scoring is entirely unchanged.
+  if (slalom) {
+    if (state.lastEvents.gateThreaded) {
+      const result = threadGate(state.slalomScore, state.lastEvents.gateCenteredness ?? 0);
+      state.lastEvents.gateMilestone = result.milestone; // surface the streak-tier crossing
+    }
+  } else {
+    integrateScore(state.score, state.vehicle.speed, simDt, powerupScoreMultiplier(effects));
+  }
 
   // SHIELD hook: intercept the crash path. While i-frames are active (granted
   // when a shield breaks), crashes are ignored so the car can clear the obstacle
@@ -319,6 +342,9 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   if (state.lastEvents.crashed) {
     state.phase = Phase.Crashed;
     resetCombo(state.score);
+    // A slalom miss breaks the clean streak (the run also ends this PR — lives
+    // arrive in PR 3, where this reset becomes the per-life punctuation).
+    if (slalom) missGate(state.slalomScore);
   }
 
   // Effect durations are wall-clock: tick on REAL dt, never the slowed simDt.

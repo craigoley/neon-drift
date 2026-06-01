@@ -645,6 +645,18 @@ export class Shell {
           this.go('start');
         }
         break;
+      case 'missions':
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.cycleStartBiome(-1);
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          this.cycleStartBiome(1);
+        } else if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          this.showStart();
+        }
+        break;
       case 'settings':
         if (e.key === 'Escape') {
           e.preventDefault();

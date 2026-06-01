@@ -594,12 +594,18 @@ body,
   letter-spacing: 0.04em;
   color: rgba(255, 255, 255, 0.7);
 }
-.shell-play-daily {
-  /* The primary daily action reads in cyan (the player's colour) to stand out
-     from the ghost menu buttons. */
-  border-color: #00ffff;
-  color: #00ffff;
-  text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+/* PLAY TODAY'S CHALLENGE uses the base .shell-btn style as-is (filled cyan, dark
+   #1a0033 text) — identical to the DONE button. The .shell-play-daily class stays
+   ONLY as a JS click-handler hook; it deliberately adds no style override. (A
+   previous color:#00ffff here painted the label cyan-on-cyan = an invisible
+   blob, plus a no-op border-color since .shell-btn has border:none.) */
+
+/* Tighten the DAILY screen's stacked spacing so its sparse content reads as one
+   cohesive panel instead of floating items. SCOPED to .shell-daily — the shared
+   .shell-screen rule (every other screen depends on it) is untouched; this only
+   overrides the inter-item gap for this one screen. */
+.shell-daily {
+  gap: clamp(8px, 2vh, 16px);
 }
 .shell-daily-today {
   margin: 8px 0 2px;

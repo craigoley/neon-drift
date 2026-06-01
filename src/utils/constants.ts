@@ -1215,6 +1215,85 @@ export const CAR_UNLOCKS: readonly CarUnlock[] = [
   },
 ] as const;
 
+/**
+ * ACROSS-RUN MISSION + RANK PROGRESSION — the layered meta-progression. This is
+ * NEVER a gameplay gate: the endless run is fully playable from Rookie, and every
+ * reward here is COSMETIC / OPTIONAL (a title, or an optional starting-biome
+ * visual). Missions accrue across runs and commit at run end (crash included);
+ * rank advances as missions complete. See state/Missions.ts for the pure logic.
+ */
+export const MISSIONS_STORAGE_KEY = 'neon-drift.missions';
+
+/** How many missions are active (and shown) at once. */
+export const MISSION_ACTIVE_COUNT = 3;
+
+/** Minimum speed (world units/s) at which a held handbrake counts as drifting,
+ *  for the drift-time missions. */
+export const DRIFT_MIN_SPEED = 1;
+
+/** Cumulative lifetime counters the missions read (the store's own accumulators,
+ *  independent of the car-unlock LifetimeStats). */
+export interface MissionStats {
+  nearMisses: number;
+  powerups: number;
+  shields: number;
+  driftSeconds: number;
+  midnightReaches: number;
+  distance: number;
+}
+export type CumulativeMetric = keyof MissionStats;
+
+export const EMPTY_MISSION_STATS: MissionStats = {
+  nearMisses: 0,
+  powerups: 0,
+  shields: 0,
+  driftSeconds: 0,
+  midnightReaches: 0,
+  distance: 0,
+};
+
+/**
+ * A mission definition. `cumulative` missions track a lifetime counter from a
+ * baseline snapped when the mission activates ("do N more"); `perRun` missions
+ * complete when a single run's value meets the target.
+ */
+export type MissionDef =
+  | { id: string; label: string; target: number; kind: 'cumulative'; metric: CumulativeMetric }
+  | { id: string; label: string; target: number; kind: 'perRun'; metric: 'score' | 'distance' };
+
+/** The mission pool. Active missions are drawn in order and the pool WRAPS, so
+ *  there is always a next short-term goal (endless). Ordered to escalate. */
+export const MISSION_POOL: readonly MissionDef[] = [
+  { id: 'nm25', label: 'Thread 25 near-misses', target: 25, kind: 'cumulative', metric: 'nearMisses' },
+  { id: 'pu15', label: 'Collect 15 powerups', target: 15, kind: 'cumulative', metric: 'powerups' },
+  { id: 'sh5', label: 'Collect 5 shields', target: 5, kind: 'cumulative', metric: 'shields' },
+  { id: 'dr20', label: 'Drift for 20s', target: 20, kind: 'cumulative', metric: 'driftSeconds' },
+  { id: 'mid3', label: 'Reach the Midnight biome 3×', target: 3, kind: 'cumulative', metric: 'midnightReaches' },
+  { id: 'run6k', label: 'Score 6,000 in one run', target: 6000, kind: 'perRun', metric: 'score' },
+  { id: 'nm60', label: 'Thread 60 near-misses', target: 60, kind: 'cumulative', metric: 'nearMisses' },
+  { id: 'pu40', label: 'Collect 40 powerups', target: 40, kind: 'cumulative', metric: 'powerups' },
+  { id: 'dr60', label: 'Drift for 60s', target: 60, kind: 'cumulative', metric: 'driftSeconds' },
+  { id: 'rd3k', label: 'Drive 3,000m in one run', target: 3000, kind: 'perRun', metric: 'distance' },
+] as const;
+
+/** A rank tier. `reward.startBiome` (a biome index) is an OPTIONAL cosmetic
+ *  starting-visual unlock; `title` is bragging rights. Neither gates gameplay. */
+export interface RankDef {
+  name: string;
+  /** Total missions that must be completed to hold this rank. */
+  missionsRequired: number;
+  reward: { title: string; startBiome?: number };
+}
+
+/** The rank ladder (ascending). Every MISSION_PER_RANK missions = one rank up. */
+export const RANKS: readonly RankDef[] = [
+  { name: 'Rookie', missionsRequired: 0, reward: { title: 'Rookie' } },
+  { name: 'Cruiser', missionsRequired: 3, reward: { title: 'Cruiser', startBiome: 1 } }, // Midnight
+  { name: 'Drifter', missionsRequired: 6, reward: { title: 'Drifter', startBiome: 2 } }, // Toxic
+  { name: 'Veteran', missionsRequired: 9, reward: { title: 'Veteran', startBiome: 3 } }, // Dawn
+  { name: 'Legend', missionsRequired: 12, reward: { title: 'Legend' } },
+] as const;
+
 /** Resolve a car by id, falling back to the default if the id is unknown. */
 export function carById(id: string): CarDef {
   return CARS.find((c) => c.id === id) ?? CARS[0];

@@ -443,6 +443,110 @@ body,
     0 0 26px #ff00ff;
 }
 
+/* Mission/rank celebration lines on the WIPEOUT screen (non-intrusive). */
+.shell-crash-missions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0;
+}
+.shell-crash-mission-line {
+  font-size: clamp(12px, 3vw, 16px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: #ff8a3d;
+  text-shadow: 0 0 8px #ff6600;
+}
+
+/* --- missions panel ----------------------------------------------------- */
+.shell-rank {
+  font-size: clamp(13px, 3.2vw, 17px);
+  color: #00ffff;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.6);
+}
+.shell-rank-name {
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+.shell-missions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(360px, 86vw);
+  margin: 4px 0;
+}
+.shell-mission {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 8px;
+  align-items: center;
+}
+.shell-mission-label {
+  font-size: clamp(12px, 3vw, 15px);
+  font-weight: 700;
+  color: #ffffff;
+}
+.shell-mission-count {
+  font-size: clamp(11px, 2.6vw, 14px);
+  font-variant-numeric: tabular-nums;
+  color: #ff66ff;
+}
+.shell-mission-track {
+  grid-column: 1 / -1;
+  height: 6px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+.shell-mission-fill {
+  height: 100%;
+  background: #ff00ff;
+  box-shadow: 0 0 8px #ff00ff;
+  transition: width 0.3s ease;
+}
+.shell-mission.done .shell-mission-fill {
+  background: #00ffff;
+  box-shadow: 0 0 8px #00ffff;
+}
+.shell-mission.done .shell-mission-label {
+  color: #00ffff;
+}
+
+/* Start-biome selector (a cosmetic, rank-gated reward). */
+.shell-startbiome {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-top: 6px;
+}
+.shell-startbiome-label {
+  font-size: clamp(11px, 2.6vw, 13px);
+  letter-spacing: 0.14em;
+  opacity: 0.7;
+}
+.shell-startbiome-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.shell-sb-name {
+  min-width: 8ch;
+  text-align: center;
+  font-size: clamp(16px, 4vw, 22px);
+  font-weight: 800;
+  text-shadow: 0 0 8px #00ffff;
+}
+.shell-missions.sb-locked .shell-sb-name {
+  opacity: 0.5;
+  text-shadow: none;
+}
+.shell-sb-req {
+  min-height: 1.2em;
+  font-size: clamp(11px, 2.6vw, 14px);
+  color: #ffb86b;
+}
+
 /* "Link copied" toast (share clipboard fallback). */
 .ui-toast {
   position: absolute;

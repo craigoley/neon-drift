@@ -32,6 +32,8 @@ import { BestStore } from './storage/BestStore';
 import { SettingsStore } from './state/Settings';
 import { ProgressStore } from './state/Progress';
 import { unlockProgress } from './state/Unlocks';
+import { MissionStore } from './state/MissionStore';
+import { missionProgress, startBiomeUnlockRank } from './state/Missions';
 import { biomesSeenForDistance } from './game/Biome';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
@@ -48,6 +50,7 @@ import {
   PALETTE,
   POWERUP_DEFS,
   PowerupKind,
+  RANKS,
   STARTER_CAR_ID,
   TIMESTEP,
 } from './utils/constants';
@@ -71,6 +74,9 @@ const settings = new SettingsStore();
 
 // Cross-run progression: lifetime stats + unlocked cars (resilient store).
 const progress = new ProgressStore();
+
+// Across-run missions + rank (resilient store; layered meta, never gates play).
+const missions = new MissionStore();
 
 // Synthesized audio — resumed on the first user gesture (autoplay policy).
 const audio = new AudioEngine();
@@ -133,7 +139,8 @@ const shell = new Shell(app, settings, bestStore, audio, {
       settings.set('selectedCarId', carId);
       vehicle.applyCar(carById(carId));
     }
-    startRun(game, handlingFor(carId));
+    // The chosen starting biome is a cosmetic mission/rank reward (visual only).
+    startRun(game, handlingFor(carId), missions.startBiome());
   },
   onPause: () => {
     pause(game);
@@ -163,6 +170,43 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // Picker lock state: a persisted-unlocked car is null (selectable); otherwise
   // show its requirement + live progress. Monotonic — once earned, never locked.
   carLock: (carId) => (progress.isUnlocked(carId) ? null : unlockProgress(carId, progress.getStats())),
+  // MISSIONS panel data (read fresh each time the panel opens). All cosmetic —
+  // nothing here gates the core run.
+  missions: {
+    active: () => {
+      const st = missions.state();
+      return st.active.map((m) => missionProgress(m, st.stats));
+    },
+    rank: () => {
+      const st = missions.state();
+      const next = RANKS[st.rank + 1];
+      const nextUnlock = next
+        ? next.reward.startBiome !== undefined
+          ? `Start in ${BIOMES[next.reward.startBiome].displayName}`
+          : `Title: ${next.reward.title}`
+        : null;
+      return {
+        name: RANKS[st.rank].name,
+        completed: st.completed,
+        nextName: next ? next.name : null,
+        toNext: next ? Math.max(0, next.missionsRequired - st.completed) : 0,
+        nextUnlock,
+      };
+    },
+    startBiomes: () =>
+      BIOMES.map((b, index) => {
+        const unlocked = missions.startBiomeUnlocked(index);
+        const r = startBiomeUnlockRank(index);
+        return {
+          index,
+          name: b.displayName,
+          unlocked,
+          requirement: unlocked || r === null ? null : `Rank: ${RANKS[r].name}`,
+          selected: index === missions.startBiome(),
+        };
+      }),
+    selectStartBiome: (index: number) => missions.setStartBiome(index),
+  },
 });
 shell.showStart();
 
@@ -232,6 +276,7 @@ function frame(now: number): void {
   // Ramp boost juice: a green flash in the ramp's "go" colour.
   if (rampBoosts > 0) screenFx.pulsePickup(cssHex(OBSTACLE_DEFS[ObstacleKind.Ramp].color));
   let unlockedNames = NO_UNLOCKS;
+  let missionLines = NO_UNLOCKS;
   if (crashed) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
@@ -245,7 +290,22 @@ function frame(now: number): void {
       biomesSeen: biomesSeenForDistance(game.distance),
     });
     unlockedNames = result.newlyUnlocked.map((id) => carById(id).displayName);
-    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo, unlockedNames);
+    // Commit the run to the across-run mission/rank progression (crash included).
+    const mission = missions.commitRun({
+      nearMisses: game.score.nearMisses,
+      powerups: game.powerups.collected,
+      shields: game.runStats.shields,
+      driftSeconds: game.runStats.driftSeconds,
+      distance: game.distance,
+      score: game.score.score,
+      reachedMidnight: biomesSeenForDistance(game.distance) >= 2,
+    });
+    missionLines = [
+      ...mission.completedMissions.map((l) => `MISSION COMPLETE: ${l}`),
+      ...mission.rankUps.map((n) => `RANK UP: ${n}!`),
+      ...mission.unlocked.map((u) => `UNLOCKED: ${u}`),
+    ];
+    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo, unlockedNames, missionLines);
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
@@ -259,8 +319,8 @@ function frame(now: number): void {
     if (nearMisses > 0) audio.playNearMiss();
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
-    // Unlock fanfare over the WIPEOUT (reuses the milestone three-note chime).
-    if (unlockedNames.length > 0) audio.playMilestone();
+    // Unlock / mission / rank fanfare over the WIPEOUT (milestone three-note chime).
+    if (unlockedNames.length > 0 || missionLines.length > 0) audio.playMilestone();
   }
 
   // Milestone / biome / objective celebration: a brief, non-intrusive toast plus

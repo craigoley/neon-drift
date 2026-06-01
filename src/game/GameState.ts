@@ -36,7 +36,7 @@ import {
 } from './Powerups';
 import { createBiomeState, updateBiome, type BiomeState } from './Biome';
 import { createMilestoneState, updateMilestones, type MilestoneState } from './Milestones';
-import { POWERUPS, RAMP, VEHICLE } from '../utils/constants';
+import { BIOME_CYCLE, DRIFT_MIN_SPEED, POWERUPS, PowerupKind, RAMP, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -69,6 +69,13 @@ export interface GameState {
    *  by the composition root and passed in — the pure layer never reaches into
    *  UI/storage). Defaults to BASE_HANDLING. */
   handling: CarHandling;
+  /** Cosmetic starting-biome index (a mission/rank reward): shifts ONLY the
+   *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
+  startBiome: number;
+  /** Per-run stat accumulators the across-run missions read at run end. Only the
+   *  values not already derivable from other state live here (drift time +
+   *  shields collected). Reset each run. */
+  runStats: { driftSeconds: number; shields: number };
   /** Events produced on the most recent update — read by audio/juice. */
   lastEvents: TrafficEvents;
 }
@@ -88,6 +95,8 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     milestones: createMilestoneState(),
     score: createScoreState(),
     handling: BASE_HANDLING,
+    startBiome: 0,
+    runStats: { driftSeconds: 0, shields: 0 },
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
   };
 }
@@ -100,6 +109,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
 export function startRun(
   state: GameState,
   handling: CarHandling = state.handling,
+  startBiome: number = state.startBiome,
   seed: number = state.seed,
 ): GameState {
   state.phase = Phase.Playing;
@@ -115,6 +125,9 @@ export function startRun(
   state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.handling = handling;
+  state.startBiome = startBiome;
+  state.runStats.driftSeconds = 0;
+  state.runStats.shields = 0;
   state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
   return state;
 }
@@ -137,6 +150,8 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();
+  state.runStats.driftSeconds = 0;
+  state.runStats.shields = 0;
   state.lastEvents.crashed = false;
   state.lastEvents.nearMisses = 0;
   state.lastEvents.collected = null;
@@ -195,8 +210,13 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   state.distance += state.vehicle.speed * simDt;
   state.time += simDt;
 
+  // Drift-time accrual for the across-run drift missions (handbrake while moving).
+  if (intent.handbrake && state.vehicle.speed > DRIFT_MIN_SPEED) state.runStats.driftSeconds += simDt;
+
   updateRoad(state.road, state.distance);
-  updateBiome(state.biome, state.distance); // environment progression (pure)
+  // Biome is shifted by the cosmetic startBiome offset (visuals only — distance
+  // and difficulty are untouched, so this never affects gameplay).
+  updateBiome(state.biome, state.distance + state.startBiome * BIOME_CYCLE.span);
   updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt);
   updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
 
@@ -205,6 +225,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
   collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);
+  // Track shields collected this run (for the "collect N shields" mission).
+  if (state.lastEvents.collected === PowerupKind.Shield) state.runStats.shields += 1;
 
   // RAMP hook: a contacted boost-strip grants a flat score burst and a brief
   // over-cap speed boost (the raised cap lives on the vehicle's boostTimer).

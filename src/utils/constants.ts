@@ -368,6 +368,22 @@ export const GATE = {
   halfLength: 1.4,
 } as const;
 
+/**
+ * DAILY SLALOM mode tuning (Daily Slalom PR 1 — mode skeleton). The slalom is an
+ * endless gates-only course at a CONSTANT speed (no distance ramp), so its feel
+ * is set by two numbers: the fixed speed and the gate spacing. Reuses the GATE
+ * opening width/position randomisation for the course itself.
+ */
+export const SLALOM = {
+  /** Fixed forward speed (world units/s). A touch under the classic baseSpeedCap
+   *  (70) so the course is brisk but readable; it never ramps. Tunable by feel. */
+  constantSpeed: 64,
+  /** Distance between consecutive gates (world units). The spawn cadence is
+   *  DERIVED as gateSpacing / constantSpeed (≈ 1 gate/second at the values above),
+   *  so the spatial spacing stays fixed regardless of the timestep. Tunable. */
+  gateSpacing: 64,
+} as const;
+
 /** RAMP (beneficial boost-strip) tuning. */
 export const RAMP = {
   /** Contact box half-extents (lateral, forward) — generous so it's easy to hit

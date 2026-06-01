@@ -7,7 +7,7 @@
  */
 
 import { clamp, decay } from '../utils/math';
-import { DRIFT, ROAD, VEHICLE, type CarHandling } from '../utils/constants';
+import { DRIFT, ROAD, SLALOM, VEHICLE, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 
 export interface VehicleState {
@@ -58,14 +58,16 @@ export function updateVehicle(
   roadCenter: number,
   handling: CarHandling,
   dt: number,
+  slalom = false,
 ): VehicleState {
   // Forward: auto-accelerate toward the distance-dependent cap, scaled by the
   // car's top-speed multiplier. A live RAMP boost raises the cap by boostBonus
   // so the car can briefly out-run its normal top speed, then settles when the
-  // boost expires.
+  // boost expires. In DAILY SLALOM the speed is instead PINNED to a constant (no
+  // ramp/accel/boost) so the gate course plays at one fixed pace.
   const baseCap = speedCap(distance) * handling.speedCap;
   const cap = state.boostTimer > 0 ? baseCap + VEHICLE.boostBonus : baseCap;
-  state.speed = clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
+  state.speed = slalom ? SLALOM.constantSpeed : clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
   if (state.boostTimer > 0) state.boostTimer = Math.max(0, state.boostTimer - dt);
 
   state.drifting = intent.handbrake;
@@ -73,7 +75,9 @@ export function updateVehicle(
   // DRIFT speed cost (the trade): holding the handbrake scrubs forward speed
   // toward a floor (a fraction of the cap), so a juke costs distance/score and
   // can't just be held forever. Normal acceleration recovers it once released.
-  if (state.drifting) {
+  // Suppressed in SLALOM so the constant speed truly holds — the drift's LATERAL
+  // juke (below) still applies, so gates can still be threaded with a slide.
+  if (state.drifting && !slalom) {
     // Clamp the floor to the current speed so a drift can only ever REMOVE
     // speed — never nudge it up to the floor on the rare frame speed sits just
     // below it (the cap, and thus the floor, rises with distance).

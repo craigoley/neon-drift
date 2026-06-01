@@ -54,19 +54,19 @@ export const VEHICLE = {
   startSpeed: 45,
   /** Speed cap floor (cap at distance 0). */
   baseSpeedCap: 70,
-  /** Speed cap ceiling reached asymptotically with distance. Raised (was 240) so
-   *  long runs reach genuinely fast, reaction-testing speeds where the dodge
-   *  window is short enough that a committed DRIFT juke is required, not optional. */
-  maxSpeedCap: 280,
-  /** Distance scale over which the cap ramps from base toward max. LOWERED (was
-   *  6000) so speed escalates clearly just after the ~15s grace instead of
-   *  crawling up over ~9000m — the root "too easy / runs forever" fix. The whole
-   *  curve is `baseSpeedCap + (maxSpeedCap-baseSpeedCap)*(1-e^(-distance/this))`;
-   *  tune this single number for how fast the run gets fast. */
-  speedCapRampDistance: 3200,
-  /** Forward acceleration toward the current cap. Raised (was 18) so the car
-   *  actually reaches the higher, faster-rising cap rather than lagging it. */
-  acceleration: 24,
+  /** Speed cap ceiling reached asymptotically with distance. REBALANCED (was 280,
+   *  240 before that): 280 + the fast ramp made the run impossible by ~30s
+   *  (diagnosis: ~230 u/s at the density floor left <0.3s per dodge). 235 is still
+   *  genuinely fast but leaves a survivable dodge window. The whole curve is
+   *  `baseSpeedCap + (maxSpeedCap-baseSpeedCap)*(1-e^(-distance/speedCapRampDistance))`. */
+  maxSpeedCap: 235,
+  /** Distance scale over which the cap ramps from base toward max. RAISED (was
+   *  3200, 6000 before that): 3200 made top speed arrive by ~45s; 5200 spreads it
+   *  over minutes. Tune this single number for how fast the run gets fast. */
+  speedCapRampDistance: 5200,
+  /** Forward acceleration toward the current cap. Eased (was 24) so the early ramp
+   *  is gentle through the first ~20s learning phase before speed builds. */
+  acceleration: 19,
   /** Lateral acceleration applied by full steer input. */
   lateralAccel: 90,
   /** Per-second retained fraction of lateral velocity under normal grip. */
@@ -123,23 +123,39 @@ export const TRAFFIC = {
   /** Distance behind the player at which obstacles are culled. */
   cullBehind: 30,
   /** Seconds between spawns at the start of a run. */
-  baseSpawnInterval: 1.4,
-  /** Lowest spawn interval as difficulty ramps. Lowered (was 0.35) for denser
-   *  late-game traffic that, combined with the higher speed, forces sharp dodges. */
-  minSpawnInterval: 0.3,
+  baseSpawnInterval: 1.5,
+  /**
+   * Lowest spawn interval (the density FLOOR) as difficulty ramps. REBALANCED:
+   * was 0.3 → ~3.3 obstacles/second, which at the simultaneously-fast speed was
+   * literally undodgeable (the diagnosed "impossible by ~30s"). 0.62 → ~1.6/s is
+   * hard-but-fair — the densest the game ever gets. This is the single biggest
+   * lever on peak difficulty; raise it to make late game easier.
+   */
+  minSpawnInterval: 0.62,
   /**
    * Difficulty ramp (spawn density). For the first `rampStartDistance` world
-   * units the interval stays at `baseSpawnInterval` — a grace period (~the
-   * first 15s at starting speed) to let the player learn. Past that, the
-   * interval shrinks by `spawnRampPerUnit` per unit toward `minSpawnInterval`,
-   * so traffic meaningfully escalates the further you get.
+   * units the interval stays at `baseSpawnInterval` — a grace period (the first
+   * ~20s) to let the player learn. Past that, the interval shrinks by
+   * `spawnRampPerUnit` per unit toward `minSpawnInterval`. This is the spawn
+   * DENSITY ramp; the spawn MIX (kinds) and PACING (waves, below) ramp separately.
    */
-  rampStartDistance: 850,
+  rampStartDistance: 1100,
   /** How much the interval shrinks per world-unit travelled past the grace.
-   *  STEEPENED (was 0.0001) so density reaches its floor by ~4500m instead of
-   *  ~11350m — traffic gets genuinely dense while a run is still going, so an
-   *  average run ends in a satisfying failure rather than running forever. */
-  spawnRampPerUnit: 0.0003,
+   *  REBALANCED (was 0.0003, 0.0001 before that): 0.0003 hit the floor by ~4.5k m
+   *  (~30s) → impossible. 0.00008 reaches the floor at ~12k m (~90s), so density
+   *  escalates steadily over minutes rather than collapsing in half a minute. */
+  spawnRampPerUnit: 0.00008,
+  /**
+   * PACING WAVE — texture so a run isn't a uniform stream. A seeded sine over
+   * distance multiplies the ramped interval, giving alternating dense GAUNTLETS
+   * (factor < 1) and BREATHERS (factor > 1). The phase is derived from the run
+   * seed so different runs place their gauntlets differently; the wave is clamped
+   * by [minSpawnInterval, baseSpawnInterval] so it never beats the density cap and
+   * never dumps a brutal gauntlet at second 5 (early ramped interval is high, so
+   * even a dense wave there is mild). amplitude = peak ± fraction; wavelength is in
+   * world units (≈ one gauntlet+breather cycle). */
+  pacingAmplitude: 0.32,
+  pacingWavelength: 2000,
   /** Obstacle forward-speed range (slower than the player, so they're overtaken). */
   minSpeed: 25,
   maxSpeed: 60,

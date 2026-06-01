@@ -26,7 +26,11 @@ import {
   TRAFFIC,
 } from '../utils/constants';
 import { roadCenterAt } from './Road';
-import type { Rng } from '../utils/rng';
+import { hashNoise, type Rng } from '../utils/rng';
+
+/** Fixed hash index used to derive the per-run pacing-wave phase from the seed
+ *  (an arbitrary key, not a tuning value). */
+const PACING_PHASE_KEY = 0x70616369; // 'paci'
 
 export interface Obstacle {
   active: boolean;
@@ -125,6 +129,28 @@ export function spawnInterval(distance: number): number {
   const ramped = Math.max(0, distance - TRAFFIC.rampStartDistance);
   return clamp(
     TRAFFIC.baseSpawnInterval - ramped * TRAFFIC.spawnRampPerUnit,
+    TRAFFIC.minSpawnInterval,
+    TRAFFIC.baseSpawnInterval,
+  );
+}
+
+/**
+ * Pacing-wave multiplier on the spawn interval: a seeded sine over distance that
+ * makes a run alternate dense GAUNTLETS (factor < 1) with BREATHERS (factor > 1)
+ * instead of a uniform stream. The phase is derived from the run seed so runs
+ * place their gauntlets differently. Pure, bounded to [1 - amplitude, 1 + amplitude].
+ */
+export function pacingFactor(seed: number, distance: number): number {
+  const phase = hashNoise(seed, PACING_PHASE_KEY) * Math.PI * 2;
+  return 1 + TRAFFIC.pacingAmplitude * Math.sin((distance / TRAFFIC.pacingWavelength) * Math.PI * 2 + phase);
+}
+
+/** Effective spawn interval: the density ramp modulated by the pacing wave, then
+ *  clamped by the same [floor, base] bounds so the wave never beats the density
+ *  cap (a gauntlet can't go below minSpawnInterval) nor stalls below base. Pure. */
+export function pacedSpawnInterval(seed: number, distance: number): number {
+  return clamp(
+    spawnInterval(distance) * pacingFactor(seed, distance),
     TRAFFIC.minSpawnInterval,
     TRAFFIC.baseSpawnInterval,
   );
@@ -250,9 +276,9 @@ export function updateTraffic(
     }
   }
 
-  // Spawn on cadence.
+  // Spawn on cadence — density ramp modulated by the seeded pacing wave.
   state.sinceSpawn += dt;
-  if (state.sinceSpawn >= spawnInterval(playerDistance)) {
+  if (state.sinceSpawn >= pacedSpawnInterval(seed, playerDistance)) {
     const slot = firstInactive(state);
     if (slot) {
       slot.active = true;

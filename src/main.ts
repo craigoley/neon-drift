@@ -257,6 +257,7 @@ function frame(now: number): void {
   // screens, don't bank time in the accumulator (so resuming never fast-forwards
   // a backlog of steps).
   let nearMisses = 0;
+  let nearMissClosest = Infinity; // smallest near-miss gap across this frame's substeps (OPP-14)
   let collectedKind: PowerupKind | null = null;
   let shieldBlocked = false;
   let rampBoosts = 0;
@@ -271,6 +272,7 @@ function frame(now: number): void {
     while (accumulator >= TIMESTEP) {
       update(game, controls.intent, TIMESTEP);
       nearMisses += game.lastEvents.nearMisses;
+      nearMissClosest = Math.min(nearMissClosest, game.lastEvents.nearMissClosest ?? Infinity);
       if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
       if (game.lastEvents.shieldBlocked) shieldBlocked = true;
       rampBoosts += game.lastEvents.rampBoosts ?? 0;
@@ -289,7 +291,10 @@ function frame(now: number): void {
   // Near-miss CRESCENDO (OPP-13+04): feedback escalates across 4 combo bands —
   // restrained at low combo, an event at a high streak. The tier comes from the
   // live combo (scoring is unchanged); each channel scales by the JUICE table.
-  const nmTier = nearMisses > 0 ? nearMissTier(game.score.combo) : 0;
+  // OPP-14 tie-in: a tight GRAZE (very close pass) bumps the tier by +1 (capped),
+  // so shaving the paint punches above its combo band even at a low combo.
+  const grazeBump = nearMissClosest <= JUICE.nearMissGrazeBumpGap ? 1 : 0;
+  const nmTier = nearMisses > 0 ? Math.min(nearMissTier(game.score.combo) + grazeBump, 3) : 0;
   if (nearMisses > 0) {
     screenFx.pulseNearMiss(JUICE.nearMissEdge[nmTier]); // brighter edge at higher tier
     speedLines.burst(); // a quick whoosh streak reinforcing the near-miss/combo

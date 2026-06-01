@@ -10,6 +10,7 @@ import {
 import {
   createScoreState,
   gateBlocks,
+  grazeMultiplier,
   isRampContact,
   resolveTraffic,
   withinGateOpening,
@@ -270,9 +271,13 @@ describe('Obstacle variety — threading a MOVER pays more combo than a static p
   it('a mover near-miss bumps the combo by the mover weight; more than a static one', () => {
     const staticGain = passGain(ObstacleKind.Static);
     const moverGain = passGain(ObstacleKind.Mover);
-    expect(staticGain).toBeCloseTo(SCORING.comboStep);
-    expect(moverGain).toBeCloseTo(SCORING.comboStep * SCORING.moverNearMissWeight);
+    // Both passes happen at the SAME gap (nearMissLateral - 1), so the OPP-14
+    // graze gradient scales each equally — the mover/static RATIO is unaffected.
+    const graze = grazeMultiplier(SCORING.nearMissLateral - 1);
+    expect(staticGain).toBeCloseTo(SCORING.comboStep * graze);
+    expect(moverGain).toBeCloseTo(SCORING.comboStep * SCORING.moverNearMissWeight * graze);
     expect(moverGain).toBeGreaterThan(staticGain);
+    expect(moverGain / staticGain).toBeCloseTo(SCORING.moverNearMissWeight);
   });
 });
 

@@ -560,6 +560,9 @@ export const CAR_VIS = {
   driftGlow: 0xff2d95,
   /** Lerp speed (0–1) for the per-frame glow colour transition into/out of drift. */
   driftGlowLerp: 0.25,
+  /** Sum-of-channel distance (0–3) within which the glow snaps to its target, so
+   *  the asymptotic lerp settles instead of running a tiny step every frame. */
+  driftGlowSnap: 0.01,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */

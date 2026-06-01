@@ -799,6 +799,37 @@ export const SUN = {
 } as const;
 
 /**
+ * Roadside parallax scenery — layered neon props that stream past to sell speed
+ * and depth. Each layer is a fixed, RECYCLED ring of `count` props per side
+ * (left + right), spaced `gap` apart, sitting OUTSIDE the road at ±`offsetX`
+ * (well clear of the drivable ROAD.halfWidth = 9 so they never read as
+ * obstacles, and cyan/magenta-coded, never the orange threat hue). A layer's
+ * `parallax` (<1) makes far layers drift slower than near ones; props fade with
+ * the scene fog so they melt into the horizon haze.
+ *
+ * BOUNDED: total meshes = layers.length * count * 2 sides, allocated once; the
+ * streaming is pure index math (utils/parallax.ts), so the active count is
+ * constant for any distance (no per-frame allocation, no growth).
+ */
+export const SCENERY = {
+  layers: [
+    // Near: tall neon pylons just off the verge — the fastest parallax.
+    { kind: 'pylon', parallax: 1.0, offsetX: 13, count: 14, gap: 26, height: 7, width: 0.5, color: 0xff00ff, opacity: 0.85 },
+    // Mid: shorter light-poles set back — moderate sweep.
+    { kind: 'pole', parallax: 0.6, offsetX: 22, count: 12, gap: 40, height: 11, width: 0.7, color: 0x00ffff, opacity: 0.6 },
+    // Far: a low distant city-silhouette band — drifts slowly, sits low + wide.
+    { kind: 'block', parallax: 0.28, offsetX: 46, count: 10, gap: 80, height: 26, width: 9, color: 0x3a1d6e, opacity: 0.5 },
+  ],
+  /** Slots kept behind the camera before a prop wraps to the front (the +z
+   *  margin of the streaming window). */
+  behind: 1,
+  /** Y of each prop's base (on the grid plane). */
+  baseY: 0,
+} as const;
+
+export type SceneryLayer = (typeof SCENERY.layers)[number];
+
+/**
  * BIOMES — environmental variety so long runs feel like progress. A biome is a
  * pure palette + environment override; which one is active is driven by distance
  * in the pure layer (see game/Biome.ts), and the rendering layer lerps between

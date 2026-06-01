@@ -16,6 +16,7 @@ import { SceneManager } from './rendering/SceneManager';
 import { Environment } from './rendering/Environment';
 import { BiomeView } from './rendering/BiomeView';
 import { Starfield } from './rendering/Starfield';
+import { ParallaxScenery } from './rendering/ParallaxScenery';
 import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
 import { CarPreview } from './rendering/CarPreview';
@@ -92,6 +93,7 @@ const scene = new SceneManager(app, isTouch);
 const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
 const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
+const scenery = new ParallaxScenery(scene.scene);
 const road = new RoadRenderer(scene.scene);
 const vehicle = new VehicleRenderer(scene.scene);
 // Resolve the persisted car against the unlock state: a returning player whose
@@ -352,6 +354,7 @@ function frame(now: number): void {
   scene.updateCamera(game, realDt);
   environment.update(game.distance, scene.camera.position.x, scene.camera.position.z, realDt);
   stars.update(scene.camera.position.x, scene.camera.position.z);
+  scenery.update(game.distance, scene.camera.position.x); // bounded roadside parallax props
   biomeView.apply(game.biome); // environment palette + stars + traffic tint follow the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
@@ -381,7 +384,7 @@ function frame(now: number): void {
   hud.sync(game, bestStore.best);
   trailInfo.active = trail.activeCount();
   trailInfo.cap = trail.capacity();
-  debug.update(game, telemetry, hud.comboText(), trailInfo);
+  debug.update(game, telemetry, hud.comboText(), trailInfo, scenery.activeCount);
 
   post.render();
   requestAnimationFrame(frame);

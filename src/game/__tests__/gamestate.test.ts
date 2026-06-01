@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { createGameState, Phase, pause, resume, returnToMenu, startRun, update } from '../GameState';
+import { createGameState, GameMode, isSlalom, Phase, pause, resume, returnToMenu, startRun, update } from '../GameState';
 import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad } from '../Road';
 import { activeObstacleCount, createTrafficState, updateTraffic } from '../Traffic';
 import { createIntent } from '../Input';
 import { Rng } from '../../utils/rng';
-import { TIMESTEP, TRAFFIC } from '../../utils/constants';
+import { ObstacleKind, SLALOM, TIMESTEP, TRAFFIC } from '../../utils/constants';
 
 describe('GameState — full-loop integration & bounded pools', () => {
   it('road + traffic pools plateau (never climb) over a long surviving run', () => {
@@ -135,24 +135,47 @@ describe('GameState — menu/pause state machine', () => {
     expect(game.score.score).toBe(0);
   });
 
-  it('startRun threads the isDaily flag + an explicit seed (OPP-09 daily run)', () => {
+  it('startRun threads the run mode + an explicit seed (daily slalom run)', () => {
     const game = createGameState(1);
-    // A normal run is not daily.
+    // A normal run is classic; isSlalom is false.
     startRun(game);
-    expect(game.isDaily).toBe(false);
+    expect(game.mode).toBe(GameMode.Classic);
+    expect(isSlalom(game)).toBe(false);
 
-    // A daily run carries the flag (so run-end routes to the daily store) and the
-    // supplied fixed seed (so the same date replays the SAME road).
+    // A daily run carries mode='dailySlalom' (so run-end routes to the daily store
+    // and the sim branches) and the supplied fixed seed (same date = same road).
     const dailySeed = 2392771152; // dailySeed(2026-05-31), see daily_seed.test.ts
-    startRun(game, undefined, undefined, dailySeed, undefined, true);
-    expect(game.isDaily).toBe(true);
+    startRun(game, undefined, undefined, dailySeed, undefined, GameMode.DailySlalom);
+    expect(game.mode).toBe(GameMode.DailySlalom);
+    expect(isSlalom(game)).toBe(true);
     expect(game.seed).toBe(dailySeed);
 
     // Determinism: re-running the same seed reproduces an identical road layout.
     const curvesA = game.road.segments.map((s) => s.curve);
-    startRun(game, undefined, undefined, dailySeed, undefined, true);
+    startRun(game, undefined, undefined, dailySeed, undefined, GameMode.DailySlalom);
     const curvesB = game.road.segments.map((s) => s.curve);
     expect(curvesB).toEqual(curvesA);
+  });
+
+  it('slalom mode pins speed to the constant every step (no ramp, no drift scrub)', () => {
+    const game = startRun(createGameState(7), undefined, undefined, 7, undefined, GameMode.DailySlalom);
+    // Drift held the whole time — in classic this would scrub speed; in slalom the
+    // constant must hold regardless (only the lateral juke survives).
+    const drifting = { ...intent, handbrake: true };
+    for (let i = 0; i < 600; i++) {
+      update(game, drifting, TIMESTEP);
+      if (game.phase !== Phase.Playing) break; // a straight run eventually clips a gate
+      expect(game.vehicle.speed).toBeCloseTo(SLALOM.constantSpeed, 6);
+    }
+  });
+
+  it('slalom mode spawns ONLY gates (zero static/mover/ramp traffic)', () => {
+    const game = startRun(createGameState(13), undefined, undefined, 13, undefined, GameMode.DailySlalom);
+    for (let i = 0; i < 1200; i++) update(game, intent, TIMESTEP);
+    const active = game.traffic.pool.filter((o) => o.active);
+    expect(active.length).toBeGreaterThan(0); // gates are streaming
+    for (const o of active) expect(o.kind).toBe(ObstacleKind.Gate);
+    expect(game.traffic.spawned).toBeGreaterThan(0);
   });
 
   it('pause halts the sim; resume continues from the same spot', () => {

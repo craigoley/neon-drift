@@ -23,6 +23,7 @@ import {
   ObstacleKind,
   OPENING_SEED,
   ROAD,
+  SLALOM,
   TRAFFIC,
 } from '../utils/constants';
 import { roadCenterAt } from './Road';
@@ -261,6 +262,7 @@ export function updateTraffic(
   seed: number,
   playerDistance: number,
   dt: number,
+  slalom = false,
 ): TrafficState {
   // Move + resolve lateral against the curve + cull.
   const cullLine = playerDistance - TRAFFIC.cullBehind;
@@ -276,15 +278,21 @@ export function updateTraffic(
     }
   }
 
-  // Spawn on cadence — density ramp modulated by the seeded pacing wave.
+  // Spawn on cadence. CLASSIC: distance-ramped density modulated by the seeded
+  // pacing wave, with a per-distance weighted kind mix. SLALOM: a CONSTANT cadence
+  // (gateSpacing / constantSpeed → fixed spatial spacing) spawning ONLY gates —
+  // bypassing the weighted mix and the gate startDistance gate. The gate config
+  // (configureForKind) still randomises opening width + position per gate, so the
+  // course varies; that's the slalom.
   state.sinceSpawn += dt;
-  if (state.sinceSpawn >= pacedSpawnInterval(seed, playerDistance)) {
+  const interval = slalom ? SLALOM.gateSpacing / SLALOM.constantSpeed : pacedSpawnInterval(seed, playerDistance);
+  if (state.sinceSpawn >= interval) {
     const slot = firstInactive(state);
     if (slot) {
       slot.active = true;
       slot.id = state.nextId++;
-      // Pick a behaviour by the distance-scaled mix, then configure the slot.
-      configureForKind(slot, pickKind(rng, playerDistance), rng);
+      const kind = slalom ? ObstacleKind.Gate : pickKind(rng, playerDistance);
+      configureForKind(slot, kind, rng);
       slot.distance = playerDistance + TRAFFIC.spawnAhead;
       slot.lateral = resolveLateral(slot, seed);
       slot.passed = false;

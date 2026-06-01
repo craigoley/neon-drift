@@ -8,7 +8,7 @@
  */
 
 import './style.css';
-import { createGameState, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
+import { createGameState, GameMode, isSlalom, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
 import { nearMissTier } from './game/Scoring';
 import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
@@ -177,13 +177,14 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     // Fresh random seed each run → a genuinely different course every time.
     startRun(game, handlingFor(carId), missions.startBiome(), randomSeed(), scoringFor(carId));
   },
-  // OPP-09: start TODAY'S daily challenge — same fixed seed all day (replayable),
-  // and flagged isDaily=true so the run-end routes its result to the daily store,
-  // not the main leaderboard. Uses the player's LOCAL date (see dailySeed).
+  // OPP-09 / Daily Slalom: start TODAY'S daily challenge — same fixed seed all day
+  // (replayable). mode='dailySlalom' makes the sim a constant-speed, gates-only
+  // slalom AND routes the run-end result to the daily store (not the main
+  // leaderboard). Uses the player's LOCAL date (see dailySeed).
   onPlayDaily: () => {
     audio.setMuted(false);
     const carId = resolvePlayCarId();
-    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), true);
+    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), GameMode.DailySlalom);
   },
   onPause: () => {
     pause(game);
@@ -351,7 +352,7 @@ function frame(now: number): void {
     let placement: RunPlacement | null = null;
     let dailyResult: DailyResult | null = null;
     let bestForCrash = leaderboard.bestRun();
-    if (game.isDaily) {
+    if (isSlalom(game)) {
       dailyResult = daily.submitDaily(dailyDateKey(new Date()), game.score.score, game.distance, carIdNow);
       bestForCrash = { distance: dailyResult.bestDistance, score: dailyResult.bestScore };
     } else {

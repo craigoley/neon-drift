@@ -47,6 +47,25 @@ export const Phase = {
 } as const;
 export type Phase = (typeof Phase)[keyof typeof Phase];
 
+/**
+ * Per-run game MODE. 'classic' is the normal endless racer (every system's
+ * single path, unchanged). 'dailySlalom' is the Daily Challenge re-imagined as an
+ * endless gates-only slalom at constant speed (Daily Slalom PRs). The mode is set
+ * once at startRun and read by the sim via the `isSlalom` predicate; it replaces
+ * the old sim-inert `isDaily` flag (the daily challenge IS the slalom now).
+ */
+export const GameMode = {
+  Classic: 'classic',
+  DailySlalom: 'dailySlalom',
+} as const;
+export type GameMode = (typeof GameMode)[keyof typeof GameMode];
+
+/** True when the run is the Daily Slalom — the single predicate the sim branches
+ *  on, so behaviour code never scatters raw string compares. */
+export function isSlalom(state: GameState): boolean {
+  return state.mode === GameMode.DailySlalom;
+}
+
 export interface GameState {
   phase: Phase;
   seed: number;
@@ -74,11 +93,11 @@ export interface GameState {
    *  Separate from handling (physics): this scales the combo build rate +
    *  survival window. Defaults to BASE_SCORING (neutral 1/1). */
   scoring: CarScoring;
-  /** True if this run is a DAILY CHALLENGE (OPP-09) — started on today's fixed
-   *  date-seed. Pure run-intent flag the composition root sets at startRun and
-   *  reads at run-end to route the result to the daily store (NOT the main
-   *  leaderboard). Does not affect the sim. Defaults to false (a normal run). */
-  isDaily: boolean;
+  /** This run's MODE (set at startRun). 'classic' = the normal racer; 'dailySlalom'
+   *  = the Daily Challenge gates-only slalom (constant speed). The composition
+   *  root routes the run-end result to the daily store for 'dailySlalom' (it's
+   *  today's fixed-seed daily), and the sim branches on it via isSlalom(). */
+  mode: GameMode;
   /** Cosmetic starting-biome index (a mission/rank reward): shifts ONLY the
    *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
   startBiome: number;
@@ -106,7 +125,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     score: createScoreState(),
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
-    isDaily: false,
+    mode: GameMode.Classic,
     startBiome: 0,
     runStats: { driftSeconds: 0, shields: 0 },
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
@@ -124,7 +143,7 @@ export function startRun(
   startBiome: number = state.startBiome,
   seed: number = state.seed,
   scoring: CarScoring = state.scoring,
-  isDaily = false,
+  mode: GameMode = GameMode.Classic,
 ): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
@@ -134,14 +153,16 @@ export function startRun(
   state.vehicle = createVehicleState();
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
-  seedOpeningObstacle(state.traffic, seed); // one easy obstacle so the opening isn't empty (fires every run)
+  // Classic seeds one easy static obstacle so the opening isn't empty road. The
+  // slalom is gates-only (a static here would violate that), so it's skipped.
+  if (mode !== GameMode.DailySlalom) seedOpeningObstacle(state.traffic, seed);
   state.powerups = createPowerupState(seed);
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.handling = handling;
   state.scoring = scoring;
-  state.isDaily = isDaily;
+  state.mode = mode;
   state.startBiome = startBiome;
   state.runStats.driftSeconds = 0;
   state.runStats.shields = 0;
@@ -224,7 +245,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
 
   // The drivable corridor follows the road's curve at the player's position.
   const roadCenter = roadCenterAt(state.seed, state.distance);
-  updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, simDt);
+  const slalom = isSlalom(state);
+  updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, simDt, slalom);
   state.distance += state.vehicle.speed * simDt;
   state.time += simDt;
 
@@ -235,7 +257,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   // Biome is shifted by the cosmetic startBiome offset (visuals only — distance
   // and difficulty are untouched, so this never affects gameplay).
   updateBiome(state.biome, state.distance + state.startBiome * BIOME_CYCLE.span);
-  updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt);
+  updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt, slalom);
   updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
 
   // Writes into the pre-allocated lastEvents object (no per-frame allocation).

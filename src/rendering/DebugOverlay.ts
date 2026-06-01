@@ -62,6 +62,7 @@ export class DebugOverlay {
     telemetry: Telemetry,
     hudComboText: string,
     trail?: { active: number; cap: number },
+    sceneryActive = 0,
   ): void {
     if (!this.visible) return;
     const road = game.road;
@@ -103,6 +104,7 @@ export class DebugOverlay {
       `R${activeObstacleCountByKind(traffic, ObstacleKind.Ramp)}  boost ${game.vehicle.boostTimer.toFixed(1)}s\n` +
       `pup   active ${activePickupCount(powerups)}/${powerups.pool.length}  spawned ${powerups.spawned}  got ${powerups.collected}  culled ${powerups.culled}\n` +
       `juice trail ${trail ? `${trail.active}/${trail.cap}` : '--'} (bounded, fixed buffer)\n` +
+      `scen  active ${sceneryActive} (fixed pool — bounded)\n` +
       `fx    shield ${fx.shield ? 'Y' : 'n'}${fx.invulnTimer > 0 ? `(iv ${fx.invulnTimer.toFixed(1)})` : ''}  slow ${fx.slowMoTimer.toFixed(1)}  x2 ${fx.scoreBoostTimer.toFixed(1)}  mag ${fx.magnetTimer.toFixed(1)}\n` +
       `-- COMBO FUNNEL (raw) ----------------\n` +
       `1 evaluated/frame   ${ev.evaluated ?? 0}\n` +

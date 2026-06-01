@@ -3,6 +3,12 @@
  * in-game (VehicleRenderer) and in the car-picker preview (CarPreview), so the
  * geometry and the per-car cosmetic mapping live in exactly one place.
  *
+ * Each car has its OWN silhouette (see CarShape / `shape` in CARS): the builder
+ * is parameterized per car so the geometry telegraphs the handling — speed cars
+ * are long/low/sharp-nosed, grip cars wide/planted/blunt, drift cars short/tall/
+ * compact. The collision box is STILL CAR_VIS for every car (gameplay fairness
+ * lives in `handling`); only the visual shape changes.
+ *
  * Structure (all generated, NO imported models/textures):
  *   group                      outer transform (position = lateral)
  *   ├─ groundGlow              flat additive blob UNDER the car (stays flat —
@@ -13,12 +19,12 @@
  *      ├─ 4 wheels + edges     octagonal prisms with glowing rims
  *      └─ 2 side accent strips thin emissive lines in the accent colour
  *
- * Each car's BODY colour is a deep but clearly-hued tint of its signature (see
- * CARS in constants.ts), so the whole silhouette carries the identity colour
- * instead of reading as the same near-black shape for every car. Cosmetic
- * mapping (`applyCar`): body→hull/cabin/wheel fill, glow→all neon edge lines +
- * ground glow, accent→side strips. The edge material is exposed so
- * VehicleRenderer can lerp it toward the hot drift colour.
+ * Cosmetic mapping (`applyCar`): body→hull/cabin/wheel fill, glow→all neon edge
+ * lines + ground glow, accent→side strips. `applyCar` ALSO rebuilds the geometry
+ * when the car's shape changes (car-switch only — never per frame), keeping the
+ * `chassis`/`group` and material references stable so VehicleRenderer.sync keeps
+ * working. The edge material is exposed so the renderer can lerp it toward the
+ * hot drift colour.
  *
  * The ground glow is PROPERLY transparent: additive blending, depthWrite OFF,
  * low opacity. There are deliberately NO headlights — forward light cones/quads
@@ -28,7 +34,7 @@
  */
 
 import * as THREE from 'three';
-import { CAR_GEO, CAR_VIS, PALETTE, type CarDef } from '../utils/constants';
+import { BASE_CAR_SHAPE, CAR_GEO, CAR_VIS, PALETTE, carShape, type CarDef, type CarShape } from '../utils/constants';
 
 /** A tapered hexahedron (lofted box): rear face wider than front, top inset. */
 function taperedHull(
@@ -124,14 +130,14 @@ export class CarMesh {
   private readonly bodyMat: THREE.MeshBasicMaterial;
   private readonly accentLineMat: THREE.LineBasicMaterial;
   private readonly groundGlowMat: THREE.MeshBasicMaterial;
-  private readonly geometries: THREE.BufferGeometry[] = [];
+  /** Shape-independent ground-glow geometry (disposed only on full dispose). */
+  private readonly groundGlowGeo: THREE.BufferGeometry;
+  /** Geometry owned by the CURRENT silhouette — freed + replaced on a reshape. */
+  private geometries: THREE.BufferGeometry[] = [];
+  /** The shape the chassis geometry was last built for (skip rebuild if same). */
+  private builtShape: CarShape;
 
-  constructor() {
-    const { width, height, length } = CAR_VIS;
-    const halfW = width / 2;
-    const halfL = length / 2;
-    const G = CAR_GEO;
-
+  constructor(car?: CarDef) {
     this.bodyMat = new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple, side: THREE.DoubleSide });
     this.edgesMat = new THREE.LineBasicMaterial({ color: PALETTE.cyan });
     this.accentLineMat = new THREE.LineBasicMaterial({
@@ -142,28 +148,57 @@ export class CarMesh {
     this.groundGlowMat = new THREE.MeshBasicMaterial({
       color: PALETTE.cyan,
       transparent: true,
-      opacity: G.groundGlow.opacity,
+      opacity: CAR_GEO.groundGlow.opacity,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       fog: false,
     });
 
-    const wheelR = height * G.wheels.radiusFraction;
+    // Ground glow: built once (shape-independent), a sibling of the chassis so a
+    // reshape never touches it and body roll never tilts it.
+    this.groundGlowGeo = new THREE.CircleGeometry(
+      CAR_VIS.width * CAR_GEO.groundGlow.radiusMul,
+      CAR_GEO.groundGlow.segments,
+    );
+    const groundGlow = new THREE.Mesh(this.groundGlowGeo, this.groundGlowMat);
+    groundGlow.rotation.x = -Math.PI / 2;
+    groundGlow.scale.z = CAR_GEO.groundGlow.lengthMul;
+    groundGlow.position.y = CAR_GEO.groundGlow.y;
+    this.group.add(groundGlow, this.chassis);
+
+    // Build the chassis for this car's silhouette, then apply its colours.
+    const shape = car ? carShape(car) : BASE_CAR_SHAPE;
+    this.builtShape = shape;
+    this.build(shape);
+    if (car) this.applyColours(car);
+  }
+
+  /** Build the chassis (hull + cabin + wheels + strips) for a given silhouette.
+   *  Clears any previous chassis geometry first. */
+  private build(shape: CarShape): void {
+    const width = CAR_VIS.width * shape.widthMul;
+    const height = CAR_VIS.height * shape.heightMul;
+    const length = CAR_VIS.length * shape.lengthMul;
+    const halfW = width / 2;
+    const halfL = length / 2;
+    const G = CAR_GEO;
+
+    const wheelR = height * G.wheels.radiusFraction * shape.wheelRadiusMul;
     const rideHeight = wheelR * G.wheels.rideHeightFraction;
 
-    // --- Lower hull (tapered wedge) ---
+    // --- Lower hull (tapered wedge; nose width = shape.noseFraction of rear) ---
     const hullH = height * G.hull.heightFraction;
     const rearHW = halfW * G.hull.rearWidthFraction;
-    const frontHW = halfW * G.hull.frontWidthFraction;
+    const frontHW = halfW * shape.noseFraction;
     const hullGeo = taperedHull(rearHW, frontHW, halfL, rideHeight, hullH, G.hull.topInsetFraction);
     this.addBody(hullGeo, 0);
 
     // --- Cabin (raked greenhouse, set back toward the rear) ---
     const hullTopY = rideHeight + hullH;
     const cabinHalfW = rearHW * (1 - G.hull.topInsetFraction) * G.cabin.widthFraction;
-    const cabinHalfL = halfL * G.cabin.lengthFraction;
-    const cabinH = height * G.cabin.heightFraction;
-    const cabinZ = halfL * G.cabin.rearOffsetFraction; // + = toward rear
+    const cabinHalfL = halfL * shape.cabinLengthFraction;
+    const cabinH = height * shape.cabinHeightFraction;
+    const cabinZ = halfL * shape.cabinRearOffset; // + = toward rear
     const cabinGeo = cabin(cabinHalfW, cabinHalfL, hullTopY, cabinH, G.cabin.windshieldRake);
     this.addBody(cabinGeo, cabinZ);
 
@@ -195,10 +230,7 @@ export class CarMesh {
       const stripZ = halfL * G.sideStrips.longitudinalFraction;
       stripGeo.setAttribute(
         'position',
-        new THREE.Float32BufferAttribute(
-          [xRear, stripY, stripZ, xFront, stripY, -stripZ],
-          3,
-        ),
+        new THREE.Float32BufferAttribute([xRear, stripY, stripZ, xFront, stripY, -stripZ], 3),
       );
       this.geometries.push(stripGeo);
       this.chassis.add(new THREE.LineSegments(stripGeo, this.accentLineMat));
@@ -206,16 +238,6 @@ export class CarMesh {
 
     // NOTE: no headlights — forward light quads/cones regressed to opaque
     // artifacts twice (#13, #42), so they were removed entirely.
-
-    // --- Ground glow (flat blob under the car; sibling of chassis) ---
-    const glowGeo = new THREE.CircleGeometry(width * G.groundGlow.radiusMul, G.groundGlow.segments);
-    this.geometries.push(glowGeo);
-    const groundGlow = new THREE.Mesh(glowGeo, this.groundGlowMat);
-    groundGlow.rotation.x = -Math.PI / 2;
-    groundGlow.scale.z = G.groundGlow.lengthMul;
-    groundGlow.position.y = G.groundGlow.y;
-
-    this.group.add(groundGlow, this.chassis);
   }
 
   /** Add a body mesh + its neon edge outline (sharing bodyMat/edgesMat), both
@@ -232,9 +254,30 @@ export class CarMesh {
     return mesh;
   }
 
-  /** Apply a car's cosmetic colours: body (deep signature tint), neon glow
-   *  (edges + ground glow), accent (side strips). */
+  /** Remove the current chassis meshes and dispose their geometry (keeps the
+   *  shared materials, the chassis group, and the ground glow). Used before
+   *  rebuilding a new shape. Each geometry is tracked in `this.geometries`. */
+  private clearChassis(): void {
+    this.chassis.clear();
+    for (const g of this.geometries) g.dispose();
+    this.geometries = [];
+  }
+
+  /** Apply a car's cosmetic colours AND silhouette. Colours are always set;
+   *  geometry is rebuilt only when the car's shape differs from the current one
+   *  (car-switch / picker-cycle — never per frame). */
   applyCar(car: CarDef): void {
+    const shape = carShape(car);
+    if (shape !== this.builtShape) {
+      this.clearChassis();
+      this.build(shape);
+      this.builtShape = shape;
+    }
+    this.applyColours(car);
+  }
+
+  /** Set the material colours from a car's cosmetic (no geometry work). */
+  private applyColours(car: CarDef): void {
     this.bodyMat.color.setHex(car.cosmetic.body);
     this.edgesMat.color.setHex(car.cosmetic.glow);
     this.groundGlowMat.color.setHex(car.cosmetic.glow);
@@ -244,6 +287,7 @@ export class CarMesh {
   /** Free all owned geometry + materials (CarPreview calls this on teardown). */
   dispose(): void {
     for (const g of this.geometries) g.dispose();
+    this.groundGlowGeo.dispose();
     this.bodyMat.dispose();
     this.edgesMat.dispose();
     this.accentLineMat.dispose();

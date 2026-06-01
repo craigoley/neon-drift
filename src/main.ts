@@ -97,14 +97,15 @@ const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
 const scenery = new ParallaxScenery(scene.scene);
 const road = new RoadRenderer(scene.scene);
-const vehicle = new VehicleRenderer(scene.scene);
 // Resolve the persisted car against the unlock state: a returning player whose
 // saved selection is now locked (re-gated since they last played) snaps back to
 // the always-free starter — so the menu/picker never open on a locked car.
 if (!progress.isUnlocked(settings.get('selectedCarId'))) {
   settings.set('selectedCarId', STARTER_CAR_ID);
 }
-vehicle.applyCar(carById(settings.get('selectedCarId'))); // persisted (validated) cosmetic
+// Seed the renderer with the persisted car so the initial silhouette + colours
+// are correct from the first frame (no flash of the base shape).
+const vehicle = new VehicleRenderer(scene.scene, carById(settings.get('selectedCarId')));
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic
@@ -168,8 +169,7 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // exit — never runs behind the game).
   onCarPickerEnter: (container, carId) => {
     carPreview?.dispose();
-    carPreview = new CarPreview(container);
-    carPreview.setCar(carById(carId));
+    carPreview = new CarPreview(container, carById(carId));
   },
   onCarPickerCar: (carId) => carPreview?.setCar(carById(carId)),
   onCarPickerExit: () => {

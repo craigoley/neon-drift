@@ -38,8 +38,13 @@ export class ParallaxScenery {
       });
       const mesh = new THREE.InstancedMesh(geo, mat, layer.count * 2);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-      // The streaming window keeps every instance near the camera; frustum
-      // culling the whole mesh is fine but per-instance is moot — leave on.
+      // Disable frustum culling (matching TrafficRenderer / SpeedLines /
+      // Starfield): an InstancedMesh's auto bounding sphere is derived from the
+      // GEOMETRY (one box at the origin), not the instance matrices — which here
+      // span z ∈ [-640, 160] — so leaving culling on can wrongly cull the whole
+      // layer depending on camera orientation. The streaming window is bounded
+      // and always near the camera, so skipping the cull test is cheap + correct.
+      mesh.frustumCulled = false;
       this.geos.push(geo);
       this.mats.push(mat);
       this.meshes.push(mesh);

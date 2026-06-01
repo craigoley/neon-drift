@@ -8,14 +8,21 @@ describe('parallax scenery — bounded streaming window', () => {
 
   it('every slot stays inside the fixed z-window for ANY travelled distance', () => {
     const { min, max } = parallaxZRange(gap, count, behind);
-    // Sweep a huge distance range (well past any real run) at a fine step.
-    for (let distance = 0; distance <= 200000; distance += 7.3) {
+    // Aggregate the observed extremes across a wide distance sweep and assert
+    // ONCE (not per-iteration) so the test is fast — ~766k expect() calls here
+    // tripped vitest's 5s per-test timeout. A coarse step still exercises the
+    // wrap boundary thoroughly because gap (26) and step (3.1) are incommensurate.
+    let lo = Infinity;
+    let hi = -Infinity;
+    for (let distance = 0; distance <= 200000; distance += 3.1) {
       for (let i = 0; i < count; i++) {
         const z = parallaxRenderZ(distance, 1, gap, i, behind);
-        expect(z).toBeGreaterThanOrEqual(min - 1e-6);
-        expect(z).toBeLessThanOrEqual(max + 1e-6);
+        if (z < lo) lo = z;
+        if (z > hi) hi = z;
       }
     }
+    expect(lo).toBeGreaterThanOrEqual(min - 1e-6);
+    expect(hi).toBeLessThanOrEqual(max + 1e-6);
   });
 
   it('the window width equals count*gap — a fixed-size pool, never growing', () => {

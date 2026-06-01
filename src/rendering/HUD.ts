@@ -7,7 +7,7 @@
  */
 
 import type { GameState } from '../game/GameState';
-import { Phase } from '../game/GameState';
+import { isSlalom, Phase } from '../game/GameState';
 import type { PowerupEffects } from '../game/Powerups';
 import {
   cssHex,
@@ -146,14 +146,29 @@ export class HUD {
     this.objectives.style.display = playing ? 'flex' : 'none';
 
     this.speedEl.textContent = `${Math.round(game.vehicle.speed)} km/s`;
-    this.distEl.textContent = `${Math.round(game.distance)} m`;
-    this.scoreEl.textContent = `${Math.round(game.score.score)}`;
-    this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
-    this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
-    // Tier-up celebration: a brief scale/glow pulse when the multiplier climbs.
-    if (game.score.combo > this.lastCombo + 1e-6) this.pulseCombo();
-    this.lastCombo = game.score.combo;
-    this.bestEl.textContent = `best ${Math.round(best.score)}`;
+    if (isSlalom(game)) {
+      // DAILY SLALOM readouts: the event-driven score, the clean-streak multiplier
+      // (the dominant term — pulses as it climbs), and gates threaded. The classic
+      // combo/distance/best aren't meaningful here; the classic best is hidden
+      // (the daily best lives on the daily screen). (Lives indicator → PR 3.)
+      const s = game.slalomScore;
+      this.distEl.textContent = `${s.gatesThreaded} gates`;
+      this.scoreEl.textContent = `${Math.round(s.score)}`;
+      this.comboEl.textContent = `CLEAN x${s.cleanMultiplier}`;
+      this.comboEl.style.opacity = s.cleanMultiplier > 1 ? '1' : '0.6';
+      if (s.cleanMultiplier > this.lastCombo + 1e-6) this.pulseCombo();
+      this.lastCombo = s.cleanMultiplier;
+      this.bestEl.textContent = '';
+    } else {
+      this.distEl.textContent = `${Math.round(game.distance)} m`;
+      this.scoreEl.textContent = `${Math.round(game.score.score)}`;
+      this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
+      this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
+      // Tier-up celebration: a brief scale/glow pulse when the multiplier climbs.
+      if (game.score.combo > this.lastCombo + 1e-6) this.pulseCombo();
+      this.lastCombo = game.score.combo;
+      this.bestEl.textContent = `best ${Math.round(best.score)}`;
+    }
 
     this.syncPowerups(game.powerups.effects);
     this.syncObjectives(game);

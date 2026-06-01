@@ -58,6 +58,7 @@ import {
   PowerupKind,
   RANKS,
   scoringFor,
+  SLALOM_FX,
   STARTER_CAR_ID,
   TIMESTEP,
 } from './utils/constants';
@@ -287,6 +288,9 @@ function frame(now: number): void {
   // a backlog of steps).
   let nearMisses = 0;
   let nearMissClosest = Infinity; // smallest near-miss gap across this frame's substeps (OPP-14)
+  let gateThreads = 0; // clean gate threads this frame (Daily Slalom feedback)
+  let gateCenteredness = 0; // the latest thread's centeredness (0 edge → 1 centre)
+  let gateMilestone = false; // a clean-streak milestone was crossed this frame
   let collectedKind: PowerupKind | null = null;
   let shieldBlocked = false;
   let rampBoosts = 0;
@@ -302,6 +306,11 @@ function frame(now: number): void {
       update(game, controls.intent, TIMESTEP);
       nearMisses += game.lastEvents.nearMisses;
       nearMissClosest = Math.min(nearMissClosest, game.lastEvents.nearMissClosest ?? Infinity);
+      if (game.lastEvents.gateThreaded) {
+        gateThreads += 1;
+        gateCenteredness = game.lastEvents.gateCenteredness ?? 0;
+        if (game.lastEvents.gateMilestone) gateMilestone = true;
+      }
       if (game.lastEvents.collected) collectedKind = game.lastEvents.collected;
       if (game.lastEvents.shieldBlocked) shieldBlocked = true;
       rampBoosts += game.lastEvents.rampBoosts ?? 0;
@@ -333,6 +342,24 @@ function frame(now: number): void {
     if (nmTier >= JUICE.nearMissCalloutTier) hud.showNearMiss(JUICE.nearMissCalloutText[nmTier]);
     if (nmTier >= JUICE.nearMissCaTier) post.pulseAberration(POSTFX.aberrationPulsePeak); // top tier only
   }
+  // DAILY SLALOM feedback — its OWN signal (gate threads), NOT the near-miss path.
+  // PER-GATE is deliberately SUBTLE (fires ~every second): a light edge pulse +
+  // a chime, both scaled by how centred the thread was. NO per-gate shake or
+  // slow-mo (that constant heaviness was the problem we removed with gate near-
+  // misses). A STREAK MILESTONE is the loud, earned moment: a bright pulse + a
+  // small one-off shake + the milestone fanfare + a callout. (A miss is the crash
+  // sting, below.)
+  if (gateThreads > 0) {
+    const c = gateCenteredness; // already clamped 0..1 at detection
+    screenFx.pulseNearMiss(SLALOM_FX.gatePulseMin + (SLALOM_FX.gatePulseMax - SLALOM_FX.gatePulseMin) * c);
+    audio.playNearMiss(SLALOM_FX.gatePitchMin + (SLALOM_FX.gatePitchMax - SLALOM_FX.gatePitchMin) * c);
+    if (gateMilestone) {
+      screenFx.pulseNearMiss(SLALOM_FX.milestonePulse);
+      scene.addShake(SLALOM_FX.milestoneShake);
+      audio.playMilestone();
+      hud.showNearMiss(`CLEAN x${game.slalomScore.cleanMultiplier}`);
+    }
+  }
   // Powerup collection juice: a screen glow in the pickup's colour. A shield
   // absorbing a crash flashes the shield colour ("saved!").
   if (collectedKind) screenFx.pulsePickup(cssHex(POWERUP_DEFS[collectedKind].color));
@@ -353,7 +380,8 @@ function frame(now: number): void {
     let dailyResult: DailyResult | null = null;
     let bestForCrash = leaderboard.bestRun();
     if (isSlalom(game)) {
-      dailyResult = daily.submitDaily(dailyDateKey(new Date()), game.score.score, game.distance, carIdNow);
+      // Daily Slalom submits its OWN event-driven score (not the classic integral).
+      dailyResult = daily.submitDaily(dailyDateKey(new Date()), game.slalomScore.score, game.distance, carIdNow);
       bestForCrash = { distance: dailyResult.bestDistance, score: dailyResult.bestScore };
     } else {
       placement = leaderboard.submit({

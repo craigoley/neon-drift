@@ -385,6 +385,54 @@ export const SLALOM = {
   gateSpacing: 64,
 } as const;
 
+/**
+ * DAILY SLALOM scoring (Daily Slalom PR 2). Per gate threaded:
+ *   gatePoints = base × accuracyBonus × cleanMultiplier
+ * where accuracyBonus = 1 + accuracyMaxBonus × centeredness (1.0 at the opening
+ * edge → 1+accuracyMaxBonus dead-centre), and cleanMultiplier climbs by cleanStep
+ * per consecutive clean gate (capped at cleanMax) and RESETS to cleanStart on a
+ * miss. Clean-survival is the dominant (multiplicative) term — the reason to keep
+ * a streak alive. The final daily score is the sum of gatePoints. No magic numbers.
+ */
+export const DAILY_SCORING = {
+  /** Flat per-gate floor — the endurance points you bank for simply surviving. */
+  base: 100,
+  /** Max accuracy bonus: a dead-centre thread scores (1 + this)× a scrape. */
+  accuracyMaxBonus: 1.0,
+  /** cleanMultiplier starts here (first clean gate scores at this). */
+  cleanStart: 1,
+  /** Increment to cleanMultiplier per consecutive clean gate. */
+  cleanStep: 1,
+  /** Cap on cleanMultiplier — a long clean streak tops out here. */
+  cleanMax: 8,
+  /** A streak MILESTONE is crossed each time cleanMultiplier passes a multiple of
+   *  this (e.g. ×4 and ×8 at step 1 / cap 8) — the rare, earned escalation point.
+   *  A scoring-state fact (the pure layer flags the crossing); the feedback layer
+   *  reacts with SLALOM_FX intensities. */
+  milestoneStep: 4,
+} as const;
+
+/**
+ * DAILY SLALOM feedback (Daily Slalom PR 2). Deliberately split: PER-GATE feedback
+ * is SUBTLE (it fires every ~second — heavy feedback here was the noise problem we
+ * removed with gate near-misses), while STREAK MILESTONES are pronounced (rare,
+ * earned). A miss is the crash sting (it ends the run this PR). No per-gate shake
+ * or slow-mo.
+ */
+export const SLALOM_FX = {
+  /** Per-gate edge-glow pulse intensity (0..1), lerped by centeredness — a
+   *  dead-centre thread reads a touch brighter than a scrape. Kept LOW. */
+  gatePulseMin: 0.16,
+  gatePulseMax: 0.42,
+  /** Per-gate chime pitch, lerped by centeredness (crisper/higher dead-centre). */
+  gatePitchMin: 1.0,
+  gatePitchMax: 1.5,
+  /** Streak-MILESTONE cue (crossing DAILY_SCORING.milestoneStep): a brighter edge
+   *  pulse + a small one-off shake. This is where intensity belongs — rare/earned. */
+  milestonePulse: 0.85,
+  milestoneShake: 0.4,
+} as const;
+
 /** RAMP (beneficial boost-strip) tuning. */
 export const RAMP = {
   /** Contact box half-extents (lateral, forward) — generous so it's easy to hit

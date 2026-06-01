@@ -4,7 +4,8 @@ import { activeSegmentCount, createRoadState, poolSize, roadCenterAt, updateRoad
 import { activeObstacleCount, createTrafficState, updateTraffic } from '../Traffic';
 import { createIntent } from '../Input';
 import { Rng } from '../../utils/rng';
-import { ObstacleKind, SLALOM, TIMESTEP, TRAFFIC } from '../../utils/constants';
+import { ObstacleKind, SCORING, SLALOM, TIMESTEP, TRAFFIC } from '../../utils/constants';
+import { createScoreState, resolveTraffic, type TrafficEvents } from '../Scoring';
 
 describe('GameState — full-loop integration & bounded pools', () => {
   it('road + traffic pools plateau (never climb) over a long surviving run', () => {
@@ -176,6 +177,42 @@ describe('GameState — menu/pause state machine', () => {
     expect(active.length).toBeGreaterThan(0); // gates are streaming
     for (const o of active) expect(o.kind).toBe(ObstacleKind.Gate);
     expect(game.traffic.spawned).toBeGreaterThan(0);
+  });
+
+  it('a clean gate thread surfaces a gate-thread event (centeredness), NOT a near-miss', () => {
+    const t = createTrafficState();
+    const g = t.pool[0];
+    g.active = true;
+    g.kind = ObstacleKind.Gate;
+    g.openingHalfWidth = 3;
+    g.lateral = 0;
+    g.laneOffset = 0;
+    g.distance = 99; // just behind the player → a fresh crossing
+    g.passed = false;
+    const score = createScoreState();
+    const events: TrafficEvents = { crashed: false, nearMisses: 0 };
+    resolveTraffic(events, score, 0, 100, t); // dead-centre thread
+    expect(events.crashed).toBe(false);
+    expect(events.gateThreaded).toBe(true);
+    expect(events.gateCenteredness).toBeCloseTo(1, 6); // dead centre
+    expect(events.nearMisses).toBe(0); // gates produce NO near-miss
+    expect(score.combo).toBe(SCORING.baseCombo); // and NO combo
+  });
+
+  it('slalom suppresses the classic distance integral; classic still accrues score', () => {
+    const slalomGame = startRun(createGameState(7), undefined, undefined, 7, undefined, GameMode.DailySlalom);
+    const classicGame = startRun(createGameState(7));
+    for (let i = 0; i < 30; i++) {
+      update(slalomGame, intent, TIMESTEP);
+      update(classicGame, intent, TIMESTEP);
+    }
+    // Classic runs the speed×combo integral → score climbs immediately.
+    expect(classicGame.score.score).toBeGreaterThan(0);
+    // Slalom does NOT (its score is event-driven per gate) — and no gate is
+    // reached this early, so the classic score stays exactly 0 and no near-miss
+    // ever engages the classic combo.
+    expect(slalomGame.score.score).toBe(0);
+    expect(slalomGame.score.combo).toBe(SCORING.baseCombo);
   });
 
   it('pause halts the sim; resume continues from the same spot', () => {

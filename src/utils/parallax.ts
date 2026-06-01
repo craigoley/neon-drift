@@ -25,7 +25,13 @@ export function parallaxRenderZ(
   behind: number,
 ): number {
   const d = distance * parallax;
-  const frac = d - Math.floor(d / gap) * gap; // [0, gap)
+  let frac = d - Math.floor(d / gap) * gap; // ~[0, gap)
+  // Defensive clamp: floating-point error in floor() at large d can nudge frac
+  // a hair below 0 or up to gap, which would push a slot one ULP outside the
+  // window. Fold it strictly into [0, gap) so the streaming window is GUARANTEED
+  // bounded for any distance, not just bounded in exact arithmetic.
+  if (frac < 0) frac += gap;
+  else if (frac >= gap) frac -= gap;
   return frac + (behind - index) * gap;
 }
 

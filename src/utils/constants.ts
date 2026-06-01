@@ -600,6 +600,8 @@ export const CAR_GEO = {
     /** Windshield rake: how far the cabin FRONT-top pulls back vs front-bottom,
      *  fraction of cabin length (a slanted windscreen, not a vertical wall). */
     windshieldRake: 0.55,
+    /** Roof narrows inward by this fraction of cabin half-width per side. */
+    roofInsetFraction: 0.18,
   },
   /** Wheels: short octagonal prisms (low-poly), one per corner. */
   wheels: {
@@ -612,6 +614,8 @@ export const CAR_GEO = {
     /** Corner inset from the hull edge, fraction of half-width / half-length. */
     lateralInset: 0.06,
     longitudinalInset: 0.26,
+    /** Ride height as a fraction of wheel radius (axle sits this high). */
+    rideHeightFraction: 0.55,
   },
   /** Headlight glow: small additive quads at the nose casting a forward bloom. */
   headlights: {
@@ -623,6 +627,16 @@ export const CAR_GEO = {
     heightFraction: 0.42,
     /** Base opacity of the additive glow (kept low so bloom doesn't blow out). */
     opacity: 0.55,
+    /** Z position of headlight quads as a fraction of half-length (slightly inside nose). */
+    zFraction: 0.99,
+    /** Forward-cast quad width as a multiple of car width. */
+    castWidthMul: 1.1,
+    /** Forward-cast quad length as a multiple of car length. */
+    castLengthMul: 0.9,
+    /** Forward-cast quad height above the road (just clear of z-fighting). */
+    castY: 0.02,
+    /** Forward-cast quad z offset ahead of the nose, as a fraction of car length. */
+    castZFraction: 0.45,
   },
   /** Ground glow: a flat additive blob under the car so it feels grounded. */
   groundGlow: {
@@ -634,9 +648,17 @@ export const CAR_GEO = {
     y: 0.03,
     /** Base opacity (additive; subtle). */
     opacity: 0.32,
+    /** Circle geometry segments for the glow disc. */
+    segments: 24,
   },
-  /** Emissive accent strip along the body sides (picks up the car's glow). */
-  underglow: {
+  /** Emissive accent strips along the body sides. */
+  sideStrips: {
+    /** Strip height as a fraction of hull height (measured from ride height). */
+    heightFraction: 0.55,
+    /** Lateral position as a fraction of hull half-width (slightly inset from edge). */
+    lateralFraction: 0.98,
+    /** Longitudinal extent as a fraction of half-length (slightly inside the tips). */
+    longitudinalFraction: 0.96,
     /** Opacity of the side accent line. */
     opacity: 0.9,
   },

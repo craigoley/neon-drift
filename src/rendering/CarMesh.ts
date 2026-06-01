@@ -82,7 +82,7 @@ function cabin(
   const y0 = yBase;
   const y1 = yBase + height;
   const rakeZ = halfLen * 2 * rake; // front-top pulled back toward the rear
-  const roofInset = halfW * 0.18;
+  const roofInset = halfW * CAR_GEO.cabin.roofInsetFraction;
   const v = [
     [-halfW, y0, halfLen], // 0 rear-bottom-right
     [halfW, y0, halfLen], // 1 rear-bottom-left
@@ -137,7 +137,7 @@ export class CarMesh {
     this.accentLineMat = new THREE.LineBasicMaterial({
       color: PALETTE.magenta,
       transparent: true,
-      opacity: CAR_GEO.underglow.opacity,
+      opacity: CAR_GEO.sideStrips.opacity,
     });
     this.headlightMat = new THREE.MeshBasicMaterial({
       color: PALETTE.magenta,
@@ -158,7 +158,7 @@ export class CarMesh {
     });
 
     const wheelR = height * G.wheels.radiusFraction;
-    const rideHeight = wheelR * 0.55;
+    const rideHeight = wheelR * G.wheels.rideHeightFraction;
 
     // --- Lower hull (tapered wedge) ---
     const hullH = height * G.hull.heightFraction;
@@ -196,15 +196,16 @@ export class CarMesh {
     }
 
     // --- Side accent strips (thin emissive lines along the body) ---
-    const stripY = rideHeight + hullH * 0.55;
+    const stripY = rideHeight + hullH * G.sideStrips.heightFraction;
     for (const sx of [-1, 1]) {
-      const xRear = sx * rearHW * 0.98;
-      const xFront = sx * frontHW * 0.98;
+      const xRear = sx * rearHW * G.sideStrips.lateralFraction;
+      const xFront = sx * frontHW * G.sideStrips.lateralFraction;
       const stripGeo = new THREE.BufferGeometry();
+      const stripZ = halfL * G.sideStrips.longitudinalFraction;
       stripGeo.setAttribute(
         'position',
         new THREE.Float32BufferAttribute(
-          [xRear, stripY, halfL * 0.96, xFront, stripY, -halfL * 0.96],
+          [xRear, stripY, stripZ, xFront, stripY, -stripZ],
           3,
         ),
       );
@@ -218,19 +219,19 @@ export class CarMesh {
     const hlY = height * G.headlights.heightFraction;
     for (const sx of [-1, 1]) {
       const hl = new THREE.Mesh(hlGeo, this.headlightMat);
-      hl.position.set(sx * frontHW * G.headlights.lateralFraction, hlY, -halfL * 0.99);
+      hl.position.set(sx * frontHW * G.headlights.lateralFraction, hlY, -halfL * G.headlights.zFraction);
       this.chassis.add(hl);
     }
     // Faint throw on the road just ahead of the nose (flat, additive).
-    const castGeo = new THREE.PlaneGeometry(width * 1.1, length * 0.9);
+    const castGeo = new THREE.PlaneGeometry(width * G.headlights.castWidthMul, length * G.headlights.castLengthMul);
     this.geometries.push(castGeo);
     const cast = new THREE.Mesh(castGeo, this.headlightMat);
     cast.rotation.x = -Math.PI / 2;
-    cast.position.set(0, 0.02, -halfL - length * 0.45);
+    cast.position.set(0, G.headlights.castY, -halfL - length * G.headlights.castZFraction);
     this.chassis.add(cast);
 
     // --- Ground glow (flat blob under the car; sibling of chassis) ---
-    const glowGeo = new THREE.CircleGeometry(width * G.groundGlow.radiusMul, 24);
+    const glowGeo = new THREE.CircleGeometry(width * G.groundGlow.radiusMul, G.groundGlow.segments);
     this.geometries.push(glowGeo);
     const groundGlow = new THREE.Mesh(glowGeo, this.groundGlowMat);
     groundGlow.rotation.x = -Math.PI / 2;

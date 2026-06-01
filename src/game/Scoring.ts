@@ -9,7 +9,18 @@
  */
 
 import { aabbOverlap, clamp, intervalsOverlap } from '../utils/math';
-import { GATE, JUICE, ObstacleKind, RAMP, SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
+import {
+  BASE_SCORING,
+  GATE,
+  JUICE,
+  ObstacleKind,
+  RAMP,
+  SCORING,
+  TRAFFIC,
+  VEHICLE,
+  type CarScoring,
+  type PowerupKind,
+} from '../utils/constants';
 import type { Obstacle, TrafficState } from './Traffic';
 
 /**
@@ -67,12 +78,14 @@ export function integrateScore(state: ScoreState, speed: number, dt: number, mul
 /**
  * Register a near-miss: bump the combo (capped) and refresh its timer. `weight`
  * scales the combo step — threading a MOVER or a GATE pays more than a static
- * pass (defaults to 1 so existing callers are unchanged).
+ * pass (defaults to 1 so existing callers are unchanged). `windowMul` scales the
+ * combo SURVIVAL WINDOW per car (OPP-07b L2) — <1 means the combo decays back to
+ * base sooner after a dry spell; defaults to 1 (the base comboTimeout).
  */
-export function registerNearMiss(state: ScoreState, weight = 1): ScoreState {
+export function registerNearMiss(state: ScoreState, weight = 1, windowMul = 1): ScoreState {
   state.combo = Math.min(state.combo + SCORING.comboStep * weight, SCORING.maxCombo);
   if (state.combo > state.peakCombo) state.peakCombo = state.combo;
-  state.comboTimer = SCORING.comboTimeout;
+  state.comboTimer = SCORING.comboTimeout * windowMul;
   state.nearMisses++;
   return state;
 }
@@ -199,10 +212,15 @@ export function resolveTraffic(
   playerDistance: number,
   traffic: TrafficState,
   drifting = false,
+  scoring: CarScoring = BASE_SCORING,
 ): void {
   // A near-miss threaded WHILE DRIFTING is a committed, risky dodge, so it pays
   // a combo bonus — a concrete reason to drift through the tightest gaps.
   const driftMul = drifting ? SCORING.driftNearMissBonus : 1;
+  // Per-car scoring tradeoff (OPP-07b): buildMul scales the combo weight (on top
+  // of mover/gate/drift/graze — never replacing them); windowMul scales the
+  // combo survival window. BASE_SCORING (1/1) leaves the base loop unchanged.
+  const { buildMul, windowMul } = scoring;
   events.crashed = false;
   events.nearMisses = 0;
   events.nearMissClosest = Infinity;
@@ -237,9 +255,10 @@ export function resolveTraffic(
           const gap = Math.abs(playerLateral - o.lateral);
           if (gap < SCORING.nearMissLateral) {
             // Threading a MOVER pays more than a static pass; the GRAZE gradient
-            // scales the reward by how close the pass was (OPP-14).
+            // scales the reward by how close the pass was (OPP-14); the per-car
+            // buildMul composes on top (OPP-07b) without replacing either.
             const weight = o.kind === ObstacleKind.Mover ? SCORING.moverNearMissWeight : 1;
-            registerNearMiss(score, weight * driftMul * grazeMultiplier(gap));
+            registerNearMiss(score, weight * driftMul * grazeMultiplier(gap) * buildMul, windowMul);
             events.nearMisses++;
             events.nearMissClosest = Math.min(events.nearMissClosest ?? Infinity, gap);
           }
@@ -255,7 +274,7 @@ export function resolveTraffic(
         if (!o.passed && o.distance <= playerDistance) {
           o.passed = true;
           if (withinGateOpening(playerLateral, o)) {
-            registerNearMiss(score, SCORING.gateThreadWeight * driftMul);
+            registerNearMiss(score, SCORING.gateThreadWeight * driftMul * buildMul, windowMul);
             events.nearMisses++;
           }
         }

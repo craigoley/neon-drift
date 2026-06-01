@@ -55,6 +55,7 @@ import {
   POWERUP_DEFS,
   PowerupKind,
   RANKS,
+  scoringFor,
   STARTER_CAR_ID,
   TIMESTEP,
 } from './utils/constants';
@@ -161,7 +162,7 @@ const shell = new Shell(app, settings, bestStore, audio, {
     }
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
     // Fresh random seed each run → a genuinely different course every time.
-    startRun(game, handlingFor(carId), missions.startBiome(), randomSeed());
+    startRun(game, handlingFor(carId), missions.startBiome(), randomSeed(), scoringFor(carId));
   },
   onPause: () => {
     pause(game);

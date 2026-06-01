@@ -11,7 +11,7 @@
  */
 
 import { Rng } from '../utils/rng';
-import { BASE_HANDLING, DEFAULT_SEED, type CarHandling } from '../utils/constants';
+import { BASE_HANDLING, BASE_SCORING, DEFAULT_SEED, type CarHandling, type CarScoring } from '../utils/constants';
 import type { InputIntent } from './Input';
 import { createVehicleState, updateVehicle, type VehicleState } from './Vehicle';
 import { createRoadState, roadCenterAt, updateRoad, type RoadState } from './Road';
@@ -69,6 +69,11 @@ export interface GameState {
    *  by the composition root and passed in — the pure layer never reaches into
    *  UI/storage). Defaults to BASE_HANDLING. */
   handling: CarHandling;
+  /** Active car SCORING tradeoff for this run (OPP-07b) — resolved from the
+   *  selected car by the composition root and passed in, like `handling`.
+   *  Separate from handling (physics): this scales the combo build rate +
+   *  survival window. Defaults to BASE_SCORING (neutral 1/1). */
+  scoring: CarScoring;
   /** Cosmetic starting-biome index (a mission/rank reward): shifts ONLY the
    *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
   startBiome: number;
@@ -95,6 +100,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     milestones: createMilestoneState(),
     score: createScoreState(),
     handling: BASE_HANDLING,
+    scoring: BASE_SCORING,
     startBiome: 0,
     runStats: { driftSeconds: 0, shields: 0 },
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
@@ -111,6 +117,7 @@ export function startRun(
   handling: CarHandling = state.handling,
   startBiome: number = state.startBiome,
   seed: number = state.seed,
+  scoring: CarScoring = state.scoring,
 ): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
@@ -126,6 +133,7 @@ export function startRun(
   state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.handling = handling;
+  state.scoring = scoring;
   state.startBiome = startBiome;
   state.runStats.driftSeconds = 0;
   state.runStats.shields = 0;
@@ -230,6 +238,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.distance,
     state.traffic,
     state.vehicle.drifting,
+    state.scoring,
   );
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;

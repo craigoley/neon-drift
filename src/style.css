@@ -376,6 +376,24 @@ body,
   opacity: 0.85;
 }
 
+/* Scoring-playstyle line (OPP-07b) — sits under the handling tagline, tinted
+   cyan so it reads as the SCORING tradeoff, distinct from the identity tagline. */
+.shell-car-playstyle {
+  min-height: 1em;
+  margin: 1px 0 0;
+  font-size: clamp(11px, 2.8vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #00ffff;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.5);
+  opacity: 0.92;
+}
+.shell-carpicker.locked .shell-car-playstyle {
+  opacity: 0.4;
+  color: #7a9aa0;
+  text-shadow: none;
+}
+
 /* Locked-car requirement line (hidden/empty for unlocked cars). */
 .shell-car-lock {
   min-height: 1.2em;

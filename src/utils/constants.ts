@@ -1415,6 +1415,55 @@ export const BASE_HANDLING: CarHandling = {
   drift: 1,
 };
 
+/**
+ * Per-car SCORING tradeoff (OPP-07b) — SEPARATE from handling: handling is
+ * physics, this is the scoring/near-miss loop. Two MULTIPLIERS, both 1.0 =
+ * neutral (identical to base scoring), expressed as multipliers so they stay
+ * correct regardless of SCORING / graze tuning:
+ *   - buildMul  scales the near-miss combo WEIGHT (the registerNearMiss weight),
+ *     composing ON TOP of the mover / gate / drift / graze multipliers — it does
+ *     NOT replace any of them. >1 builds the combo faster per near-miss.
+ *   - windowMul scales the combo SURVIVAL WINDOW (the comboTimeout refresh) —
+ *     <1 means the combo decays back to base sooner after a dry spell. (There is
+ *     no gradual decay RATE in the sim; the window is the only decay lever.)
+ *
+ * The two axes are OPPOSED (see CAR_SCORING_TABLE): every non-pulse car gives up
+ * one to gain the other, so NO car wins BOTH axes — the fairness invariant
+ * (buildMul>=1 AND windowMul>=1 together would be a strict scoring win). These
+ * balance in CHARACTER at a reference near-miss density, NOT in total on every
+ * seed: a build-heavy car out-scores on a near-miss-dense run and loses on a
+ * sparse one. That playstyle expression is the point, not a fairness bug.
+ */
+export interface CarScoring {
+  /** Multiplier on the near-miss combo weight. >1 = combo builds faster. */
+  buildMul: number;
+  /** Multiplier on the combo survival window (comboTimeout). <1 = fades sooner. */
+  windowMul: number;
+}
+
+/** Neutral scoring: identical to base behaviour on both axes. Used for any car
+ *  with no `scoring` block or an unknown id — Pulse and the fallback are 1 / 1. */
+export const BASE_SCORING: CarScoring = { buildMul: 1, windowMul: 1 };
+
+/*
+ * PER-CAR SCORING TRADEOFF (OPP-07b) — opposed build/window axis, reviewable:
+ *
+ *   car         buildMul  windowMul   playstyle
+ *   Pulse         1.00      1.00      neutral baseline (the fair reference)
+ *   Ghost         1.25      0.75      builds fast, fades fast — high-skill sustain
+ *   Onyx          0.80      1.35      builds slow, lasts long — steady scorer
+ *   Nova          1.30      0.70      fastest build, shortest window — boom or bust
+ *   Vapor         0.85      1.25      patient build, forgiving window
+ *   Ember         1.20      0.80      aggressive build, short fuse
+ *   Slipstream    1.15      0.85      rally rhythm — mild aggressive
+ *
+ * Desirability (↑good): buildMul↑ (faster combo), windowMul↑ (combo lasts).
+ * No row is ≥ Pulse on BOTH axes, and no car has buildMul>=1 AND windowMul>=1
+ * together, so none nets a strict scoring win — each trades one axis for the
+ * other. Pulse trades nothing but is beaten on each axis by that axis's
+ * specialist (it simply never loses an axis either).
+ */
+
 /*
  * TRADEOFF-TRIANGLE BALANCE (reviewable at a glance — feel confirmed on device):
  *
@@ -1452,9 +1501,15 @@ export interface CarDef {
   /** Short identity descriptor (<~6 words) shown in the picker so the car's
    *  handling tradeoff is READABLE, not just felt. */
   tagline?: string;
+  /** Short SCORING-playstyle descriptor (OPP-07b) shown in the picker beneath
+   *  the handling tagline, so the combo build/window tradeoff is READABLE too. */
+  scoringTagline?: string;
   cosmetic: CarCosmetic;
   /** Optional — absent this PR; all cars share VEHICLE physics for now. */
   handling?: CarHandling;
+  /** Optional per-car SCORING tradeoff (OPP-07b). Absent → BASE_SCORING (neutral
+   *  1/1), so Pulse and any unset car score identically to the base loop. */
+  scoring?: CarScoring;
   /** Per-car VISUAL silhouette (rendering only). Absent → BASE_CAR_SHAPE. The
    *  collision box stays CAR_VIS for every car (fairness lives in `handling`);
    *  this only changes how the car READS so its shape telegraphs its feel. */
@@ -1511,6 +1566,9 @@ export const CARS: readonly CarDef[] = [
     id: 'pulse',
     displayName: 'Pulse',
     tagline: 'Balanced — no weakness, no edge.',
+    scoringTagline: 'Combo scores by the book.',
+    // Neutral scoring baseline — the fair reference every other car deviates from.
+    scoring: { buildMul: 1.0, windowMul: 1.0 },
     cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The 1.0 reference point —
     // unchanged by OPP-07a (the others widen away from it).
@@ -1525,6 +1583,10 @@ export const CARS: readonly CarDef[] = [
     id: 'vapor',
     displayName: 'Vapor',
     tagline: 'Razor grip, low top speed.',
+    scoringTagline: 'Patient combo, forgiving window.',
+    // Grip identity carried into scoring: builds slower but the combo lingers —
+    // a precise, unhurried scorer that doesn't punish a quiet stretch.
+    scoring: { buildMul: 0.85, windowMul: 1.25 },
     cosmetic: { body: 0x6e1a60, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
@@ -1540,6 +1602,10 @@ export const CARS: readonly CarDef[] = [
     id: 'ember',
     displayName: 'Ember',
     tagline: 'Fast and loose — hard to place.',
+    scoringTagline: 'Aggressive combo, short fuse.',
+    // Fast-and-loose identity: combo builds quick but the window is short — you
+    // have to keep feeding near-misses or it slips away (matches the twitchy feel).
+    scoring: { buildMul: 1.2, windowMul: 0.8 },
     cosmetic: { body: 0x6e3208, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: high top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
@@ -1555,6 +1621,11 @@ export const CARS: readonly CarDef[] = [
     id: 'ghost',
     displayName: 'Ghost',
     tagline: 'Holds drifts forever. Commits hard.',
+    scoringTagline: 'Combo builds fast, fades fast.',
+    // Drift-commit identity in scoring: the strongest build of any car, paid for
+    // with the shortest survival window — a high-skill sustain car that rewards
+    // relentless near-misses and punishes coasting.
+    scoring: { buildMul: 1.25, windowMul: 0.75 },
     cosmetic: { body: 0x46606e, glow: 0xffffff, accent: 0x00ffff },
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
@@ -1570,6 +1641,11 @@ export const CARS: readonly CarDef[] = [
     id: 'nova',
     displayName: 'Nova',
     tagline: 'All top speed, no grip.',
+    scoringTagline: 'Boom or bust — feed it or lose it.',
+    // Glass-cannon identity in scoring: the fastest combo build AND the shortest
+    // window — the most extreme of the boom-or-bust pair (vs Ghost). Spikes hard
+    // when you're threading, collapses the instant you stop.
+    scoring: { buildMul: 1.3, windowMul: 0.7 },
     cosmetic: { body: 0x202e7e, glow: 0x4d6bff, accent: 0x00ffff },
     // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
     // loose tail — a straight-line terror you can barely place. Ember is only
@@ -1587,6 +1663,11 @@ export const CARS: readonly CarDef[] = [
     id: 'onyx',
     displayName: 'Onyx',
     tagline: 'Surgical grip. Pins any gap.',
+    scoringTagline: 'Slow to build, hard to lose.',
+    // Surgical identity in scoring: the slowest combo build, but by far the
+    // longest window — the steady-scorer extreme (vs Vapor). Forgives dry
+    // stretches; rewards patient, consistent placement over spikes.
+    scoring: { buildMul: 0.8, windowMul: 1.35 },
     cosmetic: { body: 0x4a1f70, glow: 0xb84dff, accent: 0x00ffaa },
     // SURGICAL: maxes grip (sharpest accel + tightest settle) and kills the slide,
     // paying with the lowest top speed — pin it in any gap. The precision extreme
@@ -1604,6 +1685,11 @@ export const CARS: readonly CarDef[] = [
     id: 'slipstream',
     displayName: 'Slipstream',
     tagline: 'Fast and slidey — rally power-slides.',
+    scoringTagline: 'Rally rhythm — keep it flowing.',
+    // Rally-hybrid identity in scoring: a mild build-aggressive lean with a
+    // slightly short window — rewards a steady flow of near-misses without the
+    // knife-edge of Nova/Ghost. Sits between the aggressive and steady camps.
+    scoring: { buildMul: 1.15, windowMul: 0.85 },
     cosmetic: { body: 0x3c5e0a, glow: 0xaaff00, accent: 0xff0066 },
     // RALLY HYBRID: fast AND slidey with loose grip — power-slides through gaps,
     // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
@@ -1793,6 +1879,15 @@ export function carById(id: string): CarDef {
  */
 export function handlingFor(id: string): CarHandling {
   return CARS.find((c) => c.id === id)?.handling ?? BASE_HANDLING;
+}
+
+/**
+ * Resolve the SCORING tradeoff for a car id (OPP-07b). Falls back to BASE_SCORING
+ * (neutral 1/1) for an unknown id or a car with no `scoring` block — so the pure
+ * sim always gets a complete, finite profile and Pulse scores like the base loop.
+ */
+export function scoringFor(id: string): CarScoring {
+  return CARS.find((c) => c.id === id)?.scoring ?? BASE_SCORING;
 }
 
 /**

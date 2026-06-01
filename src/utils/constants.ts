@@ -797,11 +797,15 @@ export const SUN = {
 export const SCENERY = {
   layers: [
     // Near: tall neon pylons just off the verge — the fastest parallax.
-    { kind: 'pylon', parallax: 1.0, offsetX: 13, count: 14, gap: 26, height: 7, width: 0.5, color: 0xff00ff, opacity: 0.85 },
-    // Mid: shorter light-poles set back — moderate sweep.
-    { kind: 'pole', parallax: 0.6, offsetX: 22, count: 12, gap: 40, height: 11, width: 0.7, color: 0x00ffff, opacity: 0.6 },
+    // BUG-01 hazard-colour monopoly: desaturated from pure magenta (0xff00ff,
+    // S100/L50) to a muted plum + lower opacity so the loudest, most-saturated
+    // element on the field is always the orange/red hazard, never the decor.
+    { kind: 'pylon', parallax: 1.0, offsetX: 13, count: 14, gap: 26, height: 7, width: 0.5, color: 0x6e3a73, opacity: 0.45 },
+    // Mid: shorter light-poles set back — moderate sweep. Muted from pure cyan.
+    { kind: 'pole', parallax: 0.6, offsetX: 22, count: 12, gap: 40, height: 11, width: 0.7, color: 0x2f6a73, opacity: 0.4 },
     // Far: a low distant city-silhouette band — drifts slowly, sits low + wide.
-    { kind: 'block', parallax: 0.28, offsetX: 46, count: 10, gap: 80, height: 26, width: 9, color: 0x3a1d6e, opacity: 0.5 },
+    // Dimmed a touch further so it reads as pure background haze.
+    { kind: 'block', parallax: 0.28, offsetX: 46, count: 10, gap: 80, height: 26, width: 9, color: 0x281842, opacity: 0.35 },
   ],
   /** Slots kept behind the camera before a prop wraps to the front (the +z
    *  margin of the streaming window). */

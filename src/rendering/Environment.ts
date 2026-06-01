@@ -180,21 +180,28 @@ export class Environment {
   }
 
   /**
-   * Overwrite the GridHelper's vertex colours in place (no allocation): the two
-   * centre-cross lines take `center`, every other line `line`. Mirrors the
-   * GridHelper layout (4 vertices per line index; centre at divisions/2).
+   * Overwrite the GridHelper's vertex colours in place (no allocation): EVERY
+   * line — including the centre-cross at index divisions/2 — takes the normal
+   * `line` colour. GridHelper highlights its centre cross by default, which
+   * rendered as a magenta line welded directly under the player car (the grid is
+   * pinned to cameraX, and the camera tracks the car laterally). Forcing the
+   * centre index to the line colour folds it into the grid so no stray line
+   * reads under the car. `_center` is still supplied by the biome palette (kept
+   * in the BiomeDef data + this signature) but deliberately ignored, so the fix
+   * holds across EVERY biome transition: this is the single chokepoint the
+   * blended palette re-feeds each time, now always with the line colour. Both
+   * cross arms share the same centre division, so the hidden lateral arm is
+   * covered too. Mirrors the GridHelper layout (4 vertices per line index).
    */
-  private applyGridColors(center: THREE.Color, line: THREE.Color): void {
+  private applyGridColors(_center: THREE.Color, line: THREE.Color): void {
     const attr = this.grid.geometry.getAttribute('color') as THREE.BufferAttribute;
     const arr = attr.array as Float32Array;
-    const half = GRID.divisions / 2;
     let j = 0;
     for (let i = 0; i <= GRID.divisions; i++) {
-      const c = i === half ? center : line;
       for (let v = 0; v < 4; v++) {
-        arr[j++] = c.r;
-        arr[j++] = c.g;
-        arr[j++] = c.b;
+        arr[j++] = line.r;
+        arr[j++] = line.g;
+        arr[j++] = line.b;
       }
     }
     attr.needsUpdate = true;

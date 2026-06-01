@@ -102,6 +102,7 @@ export class Shell {
   private readonly crashUnlockEl: HTMLElement;
   private readonly crashMissionsEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
+  private readonly carTaglineEl: HTMLElement;
   private readonly carCanvasEl: HTMLElement;
   private readonly carStatsEl: HTMLElement;
   private readonly carDotsEl: HTMLElement;
@@ -152,6 +153,7 @@ export class Shell {
     this.crashUnlockEl = this.crashScreen.querySelector('.shell-crash-unlock')!;
     this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
+    this.carTaglineEl = this.carScreen.querySelector('.shell-car-tagline')!;
     this.carCanvasEl = this.carScreen.querySelector('.shell-car-canvas')!;
     this.carStatsEl = this.carScreen.querySelector('.shell-car-stats')!;
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
@@ -407,6 +409,7 @@ export class Shell {
       `<button class="shell-btn shell-arrow shell-next" type="button" aria-label="next car">›</button>` +
       `</div>` +
       `<p class="shell-car-name"></p>` +
+      `<p class="shell-car-tagline"></p>` +
       `<p class="shell-car-lock"></p>` +
       `<div class="shell-car-stats">` +
       this.statRow('SPEED', 'speed') +
@@ -465,6 +468,7 @@ export class Shell {
     const car = CARS[this.carIndex];
     const lock = this.opts.carLock?.(car.id) ?? null;
     this.carNameEl.textContent = car.displayName;
+    this.carTaglineEl.textContent = car.tagline ?? '';
 
     // Locked cars show their requirement + live progress; unlocked ones clear it.
     this.carScreen.classList.toggle('locked', !!lock);

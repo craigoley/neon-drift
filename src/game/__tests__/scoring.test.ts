@@ -136,9 +136,10 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
   const collideGap = VEHICLE.halfWidth + TRAFFIC.halfWidth;
 
   it('the near-miss window is meaningfully wider than the collision box', () => {
-    // The original 3.2 window was barely 1 unit past the 2.2 collision gap, so
-    // passes almost never landed in it. Guard against regressing that tight.
-    expect(SCORING.nearMissLateral - collideGap).toBeGreaterThanOrEqual(2);
+    // LEVER 1 tightened the window to 4.0 (was 6.5) so a near-miss means a
+    // GENUINELY close pass. It must still clear the 2.2 collision gap by a usable
+    // margin (4.0 - 2.2 = 1.8) so a real dodge can register without crashing.
+    expect(SCORING.nearMissLateral - collideGap).toBeGreaterThanOrEqual(1.5);
   });
 
   it('a realistic close dodge (1.5 units of clear lateral space) counts as a near-miss', () => {
@@ -155,24 +156,33 @@ describe('Scoring — near-miss window is generous enough to fire', () => {
     expect(events.nearMisses).toBe(1);
   });
 
-  it('a normal-berth close pass (5.5 units) bumps the combo', () => {
-    // Pins Phase-1 (pass 2): a pass at a normal dodging distance must register,
-    // so the multiplier engages in ordinary play. This fails if nearMissLateral
-    // regresses below 5.5 (e.g. back to the old 4.8 that only rewarded experts).
-    const s = createScoreState();
-    const traffic = createTrafficState();
-    const slot = traffic.pool[0];
-    slot.active = true;
-    slot.lateral = 5.5; // clear of the 2.2 collision box; a real near-miss
-    slot.laneOffset = 5.5;
-    slot.distance = 99; // just behind the player at 100
-    slot.passed = false;
-    const events = { crashed: false, nearMisses: 0 };
-    const before = s.combo;
-    resolveTraffic(events, s, 0, 100, traffic);
-    expect(events.crashed).toBe(false);
-    expect(events.nearMisses).toBe(1);
-    expect(s.combo).toBeGreaterThan(before);
+  it('a genuinely-close pass (3.5 units) bumps the combo, but a WIDE pass no longer counts', () => {
+    // LEVER 1: a near-miss now means CLOSE. A 3.5-unit pass (inside the 4.0
+    // window, clear of the 2.2 collision box) still registers; a 5.5-unit pass
+    // (a casual berth, ~82% of the old qualifying band) deliberately does NOT —
+    // that loose-window spam was the bug this fixes.
+    const close = (lateral: number) => {
+      const s = createScoreState();
+      const traffic = createTrafficState();
+      const slot = traffic.pool[0];
+      slot.active = true;
+      slot.lateral = lateral;
+      slot.laneOffset = lateral;
+      slot.distance = 99; // just behind the player at 100
+      slot.passed = false;
+      const events = { crashed: false, nearMisses: 0 };
+      resolveTraffic(events, s, 0, 100, traffic);
+      return { events, combo: s.combo };
+    };
+
+    const tight = close(3.5);
+    expect(tight.events.crashed).toBe(false);
+    expect(tight.events.nearMisses).toBe(1);
+    expect(tight.combo).toBeGreaterThan(SCORING.baseCombo);
+
+    const wide = close(5.5);
+    expect(wide.events.nearMisses).toBe(0); // outside the tightened window — no freebie
+    expect(wide.combo).toBe(SCORING.baseCombo);
   });
 });
 

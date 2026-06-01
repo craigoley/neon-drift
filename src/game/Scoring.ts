@@ -266,17 +266,12 @@ export function resolveTraffic(
         break;
       }
       case ObstacleKind.Gate: {
+        // A gate is a PURE obstacle: thread the opening (nothing happens) or hit
+        // the wall (crash). It deliberately produces NO near-miss — no combo, no
+        // shake/slow-mo/crescendo — in either mode. (Traffic near-misses, above,
+        // are unaffected; the static/mover path is the only combo source now.)
         if (gateBlocks(playerLateral, playerDistance, o)) {
           events.crashed = true;
-          break;
-        }
-        // Threading the opening (only reachable without a crash) rewards combo.
-        if (!o.passed && o.distance <= playerDistance) {
-          o.passed = true;
-          if (withinGateOpening(playerLateral, o)) {
-            registerNearMiss(score, SCORING.gateThreadWeight * driftMul * buildMul, windowMul);
-            events.nearMisses++;
-          }
         }
         break;
       }

@@ -230,8 +230,9 @@ export const SCORING = {
   /** Combo weight for threading a MOVER (a lane-changing obstacle) — threading a
    *  moving target is harder, so it pays more than a static near-miss. */
   moverNearMissWeight: 2,
-  /** Combo weight for threading a GATE's opening. */
-  gateThreadWeight: 1.5,
+  // (gateThreadWeight removed: gates no longer produce a near-miss — a gate is a
+  //  pure obstacle now, thread-or-crash, in both classic and slalom. See Scoring
+  //  resolveTraffic gate case.)
   /** Multiplier applied to a near-miss's combo weight when it's threaded WHILE
    *  DRIFTING. A drifted dodge is committed/risky, so it pays more — a concrete
    *  reason to drift through the tightest gaps rather than play it safe. */

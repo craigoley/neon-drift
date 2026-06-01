@@ -139,7 +139,7 @@ describe('Obstacle variety — GATE collision vs threading the opening', () => {
     expect(withinGateOpening(6, g)).toBe(false);
   });
 
-  it('threading the opening is safe and rewards the combo', () => {
+  it('threading the opening is safe but produces NO near-miss / combo (gates are pure obstacles)', () => {
     const t = createTrafficState();
     const g = t.pool[0];
     g.active = true;
@@ -153,10 +153,10 @@ describe('Obstacle variety — GATE collision vs threading the opening', () => {
     const score = createScoreState();
     const events = freshEvents();
     resolveTraffic(events, score, 0, 100, t); // player dead-centre in the opening
-    expect(events.crashed).toBe(false);
-    expect(events.nearMisses).toBe(1); // threading the gate fed the combo
-    expect(score.combo).toBeGreaterThan(SCORING.baseCombo);
-    expect(g.passed).toBe(true);
+    expect(events.crashed).toBe(false); // threading the opening is still safe (no crash)
+    // Gate near-misses were removed: a clean thread feeds the combo NOTHING.
+    expect(events.nearMisses).toBe(0);
+    expect(score.combo).toBe(SCORING.baseCombo);
   });
 
   it('a barrier strike in the band ends the run', () => {

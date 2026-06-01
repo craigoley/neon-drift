@@ -230,8 +230,9 @@ export const SCORING = {
   /** Combo weight for threading a MOVER (a lane-changing obstacle) — threading a
    *  moving target is harder, so it pays more than a static near-miss. */
   moverNearMissWeight: 2,
-  /** Combo weight for threading a GATE's opening. */
-  gateThreadWeight: 1.5,
+  // (gateThreadWeight removed: gates no longer produce a near-miss — a gate is a
+  //  pure obstacle now, thread-or-crash, in both classic and slalom. See Scoring
+  //  resolveTraffic gate case.)
   /** Multiplier applied to a near-miss's combo weight when it's threaded WHILE
    *  DRIFTING. A drifted dodge is committed/risky, so it pays more — a concrete
    *  reason to drift through the tightest gaps rather than play it safe. */
@@ -241,8 +242,8 @@ export const SCORING = {
    * (nearMissLateral, now 4.0, is the OUTER bound), the reward scales with how
    * close the pass was. grazeMultiplier(gap) = 1.0 at the outer edge, ramping
    * linearly up to grazeMax as the gap shrinks to grazeInner (capped at grazeMax
-   * below it — no runaway). It MULTIPLIES the existing combo weight (mover/gate/
-   * drift bonuses still apply).
+   * below it — no runaway). It MULTIPLIES the existing combo weight (mover/drift
+   * bonuses still apply).
    *
    * LEVER 1 co-adjust: grazeInner was 2.0. With the outer bound now 4.0 the ramp
    * band would be only 4.0-2.0 = 2.0 wide; but more importantly grazeInner MUST be

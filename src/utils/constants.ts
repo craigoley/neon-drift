@@ -1397,6 +1397,14 @@ export const LEADERBOARD_STORAGE_KEY = 'neon-drift.leaderboard';
 /** Max entries kept on the top-runs leaderboard (sorted by score, desc). */
 export const LEADERBOARD_SIZE = 10;
 
+/** localStorage key for the OPP-09 daily challenge (per-day bests + run counts).
+ *  SEPARATE from the leaderboard: daily runs use a fixed per-date seed and are
+ *  not comparable to random-seed runs, so they never touch the main board. */
+export const DAILY_STORAGE_KEY = 'neon-drift.daily';
+
+/** Days of daily-challenge history kept (rolling — the N most-recent days). */
+export const DAILY_HISTORY_SIZE = 7;
+
 /** localStorage key for player settings (sound, selected car, future toggles). */
 export const SETTINGS_STORAGE_KEY = 'neon-drift.settings';
 

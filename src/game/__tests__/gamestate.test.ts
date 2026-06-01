@@ -135,6 +135,26 @@ describe('GameState — menu/pause state machine', () => {
     expect(game.score.score).toBe(0);
   });
 
+  it('startRun threads the isDaily flag + an explicit seed (OPP-09 daily run)', () => {
+    const game = createGameState(1);
+    // A normal run is not daily.
+    startRun(game);
+    expect(game.isDaily).toBe(false);
+
+    // A daily run carries the flag (so run-end routes to the daily store) and the
+    // supplied fixed seed (so the same date replays the SAME road).
+    const dailySeed = 2392771152; // dailySeed(2026-05-31), see daily_seed.test.ts
+    startRun(game, undefined, undefined, dailySeed, undefined, true);
+    expect(game.isDaily).toBe(true);
+    expect(game.seed).toBe(dailySeed);
+
+    // Determinism: re-running the same seed reproduces an identical road layout.
+    const curvesA = game.road.segments.map((s) => s.curve);
+    startRun(game, undefined, undefined, dailySeed, undefined, true);
+    const curvesB = game.road.segments.map((s) => s.curve);
+    expect(curvesB).toEqual(curvesA);
+  });
+
   it('pause halts the sim; resume continues from the same spot', () => {
     const game = startRun(createGameState(3));
     for (let i = 0; i < 60; i++) update(game, intent, TIMESTEP);

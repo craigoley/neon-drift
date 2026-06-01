@@ -586,6 +586,43 @@ body,
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* --- daily challenge view (OPP-09) -------------------------------------- */
+.shell-daily-sub {
+  margin: -2px 0 6px;
+  font-size: clamp(12px, 3vw, 15px);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.7);
+}
+.shell-play-daily {
+  /* The primary daily action reads in cyan (the player's colour) to stand out
+     from the ghost menu buttons. */
+  border-color: #00ffff;
+  color: #00ffff;
+  text-shadow: 0 0 8px rgba(0, 255, 255, 0.6);
+}
+.shell-daily-today {
+  margin: 8px 0 2px;
+  font-size: clamp(13px, 3.4vw, 17px);
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+  color: #ff66ff;
+  text-shadow: 0 0 8px rgba(255, 0, 255, 0.6);
+}
+.shell-daily-history {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(420px, 92vw);
+  margin: 4px 0;
+}
+/* Daily history rows reuse the leaderboard row styling but drop the rank slot
+   (4 columns: date · score · distance · car). */
+.shell-daily-row {
+  grid-template-columns: 5.5em 1fr auto auto;
+}
+
 /* --- missions panel ----------------------------------------------------- */
 .shell-rank {
   font-size: clamp(13px, 3.2vw, 17px);

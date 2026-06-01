@@ -31,7 +31,9 @@ import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { Shell } from './ui/Shell';
-import { LeaderboardStore } from './state/Leaderboard';
+import { LeaderboardStore, type RunPlacement } from './state/Leaderboard';
+import { DailyStore, type DailyResult } from './state/DailyStore';
+import { dailyDateKey, dailySeed } from './utils/daily';
 import { SettingsStore } from './state/Settings';
 import { ProgressStore } from './state/Progress';
 import { unlockProgress } from './state/Unlocks';
@@ -140,11 +142,28 @@ if (isTouch) controls.attachTouch(scene.renderer.domElement, app);
 // the legacy single-best on first load; the "BEST" readout derives from #1.
 const leaderboard = new LeaderboardStore();
 
+// Daily challenge results (OPP-09): per-day best + run count, kept SEPARATE from
+// the leaderboard (fixed per-date seed, not comparable to random runs).
+const daily = new DailyStore();
+
 // Front-end shell (start / settings / car picker / crash overlays).
 const canonicalUrl = window.location.origin + window.location.pathname;
 // The car-picker 3D preview's renderer — created when the picker opens, disposed
 // when it closes (held here so the shell callbacks can manage its lifecycle).
 let carPreview: CarPreview | null = null;
+
+// Resolve the car to start a run in, defensively falling back to the always-free
+// starter if the persisted selection is somehow locked. Shared by the normal and
+// daily launch paths so both apply the same guard.
+const resolvePlayCarId = (): string => {
+  let carId = settings.get('selectedCarId');
+  if (!progress.isUnlocked(carId)) {
+    carId = STARTER_CAR_ID;
+    settings.set('selectedCarId', carId);
+    vehicle.applyCar(carById(carId));
+  }
+  return carId;
+};
 const shell = new Shell(app, settings, leaderboard, audio, {
   isTouch,
   shareUrl: canonicalUrl,
@@ -153,17 +172,18 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   // settings/UI itself.
   onPlay: () => {
     audio.setMuted(false); // a fresh run is never muted (defensive)
-    // Defensive: never start a run in a locked car (e.g. a retuned threshold
-    // re-gated the persisted selection) — fall back to the always-free starter.
-    let carId = settings.get('selectedCarId');
-    if (!progress.isUnlocked(carId)) {
-      carId = STARTER_CAR_ID;
-      settings.set('selectedCarId', carId);
-      vehicle.applyCar(carById(carId));
-    }
+    const carId = resolvePlayCarId();
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
     // Fresh random seed each run → a genuinely different course every time.
     startRun(game, handlingFor(carId), missions.startBiome(), randomSeed(), scoringFor(carId));
+  },
+  // OPP-09: start TODAY'S daily challenge — same fixed seed all day (replayable),
+  // and flagged isDaily=true so the run-end routes its result to the daily store,
+  // not the main leaderboard. Uses the player's LOCAL date (see dailySeed).
+  onPlayDaily: () => {
+    audio.setMuted(false);
+    const carId = resolvePlayCarId();
+    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), true);
   },
   onPause: () => {
     pause(game);
@@ -230,6 +250,12 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         };
       }),
     selectStartBiome: (index: number) => missions.setStartBiome(index),
+  },
+  // OPP-09 DAILY panel data (read fresh each time the screen opens). `today` is
+  // keyed on the player's LOCAL date; history is the rolling 7-day window.
+  daily: {
+    today: () => daily.today(dailyDateKey(new Date())),
+    history: () => daily.history(),
   },
 });
 shell.showStart();
@@ -318,13 +344,23 @@ function frame(now: number): void {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
-    // Record the run on the leaderboard (insert/sort/cap + per-car best) and get
-    // its placement for the game-over callouts — computed before showCrash.
-    const placement = leaderboard.submit({
-      score: game.score.score,
-      distance: game.distance,
-      carId: settings.get('selectedCarId'),
-    });
+    const carIdNow = settings.get('selectedCarId');
+    // Route the result by run type, keeping daily + main board SEPARATE (OPP-09).
+    // A DAILY run records ONLY to the daily store (today's best + run count); a
+    // normal run records ONLY to the leaderboard. Neither writes to the other.
+    let placement: RunPlacement | null = null;
+    let dailyResult: DailyResult | null = null;
+    let bestForCrash = leaderboard.bestRun();
+    if (game.isDaily) {
+      dailyResult = daily.submitDaily(dailyDateKey(new Date()), game.score.score, game.distance, carIdNow);
+      bestForCrash = { distance: dailyResult.bestDistance, score: dailyResult.bestScore };
+    } else {
+      placement = leaderboard.submit({
+        score: game.score.score,
+        distance: game.distance,
+        carId: carIdNow,
+      });
+    }
     // Fold this run into the lifetime totals and surface anything newly unlocked.
     const result = progress.recordRun({
       distance: game.distance,
@@ -351,11 +387,12 @@ function frame(now: number): void {
     shell.showCrash(
       game.score.score,
       game.distance,
-      leaderboard.bestRun(),
+      bestForCrash,
       game.score.peakCombo,
       unlockedNames,
       missionLines,
       placement,
+      dailyResult,
     );
   }
   if (audio.started) {

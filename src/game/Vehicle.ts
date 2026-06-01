@@ -7,7 +7,7 @@
  */
 
 import { clamp, decay } from '../utils/math';
-import { ROAD, VEHICLE, type CarHandling } from '../utils/constants';
+import { DRIFT, ROAD, VEHICLE, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 
 export interface VehicleState {
@@ -21,10 +21,13 @@ export interface VehicleState {
    *  by VEHICLE.boostBonus so the car can briefly ride above its normal top
    *  speed; 0 = no boost. */
   boostTimer: number;
+  /** True while a drift is active (handbrake held mid-run). Read by the renderer
+   *  (yaw/trail/colour), audio (screech) and scoring (drifted near-miss bonus). */
+  drifting: boolean;
 }
 
 export function createVehicleState(): VehicleState {
-  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed, boostTimer: 0 };
+  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed, boostTimer: 0, drifting: false };
 }
 
 /**
@@ -65,12 +68,25 @@ export function updateVehicle(
   state.speed = clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
   if (state.boostTimer > 0) state.boostTimer = Math.max(0, state.boostTimer - dt);
 
+  state.drifting = intent.handbrake;
+
+  // DRIFT speed cost (the trade): holding the handbrake scrubs forward speed
+  // toward a floor (a fraction of the cap), so a juke costs distance/score and
+  // can't just be held forever. Normal acceleration recovers it once released.
+  if (state.drifting) {
+    const floor = cap * DRIFT.minSpeedFraction;
+    state.speed = Math.max(floor, state.speed - DRIFT.speedDrag * dt);
+  }
+
   // Lateral: steer applies acceleration (scaled by grip); friction bleeds
-  // velocity. The handbrake retains far more lateral velocity (drift) — the
-  // car's `drift` multiplier scales that slide, `lateralFriction` the normal
-  // settle. Clamp the retained fraction below 1 so no multiplier can make the
-  // car uncontrollable or blow up to NaN/Infinity.
-  state.lateralVel += intent.steer * VEHICLE.lateralAccel * handling.lateralAccel * dt;
+  // velocity. While DRIFTING the steering accel is multiplied (DRIFT.accelBoost,
+  // scaled by the car's `drift` stat) for a sharp juke — this is what makes a
+  // last-second dodge possible and is the felt difference normal steering can't
+  // match. The handbrake also retains far more lateral velocity (the slide).
+  // Clamp the retained fraction below 1 so no multiplier can make the car
+  // uncontrollable or blow up to NaN/Infinity.
+  const accelMul = state.drifting ? DRIFT.accelBoost * handling.drift : 1;
+  state.lateralVel += intent.steer * VEHICLE.lateralAccel * handling.lateralAccel * accelMul * dt;
   const requested = intent.handbrake
     ? VEHICLE.handbrakeFriction * handling.drift
     : VEHICLE.lateralFriction * handling.lateralFriction;

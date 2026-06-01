@@ -82,6 +82,31 @@ export const VEHICLE = {
   boostBonus: 55,
 } as const;
 
+/**
+ * DRIFT (handbrake) tuning. Diagnosis (see PR): the old handbrake only loosened
+ * lateral FRICTION, which raises the car's sustained lateral-velocity ceiling —
+ * but the road is so narrow (2*ROAD.halfWidth) that the car hits the wall long
+ * before that ceiling matters, and the dodge window is dominated by lateral
+ * ACCELERATION (identical drift-or-not). So drift was real but imperceptible.
+ *
+ * The fix attacks the dodge window directly: while the handbrake is held, the
+ * steering ACCELERATION is multiplied (scaled by the car's `drift` stat) for a
+ * sharp juke normal steering can't match — at the cost of forward speed, so it's
+ * a deliberate trade (dodge now, lose distance/score), not a free permanent hold.
+ */
+export const DRIFT = {
+  /** Lateral-accel multiplier while drifting, scaled further by the car's `drift`
+   *  stat. ~3x the lateral distance covered in the first 0.2s vs normal steering,
+   *  so a last-second lane juke REQUIRES drift. */
+  accelBoost: 2.4,
+  /** Forward speed scrubbed per second while the handbrake is held (the trade).
+   *  A quick juke costs little; holding it down bleeds speed toward the floor. */
+  speedDrag: 42,
+  /** Drift won't scrub forward speed below this fraction of the current cap, so
+   *  the cost is felt but never tanks the run to a crawl. */
+  minSpeedFraction: 0.6,
+} as const;
+
 /** Traffic spawning + recycled-obstacle-pool tuning. */
 export const TRAFFIC = {
   /** Maximum simultaneous obstacles (fixed pool size — never grows). */
@@ -154,6 +179,10 @@ export const SCORING = {
   moverNearMissWeight: 2,
   /** Combo weight for threading a GATE's opening. */
   gateThreadWeight: 1.5,
+  /** Multiplier applied to a near-miss's combo weight when it's threaded WHILE
+   *  DRIFTING. A drifted dodge is committed/risky, so it pays more — a concrete
+   *  reason to drift through the tightest gaps rather than play it safe. */
+  driftNearMissBonus: 1.5,
 } as const;
 
 /**
@@ -518,6 +547,17 @@ export const CAR_VIS = {
   maxRoll: 0.25,
   /** Lateral velocity that maps to maxRoll. */
   rollReference: 30,
+  /** Yaw (radians) the car angles INTO the slide at full drift — the nose kicks
+   *  out so a drift reads instantly as a slide, not a slide-step. Only applied
+   *  while drifting (normal steering keeps the nose forward). */
+  driftMaxYaw: 0.42,
+  /** Lateral velocity that maps to driftMaxYaw. */
+  driftYawReference: 55,
+  /** Extra roll multiplier while drifting (the car leans harder into a slide). */
+  driftRollBoost: 1.5,
+  /** Glow colour the edge lines shift toward while drifting (hot magenta), so
+   *  the car visibly changes state when you press DRIFT. */
+  driftGlow: 0xff2d95,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */

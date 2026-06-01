@@ -13,7 +13,7 @@ import { activeObstacleCount, activeObstacleCountByKind } from '../game/Traffic'
 import { activePickupCount } from '../game/Powerups';
 import type { GameState } from '../game/GameState';
 import type { Telemetry } from '../utils/Telemetry';
-import { BIOMES, CSS_PALETTE, ObstacleKind, SCORING } from '../utils/constants';
+import { BIOMES, CSS_PALETTE, DRIFT, ObstacleKind, SCORING, VEHICLE } from '../utils/constants';
 
 export class DebugOverlay {
   private readonly el: HTMLElement;
@@ -81,6 +81,13 @@ export class DebugOverlay {
       `NEON DRIFT · debug (\` to toggle)\n` +
       `fps ${telemetry.fps.toFixed(0).padStart(3)}  frame ${telemetry.lastMs.toFixed(1)}ms  avg ${telemetry.avgMs.toFixed(1)}ms\n` +
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
+      // DRIFT diagnosis: lateral velocity + the retained-friction fraction (per
+      // second) and steer-accel multiplier WITH vs WITHOUT drift, so the actual
+      // effect of holding DRIFT is visible on device.
+      `drift ${game.vehicle.drifting ? 'ON ' : 'off'}  latVel ${game.vehicle.lateralVel.toFixed(1).padStart(6)}  ` +
+      `accelx ${(game.vehicle.drifting ? DRIFT.accelBoost * game.handling.drift : 1).toFixed(2)}  ` +
+      `fric/s grip ${(VEHICLE.lateralFriction * game.handling.lateralFriction).toFixed(2)} | ` +
+      `drift ${(VEHICLE.handbrakeFriction * game.handling.drift).toFixed(2)}\n` +
       `biome ${BIOMES[game.biome.from].displayName}` +
       `${game.biome.blend > 0 ? ` → ${BIOMES[game.biome.to].displayName} ${(game.biome.blend * 100).toFixed(0)}%` : ''}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +

@@ -158,7 +158,11 @@ export function resolveTraffic(
   playerLateral: number,
   playerDistance: number,
   traffic: TrafficState,
+  drifting = false,
 ): void {
+  // A near-miss threaded WHILE DRIFTING is a committed, risky dodge, so it pays
+  // a combo bonus — a concrete reason to drift through the tightest gaps.
+  const driftMul = drifting ? SCORING.driftNearMissBonus : 1;
   events.crashed = false;
   events.nearMisses = 0;
   events.rampBoosts = 0;
@@ -193,7 +197,7 @@ export function resolveTraffic(
           if (gap < SCORING.nearMissLateral) {
             // Threading a MOVER pays more than a static pass.
             const weight = o.kind === ObstacleKind.Mover ? SCORING.moverNearMissWeight : 1;
-            registerNearMiss(score, weight);
+            registerNearMiss(score, weight * driftMul);
             events.nearMisses++;
           }
         }
@@ -208,7 +212,7 @@ export function resolveTraffic(
         if (!o.passed && o.distance <= playerDistance) {
           o.passed = true;
           if (withinGateOpening(playerLateral, o)) {
-            registerNearMiss(score, SCORING.gateThreadWeight);
+            registerNearMiss(score, SCORING.gateThreadWeight * driftMul);
             events.nearMisses++;
           }
         }

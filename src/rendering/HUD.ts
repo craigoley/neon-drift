@@ -101,11 +101,6 @@ export class HUD {
     parent.appendChild(root);
   }
 
-  /**
-   * Flash a milestone / biome toast: a brief, non-intrusive centred banner in
-   * the given palette colour. Uses the Web Animations API (guarded — absent in
-   * jsdom/tests, where it's a no-op besides setting the text).
-   */
   /** Flash the dedicated near-miss callout ("CLOSE!"). Short and punchy — fires
    *  only at high combo tiers (see main's near-miss dispatch). Separate from the
    *  milestone toast so the two never collide. */
@@ -122,6 +117,9 @@ export class HUD {
     );
   }
 
+  /** Flash a milestone / biome toast: a brief, non-intrusive centred banner in
+   *  the given palette colour. Uses the Web Animations API (guarded — absent in
+   *  jsdom/tests, where it's a no-op besides setting the text). */
   showToast(text: string, color: string): void {
     this.toast.textContent = text;
     this.toast.style.setProperty('--toast-color', color);

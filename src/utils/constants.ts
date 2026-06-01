@@ -965,6 +965,41 @@ export const BLOOM = {
   mobileResolutionScale: 0.5,
 } as const;
 
+/**
+ * CINEMATIC POST-FX — chromatic aberration + scanlines + film/VHS grain +
+ * vignette, ALL combined into ONE custom ShaderPass (one fullscreen pass, not
+ * four — many separate passes tank mobile FPS). Inserted after bloom, before
+ * OutputPass, so it filters the graded HDR composite and OutputPass still does
+ * tone-mapping + sRGB last.
+ *
+ * Defaults are SUBTLE by design — seasoning, not the main course. Aberration +
+ * grain in particular are kept low so obstacles + HUD text stay readable; the
+ * vignette actually AIDS readability by focusing the centre. On touch the
+ * intensities scale by `touchScale`, and a user "Retro FX" setting can disable
+ * the whole pass (see Settings.lowFx).
+ */
+export const POSTFX = {
+  /** RGB-split magnitude at the screen edge (UV units; grows with dist²). Tiny —
+   *  ~1–2 px on a 1080p screen. */
+  aberration: 0.0026,
+  /** Scanline darkening depth (0..1) and how many lines span the screen height. */
+  scanlineIntensity: 0.08,
+  scanlineCount: 900,
+  /** Slow vertical scanline drift (lines/second) — 0 = static. */
+  scanlineDrift: 8,
+  /** Film/VHS grain amount (added per pixel, ±this/2). Subtle. */
+  grain: 0.06,
+  /** Vignette: corner-darkening strength, and the radial start/end (0=centre,
+   *  ~0.71=corner) over which it ramps in. */
+  vignette: 0.42,
+  vignetteStart: 0.5,
+  vignetteEnd: 1.05,
+  /** Touch multiplier applied to aberration/scanline/grain (mobile GPU + small
+   *  screens where the effects read harsher). Vignette is left at full (it's
+   *  cheap and helps readability). */
+  touchScale: 0.6,
+} as const;
+
 /** Renderer device tuning. */
 export const RENDER = {
   /** Pixel-ratio cap on desktop. */

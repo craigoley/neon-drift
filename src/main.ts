@@ -90,6 +90,8 @@ window.addEventListener('touchstart', resumeAudio, { once: true });
 // Rendering layer.
 const scene = new SceneManager(app, isTouch);
 const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
+// Honour the persisted "Retro FX" setting (off = disable the cinematic pass).
+post.setCinematicEnabled(!settings.get('lowFx'));
 const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
 const road = new RoadRenderer(scene.scene);
@@ -175,6 +177,8 @@ const shell = new Shell(app, settings, bestStore, audio, {
   // Picker lock state: a persisted-unlocked car is null (selectable); otherwise
   // show its requirement + live progress. Monotonic — once earned, never locked.
   carLock: (carId) => (progress.isUnlocked(carId) ? null : unlockProgress(carId, progress.getStats())),
+  // "Retro FX" toggle from the settings panel → enable/disable the cinematic pass.
+  onLowFxChange: (lowFx) => post.setCinematicEnabled(!lowFx),
   // MISSIONS panel data (read fresh each time the panel opens). All cosmetic —
   // nothing here gates the core run.
   missions: {
@@ -383,7 +387,7 @@ function frame(now: number): void {
   trailInfo.cap = trail.capacity();
   debug.update(game, telemetry, hud.comboText(), trailInfo);
 
-  post.render();
+  post.render(realDt);
   requestAnimationFrame(frame);
 }
 

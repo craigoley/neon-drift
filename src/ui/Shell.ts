@@ -73,6 +73,8 @@ export interface ShellOptions {
   carLock?: (carId: string) => { label: string; have: number; need: number } | null;
   /** Across-run mission/rank panel data. Absent → no MISSIONS button (tests). */
   missions?: MissionsPanel;
+  /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
+  onLowFxChange?: (lowFx: boolean) => void;
 }
 
 export class Shell {
@@ -109,6 +111,7 @@ export class Shell {
   private readonly sbNameEl: HTMLElement;
   private readonly sbReqEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
+  private readonly fxValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
   private readonly best: BestStore;
@@ -158,6 +161,7 @@ export class Shell {
     this.sbNameEl = this.missionsScreen.querySelector('.shell-sb-name')!;
     this.sbReqEl = this.missionsScreen.querySelector('.shell-sb-req')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
+    this.fxValueEl = this.settingsScreen.querySelector('.shell-fx-value')!;
 
     // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
     // only while playing, gated by `body.playing` like the touch DRIFT button.
@@ -185,6 +189,7 @@ export class Shell {
     this.opts.applyCar(CARS[this.carIndex].id);
     this.renderCar();
     this.renderSound();
+    this.renderFx();
   }
 
   // --- public screen transitions ----------------------------------------
@@ -345,12 +350,34 @@ export class Shell {
       `<button class="shell-btn shell-toggle" type="button" role="switch">` +
       `<span class="shell-toggle-value">ON</span></button>` +
       `</div>` +
-      // Room for future toggles (difficulty, reduced motion) — add rows here.
+      // Retro FX: cinematic post-processing (aberration / scanlines / grain /
+      // vignette). OFF disables the whole pass for weaker GPUs.
+      `<div class="shell-setting">` +
+      `<span class="shell-setting-label">Retro FX</span>` +
+      `<button class="shell-btn shell-toggle shell-toggle-fx" type="button" role="switch">` +
+      `<span class="shell-fx-value">ON</span></button>` +
+      `</div>` +
       `<button class="shell-btn shell-close" type="button">CLOSE</button>`;
 
     s.querySelector('.shell-toggle')!.addEventListener('click', () => this.toggleSound());
+    s.querySelector('.shell-toggle-fx')!.addEventListener('click', () => this.toggleFx());
     s.querySelector('.shell-close')!.addEventListener('click', () => this.go('start'));
     return s;
+  }
+
+  private toggleFx(): void {
+    const nextLowFx = !this.settings.get('lowFx');
+    this.settings.set('lowFx', nextLowFx);
+    this.opts.onLowFxChange?.(nextLowFx); // enable/disable the cinematic pass
+    this.renderFx();
+  }
+
+  private renderFx(): void {
+    const on = !this.settings.get('lowFx'); // FX ON = full cinematic pass
+    this.fxValueEl.textContent = on ? 'ON' : 'OFF';
+    const toggle = this.settingsScreen.querySelector('.shell-toggle-fx')!;
+    toggle.classList.toggle('shell-toggle--on', on);
+    toggle.setAttribute('aria-checked', String(on));
   }
 
   private toggleSound(): void {

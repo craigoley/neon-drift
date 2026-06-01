@@ -19,13 +19,16 @@ import { DEFAULT_CAR_ID, SETTINGS_STORAGE_KEY } from '../utils/constants';
 export interface Settings {
   soundEnabled: boolean;
   selectedCarId: string;
+  /** "Retro FX" off → disables the cinematic post-FX pass (aberration / scanlines
+   *  / grain / vignette) for a guaranteed-cheap fallback on weaker GPUs. */
+  lowFx: boolean;
   // Future (not built this PR): difficulty?: 'chill' | 'normal' | 'intense';
-  //                             reducedMotion?: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   selectedCarId: DEFAULT_CAR_ID,
+  lowFx: false,
 };
 
 /** The slice of the Storage API this module needs. */
@@ -86,6 +89,7 @@ export class SettingsStore {
           typeof parsed.selectedCarId === 'string'
             ? parsed.selectedCarId
             : DEFAULT_SETTINGS.selectedCarId,
+        lowFx: typeof parsed.lowFx === 'boolean' ? parsed.lowFx : DEFAULT_SETTINGS.lowFx,
       };
     } catch {
       return { ...DEFAULT_SETTINGS };

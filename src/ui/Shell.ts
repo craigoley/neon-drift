@@ -103,6 +103,7 @@ export class Shell {
   private readonly crashMissionsEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carTaglineEl: HTMLElement;
+  private readonly carPlaystyleEl: HTMLElement;
   private readonly carCanvasEl: HTMLElement;
   private readonly carStatsEl: HTMLElement;
   private readonly carDotsEl: HTMLElement;
@@ -154,6 +155,7 @@ export class Shell {
     this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carTaglineEl = this.carScreen.querySelector('.shell-car-tagline')!;
+    this.carPlaystyleEl = this.carScreen.querySelector('.shell-car-playstyle')!;
     this.carCanvasEl = this.carScreen.querySelector('.shell-car-canvas')!;
     this.carStatsEl = this.carScreen.querySelector('.shell-car-stats')!;
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
@@ -410,6 +412,7 @@ export class Shell {
       `</div>` +
       `<p class="shell-car-name"></p>` +
       `<p class="shell-car-tagline"></p>` +
+      `<p class="shell-car-playstyle"></p>` +
       `<p class="shell-car-lock"></p>` +
       `<div class="shell-car-stats">` +
       this.statRow('SPEED', 'speed') +
@@ -469,6 +472,9 @@ export class Shell {
     const lock = this.opts.carLock?.(car.id) ?? null;
     this.carNameEl.textContent = car.displayName;
     this.carTaglineEl.textContent = car.tagline ?? '';
+    // Scoring-playstyle line (OPP-07b) — beneath the handling tagline so the
+    // combo build/window tradeoff is readable, not just felt.
+    this.carPlaystyleEl.textContent = car.scoringTagline ?? '';
 
     // Locked cars show their requirement + live progress; unlocked ones clear it.
     this.carScreen.classList.toggle('locked', !!lock);

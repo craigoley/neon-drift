@@ -127,13 +127,17 @@ export const TRAFFIC = {
   /** Seconds between spawns at the start of a run. */
   baseSpawnInterval: 1.5,
   /**
-   * Lowest spawn interval (the density FLOOR) as difficulty ramps. REBALANCED:
-   * was 0.3 → ~3.3 obstacles/second, which at the simultaneously-fast speed was
-   * literally undodgeable (the diagnosed "impossible by ~30s"). 0.62 → ~1.6/s is
-   * hard-but-fair — the densest the game ever gets. This is the single biggest
-   * lever on peak difficulty; raise it to make late game easier.
+   * Lowest spawn interval (the density FLOOR) as difficulty ramps. The
+   * pacedSpawnInterval clamps to this, so it sets the DENSEST the game ever gets
+   * (reached in the late game). History: 0.3 (~3.3/s, undodgeable) → 0.62 (~1.6/s).
+   *
+   * LEVER 2 (fix/near-miss-frequency-tuning): 0.62 → 0.8 (~1.25/s, ~22% fewer
+   * obstacles/sec at peak) — late-game traffic felt constant/oppressive. This is
+   * the single biggest lever on peak difficulty and ONLY affects late game (early
+   * pacing + the OPP-01 opening seed are governed by base/rampStart, untouched).
+   * Independently revertable from Lever 1.
    */
-  minSpawnInterval: 0.62,
+  minSpawnInterval: 0.8,
   /**
    * Difficulty ramp (spawn density). For the first `rampStartDistance` world
    * units the interval stays at `baseSpawnInterval` — a grace period (the first

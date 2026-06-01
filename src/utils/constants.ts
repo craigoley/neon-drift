@@ -565,6 +565,83 @@ export const CAR_VIS = {
   driftGlowSnap: 0.01,
 } as const;
 
+/**
+ * Procedural player-car geometry (rendering only — the collision box is still
+ * CAR_VIS.width × .length, see VEHICLE). The car is built as a low-poly group:
+ * a tapered lower hull, a smaller faceted cabin, four wheels, plus emissive neon
+ * edge lines, headlight glow quads and a ground-glow blob. All dimensions are
+ * FRACTIONS of the CAR_VIS footprint so the silhouette scales with the hitbox
+ * and the visible car keeps reading as "what collides". The chase cam views it
+ * from behind/above, so detail is biased to the top and rear.
+ */
+export const CAR_GEO = {
+  /** Lower hull as a fraction of the full footprint. The nose tapers in (front
+   *  narrower than rear) for a wedge/sleek read; values are 0..1 of width. */
+  hull: {
+    /** Hull height as a fraction of CAR_VIS.height (rest is headroom for cabin). */
+    heightFraction: 0.5,
+    /** Rear width as a fraction of CAR_VIS.width (the widest part). */
+    rearWidthFraction: 1.0,
+    /** Front width as a fraction of CAR_VIS.width (tapered nose). */
+    frontWidthFraction: 0.66,
+    /** Top deck inset vs the bottom (top narrower → subtle bevel), fraction. */
+    topInsetFraction: 0.16,
+  },
+  /** Faceted cabin/greenhouse sitting on the hull, toward the rear (cockpit). */
+  cabin: {
+    /** Cabin height as a fraction of CAR_VIS.height above the hull top. */
+    heightFraction: 0.5,
+    /** Cabin width as a fraction of the hull top width. */
+    widthFraction: 0.7,
+    /** Cabin length as a fraction of CAR_VIS.length. */
+    lengthFraction: 0.42,
+    /** Cabin centre offset toward the REAR as a fraction of half-length (+ = back). */
+    rearOffsetFraction: 0.18,
+    /** Windshield rake: how far the cabin FRONT-top pulls back vs front-bottom,
+     *  fraction of cabin length (a slanted windscreen, not a vertical wall). */
+    windshieldRake: 0.55,
+  },
+  /** Wheels: short octagonal prisms (low-poly), one per corner. */
+  wheels: {
+    /** Radius as a fraction of CAR_VIS.height. */
+    radiusFraction: 0.28,
+    /** Width (axle length) as a fraction of CAR_VIS.width. */
+    widthFraction: 0.18,
+    /** Radial segments — low for the faceted low-poly look. */
+    segments: 8,
+    /** Corner inset from the hull edge, fraction of half-width / half-length. */
+    lateralInset: 0.06,
+    longitudinalInset: 0.26,
+  },
+  /** Headlight glow: small additive quads at the nose casting a forward bloom. */
+  headlights: {
+    /** Quad size (world units). */
+    size: 0.55,
+    /** Lateral offset of each light from centre, fraction of front half-width. */
+    lateralFraction: 0.6,
+    /** Height above the road, fraction of CAR_VIS.height. */
+    heightFraction: 0.42,
+    /** Base opacity of the additive glow (kept low so bloom doesn't blow out). */
+    opacity: 0.55,
+  },
+  /** Ground glow: a flat additive blob under the car so it feels grounded. */
+  groundGlow: {
+    /** Radius as a multiple of CAR_VIS.width. */
+    radiusMul: 1.35,
+    /** Length stretch (z) vs width so the pool elongates with the car. */
+    lengthMul: 1.5,
+    /** Height above the road (just clear of z-fighting). */
+    y: 0.03,
+    /** Base opacity (additive; subtle). */
+    opacity: 0.32,
+  },
+  /** Emissive accent strip along the body sides (picks up the car's glow). */
+  underglow: {
+    /** Opacity of the side accent line. */
+    opacity: 0.9,
+  },
+} as const;
+
 /** Traffic obstacle visual tuning (rendering only). */
 export const TRAFFIC_VIS = {
   /** Obstacle mesh height and its y-centre above the ground. */

@@ -22,6 +22,12 @@ export class VehicleRenderer {
 
   private readonly bodyMat: THREE.MeshBasicMaterial;
   private readonly edgesMat: THREE.LineBasicMaterial;
+  /** The car's own glow colour (restored when not drifting). */
+  private readonly baseGlow = new THREE.Color(PALETTE.cyan);
+  /** Hot drift glow lerp target. */
+  private readonly driftGlow = new THREE.Color(CAR_VIS.driftGlow);
+  /** Scratch colour for the per-frame drift lerp (no per-frame allocation). */
+  private readonly glowScratch = new THREE.Color();
 
   constructor(scene: THREE.Scene) {
     const { width, height, length } = CAR_VIS;
@@ -47,12 +53,32 @@ export class VehicleRenderer {
   applyCar(car: CarDef): void {
     this.bodyMat.color.setHex(car.cosmetic.body);
     this.edgesMat.color.setHex(car.cosmetic.glow);
+    this.baseGlow.setHex(car.cosmetic.glow);
   }
 
-  /** Mirror pure state onto the transform; roll into the steer for feel. */
+  /**
+   * Mirror pure state onto the transform. Roll leans into the steer for feel;
+   * while DRIFTING the car also YAWS into the slide (nose kicks out) and the
+   * glow shifts hot, so a drift is unmistakable at a glance.
+   */
   sync(state: VehicleState): void {
     this.group.position.x = state.lateral;
-    const roll = clamp(-state.lateralVel / CAR_VIS.rollReference, -1, 1) * CAR_VIS.maxRoll;
-    this.group.rotation.z = roll;
+
+    const rollBoost = state.drifting ? CAR_VIS.driftRollBoost : 1;
+    this.group.rotation.z =
+      clamp(-state.lateralVel / CAR_VIS.rollReference, -1, 1) * CAR_VIS.maxRoll * rollBoost;
+
+    // Yaw only while drifting — the nose angles into the slide direction.
+    const yaw = state.drifting
+      ? clamp(-state.lateralVel / CAR_VIS.driftYawReference, -1, 1) * CAR_VIS.driftMaxYaw
+      : 0;
+    this.group.rotation.y = yaw;
+
+    // Glow shifts toward the hot drift colour while drifting, back otherwise.
+    const target = state.drifting ? this.driftGlow : this.baseGlow;
+    if (!this.edgesMat.color.equals(target)) {
+      this.glowScratch.copy(this.edgesMat.color).lerp(target, CAR_VIS.driftGlowLerp);
+      this.edgesMat.color.copy(this.glowScratch);
+    }
   }
 }

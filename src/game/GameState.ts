@@ -178,6 +178,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents.milestone = null;
     state.lastEvents.biomeChanged = false;
     state.lastEvents.objectiveDone = null;
+    state.vehicle.drifting = false; // not driving — no drift visual/audio/screech
     return state;
   }
 
@@ -201,7 +202,14 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
 
   // Writes into the pre-allocated lastEvents object (no per-frame allocation).
-  resolveTraffic(state.lastEvents, state.score, state.vehicle.lateral, state.distance, state.traffic);
+  resolveTraffic(
+    state.lastEvents,
+    state.score,
+    state.vehicle.lateral,
+    state.distance,
+    state.traffic,
+    state.vehicle.drifting,
+  );
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
   collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);

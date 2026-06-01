@@ -244,8 +244,8 @@ export class Shell {
   private buildStart(): HTMLElement {
     const s = screen('shell-start');
     const hint = this.opts.isTouch
-      ? 'drag to steer · DRIFT to dodge'
-      : '← → / A D to steer · SPACE to drift';
+      ? 'drag to steer · hold DRIFT to juke (costs speed)'
+      : '← → / A D to steer · hold SPACE to drift-juke (costs speed)';
     s.innerHTML =
       `<h1 class="shell-title">NEON DRIFT</h1>` +
       `<p class="shell-best"></p>` +

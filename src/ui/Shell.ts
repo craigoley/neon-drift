@@ -19,7 +19,35 @@ import type { AudioEngine } from '../audio/AudioEngine';
 import { CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
-type Screen = 'start' | 'settings' | 'carpicker' | 'crash' | 'pause' | null;
+type Screen = 'start' | 'settings' | 'carpicker' | 'missions' | 'crash' | 'pause' | null;
+
+/** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
+export interface MissionView {
+  label: string;
+  have: number;
+  need: number;
+  done: boolean;
+}
+export interface RankView {
+  name: string;
+  completed: number;
+  nextName: string | null;
+  toNext: number;
+  nextUnlock: string | null;
+}
+export interface StartBiomeView {
+  index: number;
+  name: string;
+  unlocked: boolean;
+  requirement: string | null;
+  selected: boolean;
+}
+export interface MissionsPanel {
+  active: () => MissionView[];
+  rank: () => RankView;
+  startBiomes: () => StartBiomeView[];
+  selectStartBiome: (index: number) => void;
+}
 
 export interface ShellOptions {
   isTouch: boolean;
@@ -43,6 +71,8 @@ export interface ShellOptions {
   /** Lock state for a car: `null` when unlocked, else the requirement + live
    *  progress for the picker. Absent → everything unlocked (used by tests). */
   carLock?: (carId: string) => { label: string; have: number; need: number } | null;
+  /** Across-run mission/rank panel data. Absent → no MISSIONS button (tests). */
+  missions?: MissionsPanel;
 }
 
 export class Shell {
@@ -54,10 +84,13 @@ export class Shell {
   private readonly startScreen: HTMLElement;
   private readonly settingsScreen: HTMLElement;
   private readonly carScreen: HTMLElement;
+  private readonly missionsScreen: HTMLElement;
   private readonly crashScreen: HTMLElement;
   private readonly pauseScreen: HTMLElement;
   /** In-run PAUSE affordance (visible only while playing). */
   private readonly pauseBtn: HTMLButtonElement;
+  /** Browse cursor for the start-biome selector in the missions panel. */
+  private sbIndex = 0;
 
   // Dynamic nodes.
   private readonly startBest: HTMLElement;
@@ -65,11 +98,16 @@ export class Shell {
   private readonly crashComboEl: HTMLElement;
   private readonly crashBestEl: HTMLElement;
   private readonly crashUnlockEl: HTMLElement;
+  private readonly crashMissionsEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carCanvasEl: HTMLElement;
   private readonly carStatsEl: HTMLElement;
   private readonly carDotsEl: HTMLElement;
   private readonly carLockEl: HTMLElement;
+  private readonly rankEl: HTMLElement;
+  private readonly missionsListEl: HTMLElement;
+  private readonly sbNameEl: HTMLElement;
+  private readonly sbReqEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
@@ -99,6 +137,7 @@ export class Shell {
     this.startScreen = this.buildStart();
     this.settingsScreen = this.buildSettings();
     this.carScreen = this.buildCarPicker();
+    this.missionsScreen = this.buildMissions();
     this.crashScreen = this.buildCrash();
     this.pauseScreen = this.buildPause();
 
@@ -108,11 +147,16 @@ export class Shell {
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
     this.crashUnlockEl = this.crashScreen.querySelector('.shell-crash-unlock')!;
+    this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carCanvasEl = this.carScreen.querySelector('.shell-car-canvas')!;
     this.carStatsEl = this.carScreen.querySelector('.shell-car-stats')!;
     this.carDotsEl = this.carScreen.querySelector('.shell-car-dots')!;
     this.carLockEl = this.carScreen.querySelector('.shell-car-lock')!;
+    this.rankEl = this.missionsScreen.querySelector('.shell-rank')!;
+    this.missionsListEl = this.missionsScreen.querySelector('.shell-missions-list')!;
+    this.sbNameEl = this.missionsScreen.querySelector('.shell-sb-name')!;
+    this.sbReqEl = this.missionsScreen.querySelector('.shell-sb-req')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
 
     // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
@@ -128,6 +172,7 @@ export class Shell {
       this.startScreen,
       this.settingsScreen,
       this.carScreen,
+      this.missionsScreen,
       this.crashScreen,
       this.pauseScreen,
       this.pauseBtn,
@@ -155,6 +200,7 @@ export class Shell {
     best: BestRun,
     peakCombo: number,
     unlockedNames: string[] = [],
+    missionLines: string[] = [],
   ): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
     // The live combo resets on crash, so the WIPEOUT screen is where the player
@@ -184,6 +230,17 @@ export class Shell {
       this.crashUnlockEl.style.display = 'none';
     }
 
+    // Mission / rank celebration lines (non-intrusive; never block the retry).
+    if (missionLines.length > 0) {
+      this.crashMissionsEl.innerHTML = missionLines
+        .map((l) => `<span class="shell-crash-mission-line">${l}</span>`)
+        .join('');
+      this.crashMissionsEl.style.display = '';
+    } else {
+      this.crashMissionsEl.innerHTML = '';
+      this.crashMissionsEl.style.display = 'none';
+    }
+
     this.go('crash');
   }
 
@@ -208,10 +265,14 @@ export class Shell {
     this.startScreen.style.display = screen === 'start' ? 'flex' : 'none';
     this.settingsScreen.style.display = screen === 'settings' ? 'flex' : 'none';
     this.carScreen.style.display = screen === 'carpicker' ? 'flex' : 'none';
+    this.missionsScreen.style.display = screen === 'missions' ? 'flex' : 'none';
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
     this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
     // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
     document.body.classList.toggle('playing', screen === null);
+
+    // Refresh the missions panel from live progression data when it opens.
+    if (screen === 'missions' && prev !== 'missions') this.renderMissions();
 
     // Spin up / tear down the 3D car preview with the picker (the rendering
     // layer owns the mesh; it must never run behind the game).
@@ -253,12 +314,16 @@ export class Shell {
       `<p class="shell-hint">${hint}</p>` +
       `<div class="shell-row">` +
       `<button class="shell-btn shell-btn--ghost shell-cars" type="button">CARS</button>` +
+      (this.opts.missions
+        ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
+        : '') +
       `<button class="shell-btn shell-btn--ghost shell-settings-open" type="button">SETTINGS</button>` +
       `</div>` +
       `<button class="shell-btn shell-btn--ghost shell-share" type="button">SHARE</button>`;
 
     s.querySelector('.shell-play')!.addEventListener('click', () => this.play());
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
+    s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
     s.querySelector('.shell-settings-open')!.addEventListener('click', () => this.go('settings'));
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());
     return s;
@@ -400,6 +465,86 @@ export class Shell {
     ).join('');
   }
 
+  // --- missions panel -----------------------------------------------------
+
+  private buildMissions(): HTMLElement {
+    const s = screen('shell-missions');
+    s.innerHTML =
+      `<h2 class="shell-subtitle">MISSIONS</h2>` +
+      `<p class="shell-rank"></p>` +
+      `<div class="shell-missions-list"></div>` +
+      `<div class="shell-startbiome">` +
+      `<span class="shell-startbiome-label">STARTING BIOME</span>` +
+      `<div class="shell-startbiome-row">` +
+      `<button class="shell-btn shell-arrow shell-sb-prev" type="button" aria-label="previous biome">‹</button>` +
+      `<span class="shell-sb-name"></span>` +
+      `<button class="shell-btn shell-arrow shell-sb-next" type="button" aria-label="next biome">›</button>` +
+      `</div>` +
+      `<p class="shell-sb-req"></p>` +
+      `</div>` +
+      `<button class="shell-btn shell-close-missions" type="button">DONE</button>`;
+
+    s.querySelector('.shell-sb-prev')!.addEventListener('click', () => this.cycleStartBiome(-1));
+    s.querySelector('.shell-sb-next')!.addEventListener('click', () => this.cycleStartBiome(1));
+    s.querySelector('.shell-close-missions')!.addEventListener('click', () => this.showStart());
+    return s;
+  }
+
+  /** Render the missions panel from the live progression data (on open). */
+  private renderMissions(): void {
+    const m = this.opts.missions;
+    if (!m) return;
+
+    const rank = m.rank();
+    this.rankEl.innerHTML =
+      `<span class="shell-rank-name">${rank.name}</span> · ${rank.completed} missions` +
+      (rank.nextName
+        ? ` · next: <b>${rank.nextName}</b> in ${rank.toNext} (${rank.nextUnlock})`
+        : ' · MAX RANK');
+
+    // Active missions with progress bars (rebuilt on open — at most 3 rows).
+    this.missionsListEl.innerHTML = m
+      .active()
+      .map((v) => {
+        const pct = Math.round((v.have / Math.max(1, v.need)) * 100);
+        return (
+          `<div class="shell-mission${v.done ? ' done' : ''}">` +
+          `<span class="shell-mission-label">${v.done ? '✓ ' : ''}${v.label}</span>` +
+          `<div class="shell-mission-track"><div class="shell-mission-fill" style="width:${pct}%"></div></div>` +
+          `<span class="shell-mission-count">${v.have}/${v.need}</span>` +
+          `</div>`
+        );
+      })
+      .join('');
+
+    // Start-biome selector starts on the currently-selected option.
+    const biomes = m.startBiomes();
+    const sel = biomes.findIndex((b) => b.selected);
+    this.sbIndex = sel >= 0 ? sel : 0;
+    this.renderStartBiome();
+  }
+
+  private cycleStartBiome(dir: number): void {
+    const m = this.opts.missions;
+    if (!m) return;
+    const biomes = m.startBiomes();
+    this.sbIndex = (this.sbIndex + dir + biomes.length) % biomes.length;
+    const b = biomes[this.sbIndex];
+    // Only an UNLOCKED biome can be chosen (cosmetic gating — never gameplay).
+    if (b.unlocked) m.selectStartBiome(b.index);
+    this.renderStartBiome();
+  }
+
+  private renderStartBiome(): void {
+    const m = this.opts.missions;
+    if (!m) return;
+    const b = m.startBiomes()[this.sbIndex];
+    if (!b) return;
+    this.sbNameEl.textContent = b.name;
+    this.missionsScreen.classList.toggle('sb-locked', !b.unlocked);
+    this.sbReqEl.textContent = b.unlocked ? (b.selected ? '✓ selected' : 'tap an arrow to select') : `🔒 ${b.requirement ?? 'locked'}`;
+  }
+
   // --- crash screen -------------------------------------------------------
 
   private buildCrash(): HTMLElement {
@@ -409,6 +554,7 @@ export class Shell {
       `<p class="shell-crash-line shell-crash-score"></p>` +
       `<p class="shell-crash-combo"></p>` +
       `<p class="shell-crash-unlock"></p>` +
+      `<div class="shell-crash-missions"></div>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
       `<div class="shell-row">` +
@@ -497,6 +643,18 @@ export class Shell {
         } else if (e.key === 'Enter' || e.key === 'Escape') {
           e.preventDefault();
           this.go('start');
+        }
+        break;
+      case 'missions':
+        if (e.key === 'ArrowLeft') {
+          e.preventDefault();
+          this.cycleStartBiome(-1);
+        } else if (e.key === 'ArrowRight') {
+          e.preventDefault();
+          this.cycleStartBiome(1);
+        } else if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          this.showStart();
         }
         break;
       case 'settings':

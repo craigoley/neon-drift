@@ -1386,8 +1386,16 @@ export const TOUCH = {
   deadzonePx: 8,
 } as const;
 
-/** localStorage key for the persisted best run. */
+/** localStorage key for the persisted best run. LEGACY (pre-OPP-15): the
+ *  single-best store. Still READ once on first load to MIGRATE the existing best
+ *  into the leaderboard so a player's record run is never lost. */
 export const STORAGE_KEY = 'neon-drift.best';
+
+/** localStorage key for the OPP-15 leaderboard (top runs + per-car bests). */
+export const LEADERBOARD_STORAGE_KEY = 'neon-drift.leaderboard';
+
+/** Max entries kept on the top-runs leaderboard (sorted by score, desc). */
+export const LEADERBOARD_SIZE = 10;
 
 /** localStorage key for player settings (sound, selected car, future toggles). */
 export const SETTINGS_STORAGE_KEY = 'neon-drift.settings';

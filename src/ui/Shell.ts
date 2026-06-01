@@ -14,12 +14,12 @@
  */
 
 import type { SettingsStore } from '../state/Settings';
-import type { BestStore, BestRun } from '../storage/BestStore';
+import type { BestRun, LeaderboardStore, RunPlacement } from '../state/Leaderboard';
 import type { AudioEngine } from '../audio/AudioEngine';
-import { CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
+import { carById, CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
-type Screen = 'start' | 'settings' | 'carpicker' | 'missions' | 'crash' | 'pause' | null;
+type Screen = 'start' | 'settings' | 'carpicker' | 'missions' | 'leaderboard' | 'crash' | 'pause' | null;
 
 /** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
 export interface MissionView {
@@ -87,6 +87,7 @@ export class Shell {
   private readonly settingsScreen: HTMLElement;
   private readonly carScreen: HTMLElement;
   private readonly missionsScreen: HTMLElement;
+  private readonly leaderboardScreen: HTMLElement;
   private readonly crashScreen: HTMLElement;
   private readonly pauseScreen: HTMLElement;
   /** In-run PAUSE affordance (visible only while playing). */
@@ -98,9 +99,13 @@ export class Shell {
   private readonly startBest: HTMLElement;
   private readonly crashScoreEl: HTMLElement;
   private readonly crashComboEl: HTMLElement;
+  private readonly crashPlacementEl: HTMLElement;
+  private readonly crashTargetEl: HTMLElement;
   private readonly crashBestEl: HTMLElement;
   private readonly crashUnlockEl: HTMLElement;
   private readonly crashMissionsEl: HTMLElement;
+  private readonly leaderboardListEl: HTMLElement;
+  private readonly leaderboardCarsEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carTaglineEl: HTMLElement;
   private readonly carPlaystyleEl: HTMLElement;
@@ -116,19 +121,19 @@ export class Shell {
   private readonly fxValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
-  private readonly best: BestStore;
+  private readonly leaderboard: LeaderboardStore;
   private readonly audio: AudioEngine;
   private readonly opts: ShellOptions;
 
   constructor(
     parent: HTMLElement,
     settings: SettingsStore,
-    best: BestStore,
+    leaderboard: LeaderboardStore,
     audio: AudioEngine,
     opts: ShellOptions,
   ) {
     this.settings = settings;
-    this.best = best;
+    this.leaderboard = leaderboard;
     this.audio = audio;
     this.opts = opts;
     this.carIndex = Math.max(
@@ -143,6 +148,7 @@ export class Shell {
     this.settingsScreen = this.buildSettings();
     this.carScreen = this.buildCarPicker();
     this.missionsScreen = this.buildMissions();
+    this.leaderboardScreen = this.buildLeaderboard();
     this.crashScreen = this.buildCrash();
     this.pauseScreen = this.buildPause();
 
@@ -150,9 +156,13 @@ export class Shell {
     this.startBest = this.startScreen.querySelector('.shell-best')!;
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
+    this.crashPlacementEl = this.crashScreen.querySelector('.shell-crash-placement')!;
+    this.crashTargetEl = this.crashScreen.querySelector('.shell-crash-target')!;
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
     this.crashUnlockEl = this.crashScreen.querySelector('.shell-crash-unlock')!;
     this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
+    this.leaderboardListEl = this.leaderboardScreen.querySelector('.shell-lb-list')!;
+    this.leaderboardCarsEl = this.leaderboardScreen.querySelector('.shell-lb-cars')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carTaglineEl = this.carScreen.querySelector('.shell-car-tagline')!;
     this.carPlaystyleEl = this.carScreen.querySelector('.shell-car-playstyle')!;
@@ -181,6 +191,7 @@ export class Shell {
       this.settingsScreen,
       this.carScreen,
       this.missionsScreen,
+      this.leaderboardScreen,
       this.crashScreen,
       this.pauseScreen,
       this.pauseBtn,
@@ -199,7 +210,7 @@ export class Shell {
   // --- public screen transitions ----------------------------------------
 
   showStart(): void {
-    this.startBest.textContent = this.bestLine(this.best.best);
+    this.startBest.textContent = this.bestLine(this.leaderboard.bestRun());
     this.go('start');
   }
 
@@ -210,6 +221,7 @@ export class Shell {
     peakCombo: number,
     unlockedNames: string[] = [],
     missionLines: string[] = [],
+    placement: RunPlacement | null = null,
   ): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
     // The live combo resets on crash, so the WIPEOUT screen is where the player
@@ -217,6 +229,11 @@ export class Shell {
     this.crashComboEl.textContent = `MAX COMBO x${peakCombo.toFixed(1)}`;
     // Dim when the run never rose above the base combo (a daring run pops).
     this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
+
+    // OPP-15: placement badge (made the board / beat this car) + the nearest
+    // beatable score to chase — the "one more run" hook. Both hide when absent.
+    this.renderPlacement(placement);
+
     this.crashBestEl.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
 
     // Unlock moment: celebrate anything earned this run (else stay hidden).
@@ -275,6 +292,7 @@ export class Shell {
     this.settingsScreen.style.display = screen === 'settings' ? 'flex' : 'none';
     this.carScreen.style.display = screen === 'carpicker' ? 'flex' : 'none';
     this.missionsScreen.style.display = screen === 'missions' ? 'flex' : 'none';
+    this.leaderboardScreen.style.display = screen === 'leaderboard' ? 'flex' : 'none';
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
     this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
     // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
@@ -282,6 +300,8 @@ export class Shell {
 
     // Refresh the missions panel from live progression data when it opens.
     if (screen === 'missions' && prev !== 'missions') this.renderMissions();
+    // Refresh the leaderboard from the store each time it opens (live data).
+    if (screen === 'leaderboard' && prev !== 'leaderboard') this.renderLeaderboard();
 
     // Spin up / tear down the 3D car preview with the picker (the rendering
     // layer owns the mesh; it must never run behind the game).
@@ -326,6 +346,7 @@ export class Shell {
       (this.opts.missions
         ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
         : '') +
+      `<button class="shell-btn shell-btn--ghost shell-leaderboard-open" type="button">SCORES</button>` +
       `<button class="shell-btn shell-btn--ghost shell-settings-open" type="button">SETTINGS</button>` +
       `</div>` +
       `<button class="shell-btn shell-btn--ghost shell-share" type="button">SHARE</button>`;
@@ -333,6 +354,7 @@ export class Shell {
     s.querySelector('.shell-play')!.addEventListener('click', () => this.play());
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
     s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
+    s.querySelector('.shell-leaderboard-open')!.addEventListener('click', () => this.go('leaderboard'));
     s.querySelector('.shell-settings-open')!.addEventListener('click', () => this.go('settings'));
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());
     return s;
@@ -582,17 +604,117 @@ export class Shell {
     this.sbReqEl.textContent = b.unlocked ? (b.selected ? '✓ selected' : 'tap an arrow to select') : `🔒 ${b.requirement ?? 'locked'}`;
   }
 
+  // --- leaderboard view ---------------------------------------------------
+
+  private buildLeaderboard(): HTMLElement {
+    const s = screen('shell-leaderboard');
+    s.innerHTML =
+      `<h2 class="shell-subtitle">SCORES</h2>` +
+      `<div class="shell-lb-list"></div>` +
+      `<h3 class="shell-lb-heading">BEST PER CAR</h3>` +
+      `<div class="shell-lb-cars"></div>` +
+      `<button class="shell-btn shell-close-leaderboard" type="button">DONE</button>`;
+    s.querySelector('.shell-close-leaderboard')!.addEventListener('click', () => this.showStart());
+    return s;
+  }
+
+  /** Display name for a recorded run's car ('—' for a migrated legacy entry). */
+  private carLabel(carId: string): string {
+    return carId ? carById(carId).displayName : '—';
+  }
+
+  /** Render the leaderboard view from the store (on open). Top runs + per-car. */
+  private renderLeaderboard(): void {
+    const top = this.leaderboard.top();
+    if (top.length === 0) {
+      this.leaderboardListEl.innerHTML = `<p class="shell-lb-empty">NO RUNS YET</p>`;
+    } else {
+      this.leaderboardListEl.innerHTML = top
+        .map(
+          (e, i) =>
+            `<div class="shell-lb-row${i === 0 ? ' shell-lb-row--top' : ''}">` +
+            `<span class="shell-lb-rank">#${i + 1}</span>` +
+            `<span class="shell-lb-score">${fmtNum(e.score)}</span>` +
+            `<span class="shell-lb-dist">${fmtNum(e.distance)} m</span>` +
+            `<span class="shell-lb-car">${this.carLabel(e.carId)}</span>` +
+            `<span class="shell-lb-date">${fmtDate(e.date)}</span>` +
+            `</div>`,
+        )
+        .join('');
+    }
+
+    const cars = this.leaderboard.perCarBests();
+    this.leaderboardCarsEl.innerHTML =
+      cars.length === 0
+        ? `<p class="shell-lb-empty">—</p>`
+        : cars
+            .map(
+              (c) =>
+                `<div class="shell-lb-row">` +
+                `<span class="shell-lb-car">${this.carLabel(c.carId)}</span>` +
+                `<span class="shell-lb-score">${fmtNum(c.score)}</span>` +
+                `<span class="shell-lb-dist">${fmtNum(c.distance)} m</span>` +
+                `<span class="shell-lb-date">${fmtDate(c.date)}</span>` +
+                `</div>`,
+            )
+            .join('');
+  }
+
   // --- crash screen -------------------------------------------------------
+
+  /** Game-over placement: a celebratory badge (made the board / beat this car)
+   *  and the nearest higher score to chase. Both lines hide when not earned. */
+  private renderPlacement(placement: RunPlacement | null): void {
+    let badge = '';
+    if (placement) {
+      if (placement.rank === 1) {
+        badge = 'NEW BEST!'; // #1 implies the car best too — keep it to one punch
+      } else {
+        const parts: string[] = [];
+        if (placement.rank !== null) parts.push(`NEW #${placement.rank}!`);
+        if (placement.isCarBest) parts.push(`BEST IN ${this.carLabel(placement.carId).toUpperCase()}`);
+        badge = parts.join('  ·  ');
+      }
+    }
+    if (badge) {
+      this.crashPlacementEl.textContent = badge;
+      this.crashPlacementEl.style.display = '';
+      if (typeof this.crashPlacementEl.animate === 'function') {
+        this.crashPlacementEl.animate(
+          [
+            { opacity: 0, transform: 'scale(0.9)' },
+            { opacity: 1, transform: 'scale(1.06)', offset: 0.6 },
+            { opacity: 1, transform: 'scale(1)' },
+          ],
+          { duration: 600, easing: 'ease-out' },
+        );
+      }
+    } else {
+      this.crashPlacementEl.textContent = '';
+      this.crashPlacementEl.style.display = 'none';
+    }
+
+    const target = placement?.target ?? null;
+    if (target) {
+      this.crashTargetEl.textContent = `just ${fmtNum(target.gap)} from #${target.rank}`;
+      this.crashTargetEl.style.display = '';
+    } else {
+      this.crashTargetEl.textContent = '';
+      this.crashTargetEl.style.display = 'none';
+    }
+  }
 
   private buildCrash(): HTMLElement {
     const s = screen('shell-crash');
     s.innerHTML =
       `<h1 class="shell-title shell-wipeout">WIPEOUT</h1>` +
       `<p class="shell-crash-line shell-crash-score"></p>` +
+      `<p class="shell-crash-placement"></p>` +
       `<p class="shell-crash-combo"></p>` +
       `<p class="shell-crash-unlock"></p>` +
       `<div class="shell-crash-missions"></div>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
+      `<p class="shell-crash-target"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
       `<div class="shell-row">` +
       `<button class="shell-btn shell-btn--ghost shell-menu" type="button">MENU</button>` +
@@ -700,6 +822,12 @@ export class Shell {
           this.go('start');
         }
         break;
+      case 'leaderboard':
+        if (e.key === 'Escape' || e.key === 'Enter') {
+          e.preventDefault();
+          this.showStart();
+        }
+        break;
       default:
         break; // in play — Controls handles keys
     }
@@ -718,4 +846,15 @@ function screen(modifier: string): HTMLElement {
   el.className = `shell-screen ${modifier}`;
   el.style.display = 'none';
   return el;
+}
+
+/** Rounded integer with thousands separators (e.g. 56142 → "56,142"). Fixed
+ *  'en-US' grouping so leaderboard scores read consistently across locales. */
+function fmtNum(n: number): string {
+  return Math.round(n).toLocaleString('en-US');
+}
+
+/** Short YYYY-MM-DD for a recorded run; '—' for a migrated legacy entry (date 0). */
+function fmtDate(ms: number): string {
+  return ms > 0 ? new Date(ms).toISOString().slice(0, 10) : '—';
 }

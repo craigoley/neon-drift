@@ -31,7 +31,7 @@ import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
 import { DebugOverlay } from './rendering/DebugOverlay';
 import { Shell } from './ui/Shell';
-import { BestStore } from './storage/BestStore';
+import { LeaderboardStore } from './state/Leaderboard';
 import { SettingsStore } from './state/Settings';
 import { ProgressStore } from './state/Progress';
 import { unlockProgress } from './state/Unlocks';
@@ -136,15 +136,16 @@ const telemetry = new Telemetry();
 // Touch steering on the canvas; DRIFT button in `app` (shown only while playing).
 if (isTouch) controls.attachTouch(scene.renderer.domElement, app);
 
-// Persisted best run (localStorage).
-const bestStore = new BestStore();
+// Persisted leaderboard: top-10 runs + per-car bests (localStorage). Migrates
+// the legacy single-best on first load; the "BEST" readout derives from #1.
+const leaderboard = new LeaderboardStore();
 
 // Front-end shell (start / settings / car picker / crash overlays).
 const canonicalUrl = window.location.origin + window.location.pathname;
 // The car-picker 3D preview's renderer — created when the picker opens, disposed
 // when it closes (held here so the shell callbacks can manage its lifecycle).
 let carPreview: CarPreview | null = null;
-const shell = new Shell(app, settings, bestStore, audio, {
+const shell = new Shell(app, settings, leaderboard, audio, {
   isTouch,
   shareUrl: canonicalUrl,
   // Resolve the selected car's handling fresh each run (the picker can change
@@ -317,7 +318,13 @@ function frame(now: number): void {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
-    bestStore.submit(game.distance, game.score.score); // update best before showing it
+    // Record the run on the leaderboard (insert/sort/cap + per-car best) and get
+    // its placement for the game-over callouts — computed before showCrash.
+    const placement = leaderboard.submit({
+      score: game.score.score,
+      distance: game.distance,
+      carId: settings.get('selectedCarId'),
+    });
     // Fold this run into the lifetime totals and surface anything newly unlocked.
     const result = progress.recordRun({
       distance: game.distance,
@@ -341,7 +348,15 @@ function frame(now: number): void {
       ...mission.rankUps.map((n) => `RANK UP: ${n}!`),
       ...mission.unlocked.map((u) => `UNLOCKED: ${u}`),
     ];
-    shell.showCrash(game.score.score, game.distance, bestStore.best, game.score.peakCombo, unlockedNames, missionLines);
+    shell.showCrash(
+      game.score.score,
+      game.distance,
+      leaderboard.bestRun(),
+      game.score.peakCombo,
+      unlockedNames,
+      missionLines,
+      placement,
+    );
   }
   if (audio.started) {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
@@ -409,7 +424,7 @@ function frame(now: number): void {
   );
   shards.update(realDt);
   screenFx.update(realDt);
-  hud.sync(game, bestStore.best);
+  hud.sync(game, leaderboard.bestRun());
   trailInfo.active = trail.activeCount();
   trailInfo.cap = trail.capacity();
   debug.update(game, telemetry, hud.comboText(), trailInfo, scenery.activeCount);

@@ -1248,14 +1248,6 @@ export interface Milestone {
   readonly reward: MilestoneReward;
 }
 
-// OPP-11: milestones are now SCORE-ONLY. They no longer hand out free powerups
-// (which made the run too easy and enabled a free-magnet auto-collect cascade);
-// powerups are earned only by driving to a spawned pickup. The milestone beat +
-// celebration still fire — each just rewards score instead. Amounts follow the
-// pre-existing score milestone (m5000 → 5000), i.e. amount == distance: it
-// reproduces that value exactly and escalates cleanly, rather than inventing a
-// new scale. (The 'powerup' reward kind + grantPowerup remain wired in
-// updateMilestones for a possible future earned-bonus; just unused by this data.)
 export const MILESTONES: ReadonlyArray<Milestone> = [
   { id: 'm1000', distance: 1000, label: '1000m — +1000!', reward: { kind: 'score', amount: 1000 } },
   { id: 'm2000', distance: 2000, label: '2000m — +2000!', reward: { kind: 'score', amount: 2000 } },

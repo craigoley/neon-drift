@@ -998,6 +998,9 @@ export const POSTFX = {
    *  screens where the effects read harsher). Vignette is left at full (it's
    *  cheap and helps readability). */
   touchScale: 0.6,
+  /** Animation clock wrap (seconds): the grain/scanline uTime wraps here so it
+   *  never grows large enough to lose float precision in the shader. */
+  timeWrap: 1000,
 } as const;
 
 /** Renderer device tuning. */

@@ -164,10 +164,13 @@ export class PostProcessing {
     this.cinematic.enabled = enabled;
   }
 
-  /** `dt` (seconds) advances the grain/scanline animation. */
+  /** `dt` (seconds) advances the grain/scanline animation. The clock WRAPS at
+   *  POSTFX.timeWrap so it never grows large enough to lose float precision in
+   *  the shader (which would make the grain/scanlines shimmer or freeze in a
+   *  long session); the wrap is seamless for the periodic sin/fract terms. */
   render(dt = 0): void {
     if (this.cinematic.enabled) {
-      this.elapsed += dt;
+      this.elapsed = (this.elapsed + dt) % POSTFX.timeWrap;
       this.cinematic.uniforms.uTime.value = this.elapsed;
     }
     this.composer.render();

@@ -137,3 +137,41 @@ describe('Car picker stats — single source of truth (carStats)', () => {
     expect(s('ghost').drift).toBeGreaterThan(s('vapor').drift); // GHOST driftiest
   });
 });
+
+describe('Handling — new roster cars are distinct (roster expansion)', () => {
+  const nova = handlingFor('nova'); // glass cannon
+  const onyx = handlingFor('onyx'); // surgical grip
+  const slip = handlingFor('slipstream'); // rally hybrid
+
+  it('Nova has the highest top speed of the whole roster (glass cannon)', () => {
+    const top = (h: CarHandling) => drive(h, {}, 4000, 1e9).speed;
+    const novaTop = top(nova);
+    for (const c of CARS) {
+      if (c.id === 'nova') continue;
+      expect(novaTop).toBeGreaterThan(top(handlingFor(c.id)));
+    }
+  });
+
+  it('Onyx changes lanes the fastest of the whole roster (grip extreme)', () => {
+    const reach = (h: CarHandling) => Math.abs(drive(h, { steer: 1 }, 16).lateral);
+    const onyxReach = reach(onyx);
+    for (const c of CARS) {
+      if (c.id === 'onyx') continue;
+      expect(onyxReach).toBeGreaterThan(reach(handlingFor(c.id)));
+    }
+  });
+
+  it('Slipstream is a fast drifter: faster than Ghost, slides further than Ember', () => {
+    const top = (h: CarHandling) => drive(h, {}, 4000, 1e9).speed;
+    expect(top(slip)).toBeGreaterThan(top(handlingFor('ghost')));
+    const slide = (h: CarHandling) => drive(h, { handbrake: true }, 15, 0, { lateralVel: 15 }).lateral;
+    expect(slide(slip)).toBeGreaterThan(slide(handlingFor('ember')));
+  });
+
+  it('the new extremes peg their picker bars; Onyx out-grips Vapor but tops out slower', () => {
+    expect(carStats(nova).speed).toBe(1); // speed-cap ceiling
+    expect(carStats(onyx).grip).toBe(1); // grip ceiling
+    expect(carStats(onyx).grip).toBeGreaterThan(carStats(vapor).grip);
+    expect(drive(onyx, {}, 4000, 1e9).speed).toBeLessThan(drive(vapor, {}, 4000, 1e9).speed);
+  });
+});

@@ -1188,6 +1188,33 @@ export const CARS: readonly CarDef[] = [
     // of a little top speed and steering bite vs the balanced Pulse.
     handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
   },
+  {
+    id: 'nova',
+    displayName: 'Nova',
+    cosmetic: { body: 0x0a1430, glow: 0x4d6bff, accent: 0x00ffff },
+    // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
+    // loose tail — a straight-line terror you can barely place. Ember is only
+    // mildly fast and stays controllable; Nova trades nearly all grip for the top end.
+    handling: { speedCap: 1.25, lateralAccel: 0.7, lateralFriction: 1.25, drift: 0.9 },
+  },
+  {
+    id: 'onyx',
+    displayName: 'Onyx',
+    cosmetic: { body: 0x16111f, glow: 0xb84dff, accent: 0x00ffaa },
+    // SURGICAL: maxes grip (sharpest accel + tightest settle) and kills the slide,
+    // paying with the lowest top speed — pin it in any gap. The precision extreme
+    // beyond Vapor.
+    handling: { speedCap: 0.88, lateralAccel: 1.45, lateralFriction: 0.6, drift: 0.8 },
+  },
+  {
+    id: 'slipstream',
+    displayName: 'Slipstream',
+    cosmetic: { body: 0x16260a, glow: 0xaaff00, accent: 0xff0066 },
+    // RALLY HYBRID: fast AND slidey with loose grip — power-slides through gaps,
+    // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
+    // is slow; Ember is fast but doesn't slide).
+    handling: { speedCap: 1.1, lateralAccel: 0.9, lateralFriction: 1.15, drift: 1.4 },
+  },
 ] as const;
 
 /** Default selected car — the first in the list. */
@@ -1254,6 +1281,22 @@ export const CAR_UNLOCKS: readonly CarUnlock[] = [
   {
     carId: 'ghost',
     condition: { stat: 'bestCombo', atLeast: 6, label: 'Hit an ×6 combo' },
+  },
+  // New cars unlock from deeper achievements. They reuse the existing three
+  // stats at higher tiers and add the one stat nothing used yet (biomesSeen),
+  // so all four lifetime stats now drive progression and each new car has a
+  // distinct, harder goal than the original it extends.
+  {
+    carId: 'onyx',
+    condition: { stat: 'powerupsCollected', atLeast: 75, label: 'Collect 75 powerups' },
+  },
+  {
+    carId: 'nova',
+    condition: { stat: 'bestCombo', atLeast: 10, label: 'Hit an ×10 combo' },
+  },
+  {
+    carId: 'slipstream',
+    condition: { stat: 'biomesSeen', atLeast: 4, label: 'See all 4 biomes in one run' },
   },
 ] as const;
 

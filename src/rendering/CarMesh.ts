@@ -8,20 +8,21 @@
  *   ├─ groundGlow              flat additive blob UNDER the car (stays flat —
  *   │                          sibling of chassis so body roll doesn't tilt it)
  *   └─ chassis                 the car itself (VehicleRenderer rolls/yaws THIS)
- *      ├─ hull mesh + edges    tapered wedge lower body (dark) + neon edge lines
+ *      ├─ hull mesh + edges    tapered wedge lower body + neon edge lines
  *      ├─ cabin mesh + edges   smaller raked greenhouse toward the rear
  *      ├─ 4 wheels + edges     octagonal prisms with glowing rims
- *      ├─ 2 side accent strips thin emissive lines in the accent colour
- *      ├─ 2 headlight quads    additive nose glow (accent)
- *      └─ forward cast quad    faint additive throw on the road ahead (accent)
+ *      └─ 2 side accent strips thin emissive lines in the accent colour
  *
- * Cosmetic mapping (`applyCar`): body→hull/cabin/wheel fill, glow→all neon edge
- * lines + ground glow, accent→headlights + side strips. The whole edge material
- * is exposed so VehicleRenderer can lerp it toward the hot drift colour.
+ * Each car's BODY colour is a deep but clearly-hued tint of its signature (see
+ * CARS in constants.ts), so the whole silhouette carries the identity colour
+ * instead of reading as the same near-black shape for every car. Cosmetic
+ * mapping (`applyCar`): body→hull/cabin/wheel fill, glow→all neon edge lines +
+ * ground glow, accent→side strips. The edge material is exposed so
+ * VehicleRenderer can lerp it toward the hot drift colour.
  *
- * Headlights/ground glow are PROPERLY transparent: additive blending, depthWrite
- * OFF, low opacity — so they read as light and never as the opaque triangles the
- * earlier headlight cones became (#13).
+ * The ground glow is PROPERLY transparent: additive blending, depthWrite OFF,
+ * low opacity. There are deliberately NO headlights — forward light cones/quads
+ * regressed into opaque artifacts twice (#13, #42), so they were cut entirely.
  *
  * Local frame: forward is -z, width is x, ground is y = 0 (wheels rest on it).
  */
@@ -122,7 +123,6 @@ export class CarMesh {
 
   private readonly bodyMat: THREE.MeshBasicMaterial;
   private readonly accentLineMat: THREE.LineBasicMaterial;
-  private readonly headlightMat: THREE.MeshBasicMaterial;
   private readonly groundGlowMat: THREE.MeshBasicMaterial;
   private readonly geometries: THREE.BufferGeometry[] = [];
 
@@ -138,15 +138,6 @@ export class CarMesh {
       color: PALETTE.magenta,
       transparent: true,
       opacity: CAR_GEO.sideStrips.opacity,
-    });
-    this.headlightMat = new THREE.MeshBasicMaterial({
-      color: PALETTE.magenta,
-      transparent: true,
-      opacity: G.headlights.opacity,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-      fog: false,
-      side: THREE.DoubleSide,
     });
     this.groundGlowMat = new THREE.MeshBasicMaterial({
       color: PALETTE.cyan,
@@ -213,22 +204,8 @@ export class CarMesh {
       this.chassis.add(new THREE.LineSegments(stripGeo, this.accentLineMat));
     }
 
-    // --- Headlights (additive nose quads) + forward cast ---
-    const hlGeo = new THREE.PlaneGeometry(G.headlights.size, G.headlights.size);
-    this.geometries.push(hlGeo);
-    const hlY = height * G.headlights.heightFraction;
-    for (const sx of [-1, 1]) {
-      const hl = new THREE.Mesh(hlGeo, this.headlightMat);
-      hl.position.set(sx * frontHW * G.headlights.lateralFraction, hlY, -halfL * G.headlights.zFraction);
-      this.chassis.add(hl);
-    }
-    // Faint throw on the road just ahead of the nose (flat, additive).
-    const castGeo = new THREE.PlaneGeometry(width * G.headlights.castWidthMul, length * G.headlights.castLengthMul);
-    this.geometries.push(castGeo);
-    const cast = new THREE.Mesh(castGeo, this.headlightMat);
-    cast.rotation.x = -Math.PI / 2;
-    cast.position.set(0, G.headlights.castY, -halfL - length * G.headlights.castZFraction);
-    this.chassis.add(cast);
+    // NOTE: no headlights — forward light quads/cones regressed to opaque
+    // artifacts twice (#13, #42), so they were removed entirely.
 
     // --- Ground glow (flat blob under the car; sibling of chassis) ---
     const glowGeo = new THREE.CircleGeometry(width * G.groundGlow.radiusMul, G.groundGlow.segments);
@@ -255,13 +232,13 @@ export class CarMesh {
     return mesh;
   }
 
-  /** Apply a car's cosmetic colours: body, neon glow (edges + ground), accent. */
+  /** Apply a car's cosmetic colours: body (deep signature tint), neon glow
+   *  (edges + ground glow), accent (side strips). */
   applyCar(car: CarDef): void {
     this.bodyMat.color.setHex(car.cosmetic.body);
     this.edgesMat.color.setHex(car.cosmetic.glow);
     this.groundGlowMat.color.setHex(car.cosmetic.glow);
     this.accentLineMat.color.setHex(car.cosmetic.accent);
-    this.headlightMat.color.setHex(car.cosmetic.accent);
   }
 
   /** Free all owned geometry + materials (CarPreview calls this on teardown). */
@@ -270,7 +247,6 @@ export class CarMesh {
     this.bodyMat.dispose();
     this.edgesMat.dispose();
     this.accentLineMat.dispose();
-    this.headlightMat.dispose();
     this.groundGlowMat.dispose();
   }
 }

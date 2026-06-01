@@ -1,18 +1,17 @@
 /**
  * Renders the player car: the shared procedural low-poly synthwave vehicle (see
- * CarMesh) — a tapered hull, raked cabin, four wheels, neon edge lines, additive
- * headlight glow and a ground-glow blob. Reads VehicleState (pure) and positions
- * the mesh; never mutates state. Geometry is built once.
+ * CarMesh) — a tapered hull, raked cabin, four wheels, neon edge lines and a
+ * ground-glow blob. Reads VehicleState (pure) and positions the mesh; never
+ * mutates state. Geometry is built once.
  *
  * The lateral position is applied to the OUTER group; roll (steer lean) and yaw
  * (drift slide) are applied to the inner `chassis`, so the ground-glow blob that
  * sits under the car stays flat on the road and doesn't tilt with the lean.
  *
- * Headlights are PROPERLY transparent now (additive, depthWrite off) — the old
- * opaque-triangle headlight cones (#13) are not what these are.
- *
- * Cosmetics are driven by the selected car (`applyCar`): body, neon glow (edges
- * + ground glow) and accent (headlights + side strips).
+ * Cosmetics are driven by the selected car (`applyCar`): body (a deep signature
+ * tint), neon glow (edges + ground glow) and accent (side strips). There are no
+ * headlights — forward light quads regressed to opaque artifacts twice (#13,
+ * #42) and were removed.
  */
 
 import * as THREE from 'three';

@@ -558,6 +558,8 @@ export const CAR_VIS = {
   /** Glow colour the edge lines shift toward while drifting (hot magenta), so
    *  the car visibly changes state when you press DRIFT. */
   driftGlow: 0xff2d95,
+  /** Lerp speed (0–1) for the per-frame glow colour transition into/out of drift. */
+  driftGlowLerp: 0.25,
 } as const;
 
 /** Traffic obstacle visual tuning (rendering only). */

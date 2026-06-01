@@ -77,7 +77,7 @@ export class VehicleRenderer {
     // Glow shifts toward the hot drift colour while drifting, back otherwise.
     const target = state.drifting ? this.driftGlow : this.baseGlow;
     if (!this.edgesMat.color.equals(target)) {
-      this.glowScratch.copy(this.edgesMat.color).lerp(target, 0.25);
+      this.glowScratch.copy(this.edgesMat.color).lerp(target, CAR_VIS.driftGlowLerp);
       this.edgesMat.color.copy(this.glowScratch);
     }
   }

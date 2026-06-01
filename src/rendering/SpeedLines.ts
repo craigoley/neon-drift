@@ -22,9 +22,14 @@ export class SpeedLines {
   private readonly bx: Float32Array;
   private readonly by: Float32Array;
   private readonly bz: Float32Array;
+  /** Speed-scaled base opacity (eased); the near-miss burst rides ON TOP. */
+  private base = 0;
+  /** Transient near-miss burst opacity (decays each frame). */
+  private burstAmount = 0;
 
-  constructor(scene: THREE.Scene) {
-    const n = JUICE.speedLineCount;
+  /** `count` lets the composition root scale density down on touch devices. */
+  constructor(scene: THREE.Scene, count: number = JUICE.speedLineCount) {
+    const n = count;
     this.positions = new Float32Array(n * 2 * 3);
     this.bx = new Float32Array(n);
     this.by = new Float32Array(n);
@@ -54,10 +59,18 @@ export class SpeedLines {
     this.bz[i] = -FIELD_DEPTH + depthFromFar;
   }
 
+  /** Near-miss whoosh: a quick burst of speed-line opacity on top of the
+   *  speed-scaled base, fading away over the next frames. */
+  burst(): void {
+    this.burstAmount = JUICE.speedLineBurst;
+  }
+
   update(cameraX: number, cameraY: number, cameraZ: number, normalizedSpeed: number, dt: number): void {
     const target = clamp(inverseLerp(JUICE.speedLineThreshold, 1, normalizedSpeed), 0, 1);
-    this.material.opacity +=
-      (target - this.material.opacity) * Math.min(1, dt * JUICE.speedLineOpacityRate);
+    this.base += (target - this.base) * Math.min(1, dt * JUICE.speedLineOpacityRate);
+    if (this.burstAmount > 0) this.burstAmount = Math.max(0, this.burstAmount - JUICE.speedLineBurstFade * dt);
+    // Burst rides on top of the eased base; clamp so it never exceeds full.
+    this.material.opacity = clamp(this.base + this.burstAmount, 0, 1);
 
     this.lines.position.set(cameraX, cameraY, cameraZ);
 

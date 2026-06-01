@@ -489,8 +489,9 @@ export const POWERUP_VIS = {
 /** Camera + chase-cam tuning (rendering layer). */
 export const CAMERA = {
   fov: 70,
-  /** Extra FOV degrees added at top speed for a sense of acceleration. */
-  fovSpeedBoost: 9,
+  /** Extra FOV degrees added at top speed for a sense of acceleration. Bumped
+   *  (was 9) so the world visibly stretches as the (now faster) run speeds up. */
+  fovSpeedBoost: 12,
   near: 0.1,
   far: 2000,
   /**
@@ -931,6 +932,46 @@ export const JUICE = {
    * Shared so both particle systems stay visually consistent.
    */
   spreadMinFraction: 0.4,
+  /** Speed-line count on TOUCH devices (mobile GPU headroom; desktop uses
+   *  speedLineCount). */
+  speedLineCountTouch: 48,
+  /** Near-miss SPEED-LINE BURST: opacity added instantly on a near-miss (on top
+   *  of the speed-scaled base), then fading at `speedLineBurstFade` per second —
+   *  a quick whoosh streak that reinforces the combo without lingering. */
+  speedLineBurst: 0.5,
+  speedLineBurstFade: 2.4,
+  /**
+   * TOP-SPEED CAMERA RUMBLE: a subtle CONTINUOUS jitter that grows from 0 at
+   * `rumbleThreshold` (normalised speed) to `rumbleMagnitude` world units at full
+   * speed, layered under the (larger, transient) crash shake. Kept small so it
+   * adds high-speed tension without hurting readability of incoming obstacles.
+   */
+  rumbleThreshold: 0.55,
+  rumbleMagnitude: 0.16,
+  /**
+   * CAR TRAIL — a light ribbon of the car's recent path that lengthens with
+   * speed and burns brighter/hotter while DRIFTING (a drift leaves a visible
+   * streak). A fixed ring buffer of points (bounded by construction — never
+   * grows, no per-frame allocation); rendered additively so it reads as glow and
+   * sits low behind the car, never over incoming obstacles.
+   */
+  trailPoints: 40,
+  /** Trail point budget on touch devices (mobile GPU headroom). */
+  trailPointsTouch: 20,
+  /** Trail height above the road surface. */
+  trailY: 0.3,
+  /** Normalised speed below which the trail is invisible (parked/slow = none). */
+  trailSpeedFloor: 0.12,
+  /** Peak trail opacity at top speed when cruising vs while drifting. */
+  trailMaxOpacity: 0.5,
+  trailDriftOpacity: 1.0,
+  /** Per-second ease rate for trail opacity (smooth fade in/out). */
+  trailOpacityRate: 8,
+  /** Intensity below which the trail is hidden (avoids near-invisible draws). */
+  trailMinIntensity: 0.003,
+  /** Trail colours: cruising (cool) vs drifting (hot). */
+  trailColor: 0x00ffff,
+  trailDriftColor: 0xff2db8,
 } as const;
 
 /** Synthesized audio tuning (Web Audio API — no files). */

@@ -9,7 +9,7 @@
  */
 
 import * as THREE from 'three';
-import type { GameState } from '../game/GameState';
+import { type GameState, Phase } from '../game/GameState';
 import { normalizedSpeed } from '../game/Vehicle';
 import { smoothFollow } from '../utils/math';
 import { BLOOM, CAMERA, FOG, JUICE, PALETTE, RENDER } from '../utils/constants';
@@ -63,13 +63,16 @@ export class SceneManager {
    * ahead are rendered at negative z (see the renderers).
    */
   updateCamera(game: GameState, dt: number): void {
-    // Decay shake and derive a fresh jitter offset for this frame.
+    // Decay the (transient, large) crash shake, then layer a subtle CONTINUOUS
+    // top-speed rumble under it: jitter amplitude = max(shake, speed rumble).
     this.shakeAmount = Math.max(0, this.shakeAmount - JUICE.shakeDecay * dt * this.shakeAmount);
-    this.shake.set(
-      (Math.random() - 0.5) * 2 * this.shakeAmount,
-      (Math.random() - 0.5) * 2 * this.shakeAmount,
-      0,
-    );
+    const norm = game.phase === Phase.Playing ? normalizedSpeed(game.vehicle.speed) : 0;
+    const rumble =
+      norm > JUICE.rumbleThreshold
+        ? ((norm - JUICE.rumbleThreshold) / (1 - JUICE.rumbleThreshold)) * JUICE.rumbleMagnitude
+        : 0;
+    const jitter = Math.max(this.shakeAmount, rumble);
+    this.shake.set((Math.random() - 0.5) * 2 * jitter, (Math.random() - 0.5) * 2 * jitter, 0);
 
     const follow = smoothFollow(CAMERA.followLerp, dt);
     const targetX = game.vehicle.lateral;

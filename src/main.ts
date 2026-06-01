@@ -23,6 +23,7 @@ import { TrafficRenderer } from './rendering/TrafficRenderer';
 import { PowerupRenderer } from './rendering/PowerupRenderer';
 import { PostProcessing } from './rendering/PostProcessing';
 import { SpeedLines } from './rendering/SpeedLines';
+import { CarTrail } from './rendering/CarTrail';
 import { CrashShards } from './rendering/CrashShards';
 import { ScreenFx } from './rendering/ScreenFx';
 import { HUD } from './rendering/HUD';
@@ -105,7 +106,11 @@ const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic
 // tint, so it's built after the things it recolours.
 const biomeView = new BiomeView(scene.scene, environment, stars, traffic);
-const speedLines = new SpeedLines(scene.scene);
+// Motion juice — speed lines + the car light-trail; both scale density DOWN on
+// touch for mobile GPU headroom.
+const speedLines = new SpeedLines(scene.scene, isTouch ? JUICE.speedLineCountTouch : JUICE.speedLineCount);
+const trail = new CarTrail(scene.scene, isTouch);
+const trailInfo = { active: 0, cap: 0 };
 const shards = new CrashShards(scene.scene);
 const screenFx = new ScreenFx(app);
 const hud = new HUD(app);
@@ -267,6 +272,7 @@ function frame(now: number): void {
   // Event-driven juice + audio.
   if (nearMisses > 0) {
     screenFx.pulseNearMiss();
+    speedLines.burst(); // a quick whoosh streak reinforcing the near-miss/combo
     slowmo = JUICE.nearMissSlowmo;
   }
   // Powerup collection juice: a screen glow in the pickup's colour. A shield
@@ -349,6 +355,15 @@ function frame(now: number): void {
   biomeView.apply(game.biome); // environment palette + stars + traffic tint follow the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
+  // Car light-trail: lengthens with speed, hotter while drifting. Fed 0 speed
+  // when not playing so it fades out on the menu / pause / WIPEOUT screens.
+  trail.update(
+    game.vehicle.lateral,
+    playing ? game.vehicle.speed : 0,
+    playing ? normalizedSpeed(game.vehicle.speed) : 0,
+    playing && game.vehicle.drifting,
+    realDt,
+  );
   traffic.sync(game.traffic, game.distance);
   powerups.sync(game.powerups, game.distance, game.vehicle.lateral, realDt);
   // Speed lines only stream while actually playing — otherwise they keep
@@ -364,7 +379,9 @@ function frame(now: number): void {
   shards.update(realDt);
   screenFx.update(realDt);
   hud.sync(game, bestStore.best);
-  debug.update(game, telemetry, hud.comboText());
+  trailInfo.active = trail.activeCount();
+  trailInfo.cap = trail.capacity();
+  debug.update(game, telemetry, hud.comboText(), trailInfo);
 
   post.render();
   requestAnimationFrame(frame);

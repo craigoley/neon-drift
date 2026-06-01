@@ -585,10 +585,14 @@ export const CAR_VIS = {
  * Procedural player-car geometry (rendering only — the collision box is still
  * CAR_VIS.width × .length, see VEHICLE). The car is built as a low-poly group:
  * a tapered lower hull, a smaller faceted cabin, four wheels, plus emissive neon
- * edge lines, headlight glow quads and a ground-glow blob. All dimensions are
- * FRACTIONS of the CAR_VIS footprint so the silhouette scales with the hitbox
- * and the visible car keeps reading as "what collides". The chase cam views it
- * from behind/above, so detail is biased to the top and rear.
+ * edge lines and a ground-glow blob. All dimensions are FRACTIONS of the CAR_VIS
+ * footprint so the silhouette scales with the hitbox and the visible car keeps
+ * reading as "what collides". The chase cam views it from behind/above, so detail
+ * is biased to the top and rear.
+ *
+ * NOTE: there are deliberately NO headlights. Forward light cones/quads regressed
+ * into opaque artifacts twice (#13, #42), so they were removed entirely — the car
+ * reads cleanly without them.
  */
 export const CAR_GEO = {
   /** Lower hull as a fraction of the full footprint. The nose tapers in (front
@@ -632,27 +636,6 @@ export const CAR_GEO = {
     longitudinalInset: 0.26,
     /** Ride height as a fraction of wheel radius (axle sits this high). */
     rideHeightFraction: 0.55,
-  },
-  /** Headlight glow: small additive quads at the nose casting a forward bloom. */
-  headlights: {
-    /** Quad size (world units). */
-    size: 0.55,
-    /** Lateral offset of each light from centre, fraction of front half-width. */
-    lateralFraction: 0.6,
-    /** Height above the road, fraction of CAR_VIS.height. */
-    heightFraction: 0.42,
-    /** Base opacity of the additive glow (kept low so bloom doesn't blow out). */
-    opacity: 0.55,
-    /** Z position of headlight quads as a fraction of half-length (slightly inside nose). */
-    zFraction: 0.99,
-    /** Forward-cast quad width as a multiple of car width. */
-    castWidthMul: 1.1,
-    /** Forward-cast quad length as a multiple of car length. */
-    castLengthMul: 0.9,
-    /** Forward-cast quad height above the road (just clear of z-fighting). */
-    castY: 0.02,
-    /** Forward-cast quad z offset ahead of the nose, as a fraction of car length. */
-    castZFraction: 0.45,
   },
   /** Ground glow: a flat additive blob under the car so it feels grounded. */
   groundGlow: {
@@ -1367,11 +1350,13 @@ export const BASE_HANDLING: CarHandling = {
  */
 
 export interface CarCosmetic {
-  /** Dark body color (kept deep so the emissive edges read as neon). */
+  /** Body color — a DEEP but clearly-hued tint of the car's signature, so the
+   *  whole silhouette carries the identity colour (not a near-black shape). The
+   *  brighter emissive `glow` still reads as the neon edge on top of it. */
   body: number;
   /** Edge / wireframe glow color — the car's signature. */
   glow: number;
-  /** Headlight / accent color. */
+  /** Side-strip / accent color. */
   accent: number;
 }
 
@@ -1387,14 +1372,14 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'pulse',
     displayName: 'Pulse',
-    cosmetic: { body: 0x140a2e, glow: 0x00ffff, accent: 0xff00ff },
+    cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The reference point.
     handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
   },
   {
     id: 'vapor',
     displayName: 'Vapor',
-    cosmetic: { body: 0x2e0a24, glow: 0xff00ff, accent: 0x00ffff },
+    cosmetic: { body: 0x6e1a60, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
     handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
@@ -1402,7 +1387,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ember',
     displayName: 'Ember',
-    cosmetic: { body: 0x2e1605, glow: 0xff6600, accent: 0xff00ff },
+    cosmetic: { body: 0x6e3208, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
     handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
@@ -1410,7 +1395,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ghost',
     displayName: 'Ghost',
-    cosmetic: { body: 0x06261f, glow: 0xffffff, accent: 0x00ffff },
+    cosmetic: { body: 0x46606e, glow: 0xffffff, accent: 0x00ffff },
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
     handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
@@ -1418,7 +1403,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'nova',
     displayName: 'Nova',
-    cosmetic: { body: 0x0a1430, glow: 0x4d6bff, accent: 0x00ffff },
+    cosmetic: { body: 0x202e7e, glow: 0x4d6bff, accent: 0x00ffff },
     // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
     // loose tail — a straight-line terror you can barely place. Ember is only
     // mildly fast and stays controllable; Nova trades nearly all grip for the top end.
@@ -1427,7 +1412,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'onyx',
     displayName: 'Onyx',
-    cosmetic: { body: 0x16111f, glow: 0xb84dff, accent: 0x00ffaa },
+    cosmetic: { body: 0x4a1f70, glow: 0xb84dff, accent: 0x00ffaa },
     // SURGICAL: maxes grip (sharpest accel + tightest settle) and kills the slide,
     // paying with the lowest top speed — pin it in any gap. The precision extreme
     // beyond Vapor.
@@ -1436,7 +1421,7 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'slipstream',
     displayName: 'Slipstream',
-    cosmetic: { body: 0x16260a, glow: 0xaaff00, accent: 0xff0066 },
+    cosmetic: { body: 0x3c5e0a, glow: 0xaaff00, accent: 0xff0066 },
     // RALLY HYBRID: fast AND slidey with loose grip — power-slides through gaps,
     // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
     // is slow; Ember is fast but doesn't slide).

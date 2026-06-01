@@ -161,6 +161,25 @@ export const TRAFFIC = {
   swayRate: 1.1,
 } as const;
 
+/**
+ * OPENING SEED — one easy obstacle placed at run start so the very first PLAY has
+ * an immediate, low-stakes decision (steer around it), instead of ~6-11s of empty
+ * road (the first timer-spawned obstacle spawns 420m ahead — TRAFFIC.spawnAhead —
+ * and takes that long to close). This is a ONE-SHOT at run init only: it does NOT
+ * touch spawnInterval / spawnAhead / rampStartDistance or the steady-state timer,
+ * so encounter geometry past the opening is unchanged. A dead-centre STATIC
+ * obstacle ~200m ahead is reached in ~3s and forces a trivial dodge (the road is
+ * ~9 units half-width vs the obstacle's ~1.1, so there's huge clearance each side).
+ */
+export const OPENING_SEED = {
+  /** Distance ahead of the player's start (distance 0) — ~3s of travel away. */
+  distance: 200,
+  /** Lane offset from the road centre (0 = dead centre → guarantees a steer). */
+  laneOffset: 0,
+  /** Stationary so it's reached promptly (and reads as a parked car to dodge). */
+  speed: 0,
+} as const;
+
 /** Scoring, combo, and near-miss / collision thresholds. */
 export const SCORING = {
   /** Score per (world-unit * combo-multiplier). */

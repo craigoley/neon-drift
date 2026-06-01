@@ -8,6 +8,7 @@ import {
   type CarHandling,
   DRIFT,
   ObstacleKind,
+  ROAD,
   SCORING,
   TIMESTEP,
   VEHICLE,
@@ -44,6 +45,38 @@ describe('Drift — the juke beats normal steering in the dodge window', () => {
     expect(a).toBeCloseTo(b);
     // And the drift accel multiplier is actually > 1 (guards the constant).
     expect(DRIFT.accelBoost).toBeGreaterThan(1);
+  });
+});
+
+describe('Drift — is a CONTINUOUS slide, never a one-frame teleport/snap', () => {
+  it('advances laterally incrementally across frames (no single-frame jump across the road)', () => {
+    const v = createVehicleState();
+    const intent = createIntent();
+    intent.steer = 1;
+    intent.handbrake = true; // drifting hard right on a wide-open straight (centre 0)
+
+    // One step must NOT snap the car a large distance — it accelerates from rest.
+    updateVehicle(v, intent, 0, 0, BASE_HANDLING, TIMESTEP);
+    const afterOne = v.lateral;
+    expect(afterOne).toBeGreaterThan(0); // it moved…
+    expect(afterOne).toBeLessThan(0.5); // …but only a little (not a teleport)
+
+    // Over the next frames the position rises strictly and by BOUNDED per-frame
+    // deltas — a continuous slide, never a jump across the corridor in one frame.
+    let prev = afterOne;
+    let prevDelta = afterOne;
+    for (let i = 0; i < 12; i++) {
+      updateVehicle(v, intent, 0, 0, BASE_HANDLING, TIMESTEP);
+      const delta = v.lateral - prev;
+      expect(delta).toBeGreaterThan(0); // monotonic — keeps sliding, no snap-back
+      expect(delta).toBeLessThan(ROAD.halfWidth); // no single frame crosses the road
+      // Acceleration phase: deltas grow smoothly, not a discontinuous leap.
+      expect(delta).toBeLessThan(prevDelta + ROAD.halfWidth);
+      prev = v.lateral;
+      prevDelta = delta;
+    }
+    // It takes several frames of sliding to cross a car-width — that's the skill.
+    expect(prev).toBeGreaterThan(afterOne);
   });
 });
 

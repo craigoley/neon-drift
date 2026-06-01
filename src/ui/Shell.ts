@@ -15,11 +15,21 @@
 
 import type { SettingsStore } from '../state/Settings';
 import type { BestRun, LeaderboardStore, RunPlacement } from '../state/Leaderboard';
+import type { DailyEntry, DailyResult } from '../state/DailyStore';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { carById, CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
 import { share } from './share';
 
-type Screen = 'start' | 'settings' | 'carpicker' | 'missions' | 'leaderboard' | 'crash' | 'pause' | null;
+type Screen =
+  | 'start'
+  | 'settings'
+  | 'carpicker'
+  | 'missions'
+  | 'leaderboard'
+  | 'daily'
+  | 'crash'
+  | 'pause'
+  | null;
 
 /** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
 export interface MissionView {
@@ -49,6 +59,14 @@ export interface MissionsPanel {
   selectStartBiome: (index: number) => void;
 }
 
+/** Live data for the DAILY CHALLENGE screen (OPP-09). */
+export interface DailyPanel {
+  /** Today's record on today's seed, or null if not played yet today. */
+  today: () => DailyEntry | null;
+  /** Rolling 7-day history, most-recent day first. */
+  history: () => DailyEntry[];
+}
+
 export interface ShellOptions {
   isTouch: boolean;
   /** Canonical game URL to share (no query/hash). */
@@ -75,6 +93,10 @@ export interface ShellOptions {
   missions?: MissionsPanel;
   /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
   onLowFxChange?: (lowFx: boolean) => void;
+  /** Start TODAY'S daily challenge (OPP-09). Absent → no DAILY button (tests). */
+  onPlayDaily?: () => void;
+  /** Daily-challenge panel data. Absent → no DAILY button / screen (tests). */
+  daily?: DailyPanel;
 }
 
 export class Shell {
@@ -88,8 +110,12 @@ export class Shell {
   private readonly carScreen: HTMLElement;
   private readonly missionsScreen: HTMLElement;
   private readonly leaderboardScreen: HTMLElement;
+  private readonly dailyScreen: HTMLElement;
   private readonly crashScreen: HTMLElement;
   private readonly pauseScreen: HTMLElement;
+  /** Which mode the last launched run used, so PLAY AGAIN / retry replays the
+   *  same mode (a daily crash retries the daily, not a random run). */
+  private lastWasDaily = false;
   /** In-run PAUSE affordance (visible only while playing). */
   private readonly pauseBtn: HTMLButtonElement;
   /** Browse cursor for the start-biome selector in the missions panel. */
@@ -106,6 +132,8 @@ export class Shell {
   private readonly crashMissionsEl: HTMLElement;
   private readonly leaderboardListEl: HTMLElement;
   private readonly leaderboardCarsEl: HTMLElement;
+  private readonly dailyTodayEl: HTMLElement;
+  private readonly dailyHistoryEl: HTMLElement;
   private readonly carNameEl: HTMLElement;
   private readonly carTaglineEl: HTMLElement;
   private readonly carPlaystyleEl: HTMLElement;
@@ -149,6 +177,7 @@ export class Shell {
     this.carScreen = this.buildCarPicker();
     this.missionsScreen = this.buildMissions();
     this.leaderboardScreen = this.buildLeaderboard();
+    this.dailyScreen = this.buildDaily();
     this.crashScreen = this.buildCrash();
     this.pauseScreen = this.buildPause();
 
@@ -163,6 +192,8 @@ export class Shell {
     this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
     this.leaderboardListEl = this.leaderboardScreen.querySelector('.shell-lb-list')!;
     this.leaderboardCarsEl = this.leaderboardScreen.querySelector('.shell-lb-cars')!;
+    this.dailyTodayEl = this.dailyScreen.querySelector('.shell-daily-today')!;
+    this.dailyHistoryEl = this.dailyScreen.querySelector('.shell-daily-history')!;
     this.carNameEl = this.carScreen.querySelector('.shell-car-name')!;
     this.carTaglineEl = this.carScreen.querySelector('.shell-car-tagline')!;
     this.carPlaystyleEl = this.carScreen.querySelector('.shell-car-playstyle')!;
@@ -192,6 +223,7 @@ export class Shell {
       this.carScreen,
       this.missionsScreen,
       this.leaderboardScreen,
+      this.dailyScreen,
       this.crashScreen,
       this.pauseScreen,
       this.pauseBtn,
@@ -222,6 +254,7 @@ export class Shell {
     unlockedNames: string[] = [],
     missionLines: string[] = [],
     placement: RunPlacement | null = null,
+    daily: DailyResult | null = null,
   ): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
     // The live combo resets on crash, so the WIPEOUT screen is where the player
@@ -230,11 +263,13 @@ export class Shell {
     // Dim when the run never rose above the base combo (a daring run pops).
     this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
 
-    // OPP-15: placement badge (made the board / beat this car) + the nearest
-    // beatable score to chase — the "one more run" hook. Both hide when absent.
-    this.renderPlacement(placement);
+    // Placement callout: for a DAILY run a daily badge (OPP-09); otherwise the
+    // OPP-15 board placement + nearest target. Both hide when nothing's earned.
+    this.renderPlacement(placement, daily);
 
-    this.crashBestEl.textContent = `best ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
+    // For a daily run `best` is TODAY's best (chase-your-own); else the all-time #1.
+    const bestLabel = daily ? 'today' : 'best';
+    this.crashBestEl.textContent = `${bestLabel} ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
 
     // Unlock moment: celebrate anything earned this run (else stay hidden).
     if (unlockedNames.length > 0) {
@@ -293,6 +328,7 @@ export class Shell {
     this.carScreen.style.display = screen === 'carpicker' ? 'flex' : 'none';
     this.missionsScreen.style.display = screen === 'missions' ? 'flex' : 'none';
     this.leaderboardScreen.style.display = screen === 'leaderboard' ? 'flex' : 'none';
+    this.dailyScreen.style.display = screen === 'daily' ? 'flex' : 'none';
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
     this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
     // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
@@ -302,6 +338,8 @@ export class Shell {
     if (screen === 'missions' && prev !== 'missions') this.renderMissions();
     // Refresh the leaderboard from the store each time it opens (live data).
     if (screen === 'leaderboard' && prev !== 'leaderboard') this.renderLeaderboard();
+    // Refresh the daily challenge view from the store each time it opens.
+    if (screen === 'daily' && prev !== 'daily') this.renderDaily();
 
     // Spin up / tear down the 3D car preview with the picker (the rendering
     // layer owns the mesh; it must never run behind the game).
@@ -313,8 +351,25 @@ export class Shell {
   }
 
   private play(): void {
+    this.lastWasDaily = false;
     this.go(null);
     this.opts.onPlay();
+  }
+
+  /** Launch TODAY'S daily challenge (OPP-09). Falls back to a normal run if the
+   *  daily callback isn't wired (e.g. in tests). */
+  private playDaily(): void {
+    if (!this.opts.onPlayDaily) return this.play();
+    this.lastWasDaily = true;
+    this.go(null);
+    this.opts.onPlayDaily();
+  }
+
+  /** Retry from the crash screen, REPLAYING the same mode the last run used — so
+   *  a daily wipeout retries the daily (chasing your best), not a random run. */
+  private replay(): void {
+    if (this.lastWasDaily) this.playDaily();
+    else this.play();
   }
 
   /** Resume from the pause overlay back into the run. */
@@ -343,6 +398,9 @@ export class Shell {
       `<p class="shell-hint">${hint}</p>` +
       `<div class="shell-row">` +
       `<button class="shell-btn shell-btn--ghost shell-cars" type="button">CARS</button>` +
+      (this.opts.daily
+        ? `<button class="shell-btn shell-btn--ghost shell-daily-open" type="button">DAILY</button>`
+        : '') +
       (this.opts.missions
         ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
         : '') +
@@ -353,6 +411,7 @@ export class Shell {
 
     s.querySelector('.shell-play')!.addEventListener('click', () => this.play());
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
+    s.querySelector('.shell-daily-open')?.addEventListener('click', () => this.go('daily'));
     s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
     s.querySelector('.shell-leaderboard-open')!.addEventListener('click', () => this.go('leaderboard'));
     s.querySelector('.shell-settings-open')!.addEventListener('click', () => this.go('settings'));
@@ -660,13 +719,66 @@ export class Shell {
             .join('');
   }
 
+  // --- daily challenge view (OPP-09) --------------------------------------
+
+  private buildDaily(): HTMLElement {
+    const s = screen('shell-daily');
+    s.innerHTML =
+      `<h2 class="shell-subtitle">DAILY CHALLENGE</h2>` +
+      `<p class="shell-daily-sub">One fixed seed all day · chase your own best</p>` +
+      `<button class="shell-btn shell-play-daily" type="button">PLAY TODAY'S CHALLENGE</button>` +
+      `<p class="shell-daily-today"></p>` +
+      `<h3 class="shell-lb-heading">LAST 7 DAYS</h3>` +
+      `<div class="shell-daily-history"></div>` +
+      `<button class="shell-btn shell-close-daily" type="button">DONE</button>`;
+    s.querySelector('.shell-play-daily')!.addEventListener('click', () => this.playDaily());
+    s.querySelector('.shell-close-daily')!.addEventListener('click', () => this.showStart());
+    return s;
+  }
+
+  /** Render the daily view from the store (on open): today's best + run count,
+   *  and the rolling 7-day history. */
+  private renderDaily(): void {
+    const d = this.opts.daily;
+    if (!d) return;
+
+    const today = d.today();
+    this.dailyTodayEl.textContent =
+      today && today.runs > 0
+        ? `TODAY: ${fmtNum(today.bestScore)} · ${fmtNum(today.bestDistance)} m · ${today.runs} run${today.runs === 1 ? '' : 's'}`
+        : 'TODAY: not played yet';
+
+    const history = d.history();
+    this.dailyHistoryEl.innerHTML =
+      history.length === 0
+        ? `<p class="shell-lb-empty">NO DAILIES YET</p>`
+        : history
+            .map(
+              (e) =>
+                `<div class="shell-lb-row shell-daily-row">` +
+                `<span class="shell-lb-date">${fmtDateKey(e.dateKey)}</span>` +
+                `<span class="shell-lb-score">${fmtNum(e.bestScore)}</span>` +
+                `<span class="shell-lb-dist">${fmtNum(e.bestDistance)} m</span>` +
+                `<span class="shell-lb-car">${this.carLabel(e.bestCarId)}</span>` +
+                `</div>`,
+            )
+            .join('');
+  }
+
   // --- crash screen -------------------------------------------------------
 
-  /** Game-over placement: a celebratory badge (made the board / beat this car)
-   *  and the nearest higher score to chase. Both lines hide when not earned. */
-  private renderPlacement(placement: RunPlacement | null): void {
+  /** Game-over placement callout. For a DAILY run (OPP-09): a daily badge (new
+   *  daily best, else the replay count). Otherwise the OPP-15 board placement +
+   *  nearest higher score to chase. Lines hide when nothing's earned. The two
+   *  paths are mutually exclusive — daily + main board never mix. */
+  private renderPlacement(placement: RunPlacement | null, daily: DailyResult | null = null): void {
     let badge = '';
-    if (placement) {
+    let target = '';
+    if (daily) {
+      // DAILY run: celebrate a new best on today's seed, else show the run count
+      // (the "today <best>" line below is the score to chase — no board target).
+      badge = daily.isBest ? 'DAILY BEST!' : `DAILY · RUN #${daily.runs}`;
+    } else if (placement) {
       if (placement.rank === 1) {
         badge = 'NEW BEST!'; // #1 implies the car best too — keep it to one punch
       } else {
@@ -675,6 +787,7 @@ export class Shell {
         if (placement.isCarBest) parts.push(`BEST IN ${this.carLabel(placement.carId).toUpperCase()}`);
         badge = parts.join('  ·  ');
       }
+      if (placement.target) target = `just ${fmtNum(placement.target.gap)} from #${placement.target.rank}`;
     }
     if (badge) {
       this.crashPlacementEl.textContent = badge;
@@ -694,9 +807,8 @@ export class Shell {
       this.crashPlacementEl.style.display = 'none';
     }
 
-    const target = placement?.target ?? null;
     if (target) {
-      this.crashTargetEl.textContent = `just ${fmtNum(target.gap)} from #${target.rank}`;
+      this.crashTargetEl.textContent = target;
       this.crashTargetEl.style.display = '';
     } else {
       this.crashTargetEl.textContent = '';
@@ -722,12 +834,12 @@ export class Shell {
       `</div>` +
       `<p class="shell-hint">tap / any key to retry · Esc for menu</p>`;
 
-    s.querySelector('.shell-play-again')!.addEventListener('click', () => this.play());
+    s.querySelector('.shell-play-again')!.addEventListener('click', () => this.replay());
     s.querySelector('.shell-menu')!.addEventListener('click', () => this.menu());
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());
     // Tap anywhere on the crash backdrop (not a button) also retries.
     s.addEventListener('click', (e) => {
-      if (e.target === s) this.play();
+      if (e.target === s) this.replay();
     });
     return s;
   }
@@ -790,7 +902,7 @@ export class Shell {
         if (e.key === 'Tab' || e.key === 'Shift') return;
         if ((e.key === 'Enter' || e.key === ' ') && this.focusedNonPlayButton()) return;
         e.preventDefault();
-        this.play();
+        this.replay();
         break;
       case 'carpicker':
         if (e.key === 'ArrowLeft') {
@@ -828,6 +940,16 @@ export class Shell {
           this.showStart();
         }
         break;
+      case 'daily':
+        // Esc closes; Enter launches today's challenge (the screen's primary action).
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.showStart();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          this.playDaily();
+        }
+        break;
       default:
         break; // in play — Controls handles keys
     }
@@ -857,4 +979,10 @@ function fmtNum(n: number): string {
 /** Short YYYY-MM-DD for a recorded run; '—' for a migrated legacy entry (date 0). */
 function fmtDate(ms: number): string {
   return ms > 0 ? new Date(ms).toISOString().slice(0, 10) : '—';
+}
+
+/** Format a YYYYMMDD daily date key (e.g. 20260531 → "2026-05-31"). */
+function fmtDateKey(key: number): string {
+  const s = String(key);
+  return s.length === 8 ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s;
 }

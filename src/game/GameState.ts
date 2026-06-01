@@ -74,6 +74,11 @@ export interface GameState {
    *  Separate from handling (physics): this scales the combo build rate +
    *  survival window. Defaults to BASE_SCORING (neutral 1/1). */
   scoring: CarScoring;
+  /** True if this run is a DAILY CHALLENGE (OPP-09) — started on today's fixed
+   *  date-seed. Pure run-intent flag the composition root sets at startRun and
+   *  reads at run-end to route the result to the daily store (NOT the main
+   *  leaderboard). Does not affect the sim. Defaults to false (a normal run). */
+  isDaily: boolean;
   /** Cosmetic starting-biome index (a mission/rank reward): shifts ONLY the
    *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
   startBiome: number;
@@ -101,6 +106,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     score: createScoreState(),
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
+    isDaily: false,
     startBiome: 0,
     runStats: { driftSeconds: 0, shields: 0 },
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
@@ -118,6 +124,7 @@ export function startRun(
   startBiome: number = state.startBiome,
   seed: number = state.seed,
   scoring: CarScoring = state.scoring,
+  isDaily = false,
 ): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
@@ -134,6 +141,7 @@ export function startRun(
   state.score = createScoreState();
   state.handling = handling;
   state.scoring = scoring;
+  state.isDaily = isDaily;
   state.startBiome = startBiome;
   state.runStats.driftSeconds = 0;
   state.runStats.shields = 0;

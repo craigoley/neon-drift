@@ -1,56 +1,44 @@
 /**
- * Renders the player car: a dark low-poly body with glowing neon edge lines.
- * Reads VehicleState (pure) and positions/rolls the mesh; never mutates state.
- * All geometry built once.
+ * Renders the player car: the shared procedural low-poly synthwave vehicle (see
+ * CarMesh) — a tapered hull, raked cabin, four wheels, neon edge lines, additive
+ * headlight glow and a ground-glow blob. Reads VehicleState (pure) and positions
+ * the mesh; never mutates state. Geometry is built once.
  *
- * The forward headlight cones were removed (#13): from the chase cam (behind/
- * above) the open cones rendered as flat triangles stuck to the nose rather than
- * reading as light, so the car is just the neon wireframe box now.
+ * The lateral position is applied to the OUTER group; roll (steer lean) and yaw
+ * (drift slide) are applied to the inner `chassis`, so the ground-glow blob that
+ * sits under the car stays flat on the road and doesn't tilt with the lean.
  *
- * Cosmetics are driven by the selected car (`applyCar`): body + glow (edge)
- * colours. Physics is identical across cars this PR — only the colours change.
- * (The car's `accent` colour is used by the car-picker preview, not the mesh.)
+ * Headlights are PROPERLY transparent now (additive, depthWrite off) — the old
+ * opaque-triangle headlight cones (#13) are not what these are.
+ *
+ * Cosmetics are driven by the selected car (`applyCar`): body, neon glow (edges
+ * + ground glow) and accent (headlights + side strips).
  */
 
 import * as THREE from 'three';
 import type { VehicleState } from '../game/Vehicle';
 import { clamp } from '../utils/math';
 import { CAR_VIS, PALETTE, type CarDef } from '../utils/constants';
+import { CarMesh } from './CarMesh';
 
 export class VehicleRenderer {
-  readonly group = new THREE.Group();
+  readonly group: THREE.Group;
 
-  private readonly bodyMat: THREE.MeshBasicMaterial;
-  private readonly edgesMat: THREE.LineBasicMaterial;
+  private readonly car: CarMesh;
   /** The car's own glow colour (restored when not drifting). */
   private readonly baseGlow = new THREE.Color(PALETTE.cyan);
   /** Hot drift glow lerp target. */
   private readonly driftGlow = new THREE.Color(CAR_VIS.driftGlow);
 
   constructor(scene: THREE.Scene) {
-    const { width, height, length } = CAR_VIS;
-
-    // Dark body so the emissive edges read as neon wireframe. Default colours
-    // match the original look; applyCar() overrides them per selected car.
-    this.bodyMat = new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(width, height, length), this.bodyMat);
-    body.position.y = height / 2;
-
-    this.edgesMat = new THREE.LineBasicMaterial({ color: PALETTE.cyan });
-    const edges = new THREE.LineSegments(
-      new THREE.EdgesGeometry(new THREE.BoxGeometry(width, height, length)),
-      this.edgesMat,
-    );
-    edges.position.y = height / 2;
-
-    this.group.add(body, edges);
+    this.car = new CarMesh();
+    this.group = this.car.group;
     scene.add(this.group);
   }
 
-  /** Apply a car's cosmetic colours (body + glow). Cheap — only colours change. */
+  /** Apply a car's cosmetic colours. Cheap — only colours change. */
   applyCar(car: CarDef): void {
-    this.bodyMat.color.setHex(car.cosmetic.body);
-    this.edgesMat.color.setHex(car.cosmetic.glow);
+    this.car.applyCar(car);
     this.baseGlow.setHex(car.cosmetic.glow);
   }
 
@@ -62,22 +50,21 @@ export class VehicleRenderer {
   sync(state: VehicleState): void {
     this.group.position.x = state.lateral;
 
+    const chassis = this.car.chassis;
     const rollBoost = state.drifting ? CAR_VIS.driftRollBoost : 1;
-    this.group.rotation.z =
+    chassis.rotation.z =
       clamp(-state.lateralVel / CAR_VIS.rollReference, -1, 1) * CAR_VIS.maxRoll * rollBoost;
 
     // Yaw only while drifting — the nose angles into the slide direction.
-    const yaw = state.drifting
+    chassis.rotation.y = state.drifting
       ? clamp(-state.lateralVel / CAR_VIS.driftYawReference, -1, 1) * CAR_VIS.driftMaxYaw
       : 0;
-    this.group.rotation.y = yaw;
 
     // Glow eases toward the hot drift colour while drifting, back otherwise.
-    // lerp() mutates in place, so no scratch colour is needed; snap to the
-    // target once within epsilon so the asymptotic ease settles instead of
-    // running a vanishing step on every future frame.
+    // lerp() mutates in place; snap to the target once within epsilon so the
+    // asymptotic ease settles instead of running a vanishing step every frame.
     const target = state.drifting ? this.driftGlow : this.baseGlow;
-    const glow = this.edgesMat.color;
+    const glow = this.car.edgesMat.color;
     if (!glow.equals(target)) {
       glow.lerp(target, CAR_VIS.driftGlowLerp);
       const dist =

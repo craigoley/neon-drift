@@ -17,6 +17,7 @@ import {
   POWERUP_DEFS,
   POWERUP_ORDER,
   PowerupKind,
+  SLALOM,
 } from '../utils/constants';
 
 /** Minimal shape the HUD needs for the best run (kept local to avoid coupling). */
@@ -43,6 +44,9 @@ export class HUD {
   /** Dedicated transient near-miss callout ("CLOSE!"), separate from `toast` so
    *  frequent near-misses never collide with milestone/biome banners. */
   private readonly nearMiss: HTMLElement;
+  /** Daily Slalom lives row + one reused pip per life (built once; slalom-only). */
+  private readonly lives: HTMLElement;
+  private readonly lifePips: HTMLElement[];
   /** Last combo shown, to detect tier-ups for the celebration pulse. */
   private lastCombo = 1;
 
@@ -97,7 +101,18 @@ export class HUD {
     this.nearMiss = el('div', 'hud-nearmiss');
     this.nearMiss.style.opacity = '0';
 
-    root.append(this.stats, this.powerups, this.objectives, this.toast, this.nearMiss);
+    // Daily Slalom lives row — one reused pip per life (build once, like the
+    // powerup chips), shown only in slalom. Dimmed (`.lost`) as lives are spent.
+    this.lives = el('div', 'hud-lives');
+    this.lifePips = [];
+    for (let i = 0; i < SLALOM.lives; i++) {
+      const pip = el('span', 'hud-life');
+      this.lives.appendChild(pip);
+      this.lifePips.push(pip);
+    }
+    this.lives.style.display = 'none';
+
+    root.append(this.stats, this.powerups, this.objectives, this.toast, this.nearMiss, this.lives);
     parent.appendChild(root);
   }
 
@@ -141,16 +156,24 @@ export class HUD {
     // it always mirrors the internal combo — including the crash frame where the
     // combo resets (locked by hud_combo_funnel.test.ts).
     const playing = game.phase === Phase.Playing;
+    const slalom = isSlalom(game);
     this.stats.style.display = playing ? 'flex' : 'none';
     this.powerups.style.display = playing ? 'flex' : 'none';
     this.objectives.style.display = playing ? 'flex' : 'none';
+    // Lives row: slalom-only, shown while playing. Pips dim (`.lost`) as lives go.
+    this.lives.style.display = playing && slalom ? 'flex' : 'none';
+    if (playing && slalom) {
+      for (let i = 0; i < this.lifePips.length; i++) {
+        this.lifePips[i].classList.toggle('lost', i >= game.lives);
+      }
+    }
 
     this.speedEl.textContent = `${Math.round(game.vehicle.speed)} km/s`;
-    if (isSlalom(game)) {
+    if (slalom) {
       // DAILY SLALOM readouts: the event-driven score, the clean-streak multiplier
       // (the dominant term — pulses as it climbs), and gates threaded. The classic
       // combo/distance/best aren't meaningful here; the classic best is hidden
-      // (the daily best lives on the daily screen). (Lives indicator → PR 3.)
+      // (the daily best lives on the daily screen). Lives show in the .hud-lives row.
       const s = game.slalomScore;
       this.distEl.textContent = `${s.gatesThreaded} gates`;
       this.scoreEl.textContent = `${Math.round(s.score)}`;

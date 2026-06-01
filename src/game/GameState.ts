@@ -42,7 +42,7 @@ import {
 } from './Powerups';
 import { createBiomeState, updateBiome, type BiomeState } from './Biome';
 import { createMilestoneState, updateMilestones, type MilestoneState } from './Milestones';
-import { BIOME_CYCLE, DRIFT_MIN_SPEED, POWERUPS, PowerupKind, RAMP, VEHICLE } from '../utils/constants';
+import { BIOME_CYCLE, DRIFT_MIN_SPEED, POWERUPS, PowerupKind, RAMP, SLALOM, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -95,6 +95,10 @@ export interface GameState {
    *  from `score` (the classic ScoreState) so neither mode's scoring touches the
    *  other. */
   slalomScore: SlalomScoreState;
+  /** Lives remaining (Daily Slalom PR 3). In 'dailySlalom' a gate-WALL miss costs
+   *  one (run continues until 0); used ONLY in slalom. In classic it's inert
+   *  (single-collision death is unchanged) — initialised but never read. */
+  lives: number;
   /** Active car handling profile for this run (resolved from the selected car
    *  by the composition root and passed in — the pure layer never reaches into
    *  UI/storage). Defaults to BASE_HANDLING. */
@@ -135,6 +139,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     milestones: createMilestoneState(),
     score: createScoreState(),
     slalomScore: createSlalomScoreState(),
+    lives: SLALOM.lives,
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
     mode: GameMode.Classic,
@@ -173,6 +178,7 @@ export function startRun(
   state.milestones = createMilestoneState();
   state.score = createScoreState();
   state.slalomScore = createSlalomScoreState();
+  state.lives = SLALOM.lives; // full lives each run (inert in classic)
   state.handling = handling;
   state.scoring = scoring;
   state.mode = mode;
@@ -339,11 +345,29 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     effects.invulnTimer = POWERUPS.shieldInvuln;
   }
 
+  // LIVES (Daily Slalom PR 3): in slalom, a gate-WALL miss (the only crash source
+  // there — gates-only) costs a LIFE instead of ending the run, until the last.
+  // Mirrors the shield intercept and sits AFTER it: the i-frame check above (and a
+  // held shield) get first refusal, so the post-miss invuln window swallows the
+  // immediately-following gate WITHOUT spending a second life. Classic NEVER enters
+  // here (guarded by `slalom`), so single-collision death is unchanged.
+  if (slalom && state.lastEvents.crashed && state.lives > 0) {
+    state.lives -= 1;
+    if (state.lives > 0) {
+      // Survived: swallow the crash, break the streak, grant i-frames, sting.
+      state.lastEvents.crashed = false;
+      state.lastEvents.gateMissed = true;
+      missGate(state.slalomScore);
+      effects.invulnTimer = POWERUPS.shieldInvuln;
+    }
+    // else lives now 0 → leave `crashed` set so the run ends below (the 3rd miss).
+  }
+
   if (state.lastEvents.crashed) {
     state.phase = Phase.Crashed;
     resetCombo(state.score);
-    // A slalom miss breaks the clean streak (the run also ends this PR — lives
-    // arrive in PR 3, where this reset becomes the per-life punctuation).
+    // A slalom run-ending miss (the last life) also breaks the streak — moot at
+    // run-end, but keeps the invariant "any miss resets cleanMultiplier".
     if (slalom) missGate(state.slalomScore);
   }
 

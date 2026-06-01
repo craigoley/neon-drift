@@ -191,6 +191,10 @@ export interface TrafficEvents {
    *  MILESTONE tier (DAILY_SCORING.milestoneStep) — the rare, earned escalation
    *  cue. Set by GameState (slalom only) from the threadGate result. */
   gateMilestone?: boolean;
+  /** True on the step a slalom gate-WALL miss cost a life but the run CONTINUED
+   *  (lives remained) — drives the non-fatal miss sting. Set by GameState (slalom
+   *  only); the FATAL miss instead sets `crashed` (the full crash). */
+  gateMissed?: boolean;
   /** Label of a distance MILESTONE hit this step (last one), else null — for the
    *  celebratory toast + fanfare. See Milestones.ts. */
   milestone?: string | null;
@@ -239,6 +243,7 @@ export function resolveTraffic(
   events.rampBoosts = 0;
   events.gateThreaded = false;
   events.gateMilestone = false;
+  events.gateMissed = false;
   events.evaluated = 0;
   events.closestLateral = Infinity;
   events.closestLongitudinal = Infinity;

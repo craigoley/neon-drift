@@ -188,6 +188,33 @@ body,
     0 2px 4px rgba(0, 0, 0, 0.85);
 }
 
+/* Daily Slalom lives row (slalom-only) — top-left, clear of the centred stats bar
+   + powerup strip. Pips are filled cyan (the player's colour); a spent life dims
+   to a hollow outline. Follows the build-once + toggle pattern of the powerup chips. */
+.hud-lives {
+  position: absolute;
+  top: clamp(44px, 9vw, 64px);
+  left: clamp(10px, 3vw, 20px);
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+.hud-life {
+  width: clamp(10px, 2.6vw, 14px);
+  height: clamp(10px, 2.6vw, 14px);
+  border-radius: 3px;
+  background: #00ffff;
+  box-shadow: 0 0 8px rgba(0, 255, 255, 0.7);
+  transition:
+    opacity 0.2s ease,
+    background 0.2s ease;
+}
+.hud-life.lost {
+  background: transparent;
+  border: 2px solid rgba(0, 255, 255, 0.28);
+  box-shadow: none;
+}
+
 /* --- front-end shell (start / settings / car picker / crash) ----------- */
 /* Root never blocks input; only a visible screen captures taps. Sits above the
    HUD; built for mobile portrait first (flex column, clamp() sizing, safe-area

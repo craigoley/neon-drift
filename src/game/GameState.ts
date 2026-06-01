@@ -15,7 +15,7 @@ import { BASE_HANDLING, DEFAULT_SEED, type CarHandling } from '../utils/constant
 import type { InputIntent } from './Input';
 import { createVehicleState, updateVehicle, type VehicleState } from './Vehicle';
 import { createRoadState, roadCenterAt, updateRoad, type RoadState } from './Road';
-import { createTrafficState, updateTraffic, type TrafficState } from './Traffic';
+import { createTrafficState, seedOpeningObstacle, updateTraffic, type TrafficState } from './Traffic';
 import {
   createScoreState,
   integrateScore,
@@ -120,6 +120,7 @@ export function startRun(
   state.vehicle = createVehicleState();
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
+  seedOpeningObstacle(state.traffic, seed); // one easy obstacle so the opening isn't empty (fires every run)
   state.powerups = createPowerupState(seed);
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();

@@ -21,6 +21,7 @@ import {
   OBSTACLE_DEFS,
   OBSTACLE_ORDER,
   ObstacleKind,
+  OPENING_SEED,
   ROAD,
   TRAFFIC,
 } from '../utils/constants';
@@ -90,6 +91,31 @@ export function createTrafficState(): TrafficState {
     });
   }
   return { pool, sinceSpawn: 0, nextId: 0, spawned: 0, culled: 0 };
+}
+
+/**
+ * Place ONE easy obstacle near the start of a fresh run (see OPENING_SEED) so the
+ * opening has an immediate, low-stakes steer-around decision instead of empty
+ * road. Claims pool slot 0 (always free in a freshly-created state) and activates
+ * it as a dead-centre STATIC obstacle a short distance ahead. Sets fields
+ * DIRECTLY (no rng draws) so the deterministic traffic sequence is unperturbed.
+ * Call once from startRun, after createTrafficState. Pure.
+ */
+export function seedOpeningObstacle(state: TrafficState, seed: number): void {
+  const slot = state.pool[0];
+  slot.active = true;
+  slot.id = state.nextId++;
+  slot.kind = ObstacleKind.Static; // easy + predictable (not gate/ramp/mover)
+  slot.sway = 0;
+  slot.swayPhase = 0;
+  slot.openingHalfWidth = 0;
+  slot.consumed = false;
+  slot.laneOffset = OPENING_SEED.laneOffset;
+  slot.speed = OPENING_SEED.speed;
+  slot.distance = OPENING_SEED.distance; // run starts at distance 0 → absolute ahead
+  slot.lateral = resolveLateral(slot, seed);
+  slot.passed = false;
+  state.spawned++;
 }
 
 /** Spawn interval (seconds) for a given distance — flat through the grace

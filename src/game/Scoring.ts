@@ -95,8 +95,8 @@ export function registerNearMiss(state: ScoreState, weight = 1, windowMul = 1): 
  * distance, always < nearMissLateral when called), returns a reward multiplier
  * that scales the combo weight by how CLOSE the pass was:
  *
- *   gap >= nearMissLateral (6.5)  → 1.0   (outer edge: ordinary near-miss)
- *   gap == grazeInner      (2.0)  → grazeMax (2.5)  (paint-shave)
+ *   gap >= nearMissLateral (4.0)  → 1.0   (outer edge: ordinary near-miss)
+ *   gap == grazeInner      (2.3)  → grazeMax (2.5)  (paint-shave)
  *   gap <  grazeInner             → grazeMax  (capped — no runaway)
  *
  * i.e. mult = 1 + (grazeMax-1) · clamp((outer-gap)/(outer-inner), 0, 1). Linear

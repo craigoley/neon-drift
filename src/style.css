@@ -345,6 +345,17 @@ body,
   text-shadow: 0 0 8px #00ffff;
 }
 
+/* Identity descriptor under the car name — makes the handling tradeoff readable. */
+.shell-car-tagline {
+  min-height: 1.1em;
+  margin: 2px 0 0;
+  font-size: clamp(12px, 3.2vw, 16px);
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0.85;
+}
+
 /* Locked-car requirement line (hidden/empty for unlocked cars). */
 .shell-car-lock {
   min-height: 1.2em;

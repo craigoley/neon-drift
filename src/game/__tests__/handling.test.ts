@@ -168,9 +168,15 @@ describe('Handling — new roster cars are distinct (roster expansion)', () => {
     expect(slide(slip)).toBeGreaterThan(slide(handlingFor('ember')));
   });
 
-  it('the new extremes peg their picker bars; Onyx out-grips Vapor but tops out slower', () => {
-    expect(carStats(nova).speed).toBe(1); // speed-cap ceiling
-    expect(carStats(onyx).grip).toBe(1); // grip ceiling
+  it('the new extremes lead their picker bars (distinct, not pegged); Onyx out-grips Vapor but tops out slower', () => {
+    // OPP-07a widened CAR_STAT_RANGE so the extremes no longer clamp to a shared
+    // 1.0 rail — bars stay DISTINCT (the legibility goal). Assert leadership +
+    // the in-range ordering rather than exact saturation.
+    const speeds = CARS.map((c) => carStats(handlingFor(c.id)).speed);
+    const grips = CARS.map((c) => carStats(handlingFor(c.id)).grip);
+    expect(carStats(nova).speed).toBe(Math.max(...speeds)); // fastest of the roster
+    expect(carStats(onyx).grip).toBe(Math.max(...grips)); // grippiest of the roster
+    expect(carStats(nova).speed).toBeLessThanOrEqual(1); // in range, not over-pegged
     expect(carStats(onyx).grip).toBeGreaterThan(carStats(vapor).grip);
     expect(drive(onyx, {}, 4000, 1e9).speed).toBeLessThan(drive(vapor, {}, 4000, 1e9).speed);
   });

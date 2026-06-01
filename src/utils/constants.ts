@@ -1404,6 +1404,9 @@ export interface CarCosmetic {
 export interface CarDef {
   id: string;
   displayName: string;
+  /** Short identity descriptor (<~6 words) shown in the picker so the car's
+   *  handling tradeoff is READABLE, not just felt. */
+  tagline?: string;
   cosmetic: CarCosmetic;
   /** Optional — absent this PR; all cars share VEHICLE physics for now. */
   handling?: CarHandling;
@@ -1462,8 +1465,10 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'pulse',
     displayName: 'Pulse',
+    tagline: 'Balanced — no weakness, no edge.',
     cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
-    // Balanced all-rounder: no weakness, no specialty. The reference point.
+    // Balanced all-rounder: no weakness, no specialty. The 1.0 reference point —
+    // unchanged by OPP-07a (the others widen away from it).
     handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
     // Classic mid silhouette — the visual reference the others deviate from.
     shape: {
@@ -1474,10 +1479,12 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'vapor',
     displayName: 'Vapor',
+    tagline: 'Razor grip, low top speed.',
     cosmetic: { body: 0x6e1a60, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
-    handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
+    // OPP-07a widen (was 0.90/1.25/0.70/0.85): sharpen the grip+slow identity.
+    handling: { speedCap: 0.84, lateralAccel: 1.4, lateralFriction: 0.55, drift: 0.78 },
     // GRIP look: wide, low, planted, blunt nose, beefy wheels — reads stable.
     shape: {
       lengthMul: 0.95, widthMul: 1.15, heightMul: 0.82, noseFraction: 0.82,
@@ -1487,10 +1494,12 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ember',
     displayName: 'Ember',
+    tagline: 'Fast and loose — hard to place.',
     cosmetic: { body: 0x6e3208, glow: 0xff6600, accent: 0xff00ff },
-    // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
+    // Speed / twitchy: high top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
-    handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
+    // OPP-07a widen (was 1.18/0.85/1.20/1.00): sharpen the fast+loose identity.
+    handling: { speedCap: 1.28, lateralAccel: 0.78, lateralFriction: 1.35, drift: 1.0 },
     // SPEED look: long, low, sleek, sharp nose, long hood (cabin set back).
     shape: {
       lengthMul: 1.18, widthMul: 0.92, heightMul: 0.82, noseFraction: 0.5,
@@ -1500,10 +1509,12 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ghost',
     displayName: 'Ghost',
+    tagline: 'Holds drifts forever. Commits hard.',
     cosmetic: { body: 0x46606e, glow: 0xffffff, accent: 0x00ffff },
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
-    handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
+    // OPP-07a widen (was 0.95/0.95/1.10/1.45): sharpen the drift identity.
+    handling: { speedCap: 0.92, lateralAccel: 0.92, lateralFriction: 1.2, drift: 1.65 },
     // DRIFT look: short, compact, tall kart with big wheels — reads tossable.
     shape: {
       lengthMul: 0.82, widthMul: 0.95, heightMul: 1.08, noseFraction: 0.7,
@@ -1513,11 +1524,13 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'nova',
     displayName: 'Nova',
+    tagline: 'All top speed, no grip.',
     cosmetic: { body: 0x202e7e, glow: 0x4d6bff, accent: 0x00ffff },
     // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
     // loose tail — a straight-line terror you can barely place. Ember is only
     // mildly fast and stays controllable; Nova trades nearly all grip for the top end.
-    handling: { speedCap: 1.25, lateralAccel: 0.7, lateralFriction: 1.25, drift: 0.9 },
+    // OPP-07a widen (was 1.25/0.70/1.25/0.90): sharpen the glass-cannon identity.
+    handling: { speedCap: 1.38, lateralAccel: 0.6, lateralFriction: 1.4, drift: 0.88 },
     // SPEED EXTREME look: longest, lowest, sharpest — a dragster with a tiny
     // canopy set far back. The most extreme of the long-low pair (vs Ember).
     shape: {
@@ -1528,11 +1541,13 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'onyx',
     displayName: 'Onyx',
+    tagline: 'Surgical grip. Pins any gap.',
     cosmetic: { body: 0x4a1f70, glow: 0xb84dff, accent: 0x00ffaa },
     // SURGICAL: maxes grip (sharpest accel + tightest settle) and kills the slide,
     // paying with the lowest top speed — pin it in any gap. The precision extreme
     // beyond Vapor.
-    handling: { speedCap: 0.88, lateralAccel: 1.45, lateralFriction: 0.6, drift: 0.8 },
+    // OPP-07a widen (was 0.88/1.45/0.60/0.80): sharpen the surgical-grip identity.
+    handling: { speedCap: 0.82, lateralAccel: 1.62, lateralFriction: 0.45, drift: 0.74 },
     // GRIP EXTREME look: widest, lowest, bluntest — a planted brick with big
     // wheels. The most extreme of the wide-low pair (vs Vapor).
     shape: {
@@ -1543,11 +1558,13 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'slipstream',
     displayName: 'Slipstream',
+    tagline: 'Fast and slidey — rally power-slides.',
     cosmetic: { body: 0x3c5e0a, glow: 0xaaff00, accent: 0xff0066 },
     // RALLY HYBRID: fast AND slidey with loose grip — power-slides through gaps,
     // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
     // is slow; Ember is fast but doesn't slide).
-    handling: { speedCap: 1.1, lateralAccel: 0.9, lateralFriction: 1.15, drift: 1.4 },
+    // OPP-07a widen (was 1.10/0.90/1.15/1.40): sharpen the rally-hybrid identity.
+    handling: { speedCap: 1.16, lateralAccel: 0.86, lateralFriction: 1.28, drift: 1.58 },
     // RALLY look: tall, chunky, big wheels, medium nose — speed+drift hybrid that
     // reads as a beefy rally car, distinct from sleek Ember and compact Ghost.
     shape: {
@@ -1740,10 +1757,16 @@ export function handlingFor(id: string): CarHandling {
  * the physics. Chosen to span the roster's spread with a little headroom.
  */
 export const CAR_STAT_RANGE = {
-  speed: { min: 0.85, max: 1.25 },
+  // Widened alongside the OPP-07a handling spread (was 0.85-1.25 / 0.6-2.0 /
+  // 0.8-1.5): the sharpened roster now spans wider raw values, and these ranges
+  // must enclose it with headroom or multiple cars would clamp to identical
+  // full/empty bars — defeating the legibility goal. Span the new extremes
+  // (speedCap 0.82-1.38; grip ratio 0.43-3.6; drift 0.74-1.65) so every car's
+  // bars stay distinct.
+  speed: { min: 0.8, max: 1.4 },
   /** Grip = steering authority / how loose the car is = lateralAccel / lateralFriction. */
-  grip: { min: 0.6, max: 2.0 },
-  drift: { min: 0.8, max: 1.5 },
+  grip: { min: 0.4, max: 3.7 },
+  drift: { min: 0.72, max: 1.7 },
 } as const;
 
 export interface CarStats {

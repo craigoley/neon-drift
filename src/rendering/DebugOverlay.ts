@@ -57,7 +57,12 @@ export class DebugOverlay {
    * Refresh the readout from current state. No-op work when hidden.
    * `hudComboText` is the LIVE text of the HUD's combo element (funnel step 6).
    */
-  update(game: GameState, telemetry: Telemetry, hudComboText: string): void {
+  update(
+    game: GameState,
+    telemetry: Telemetry,
+    hudComboText: string,
+    trail?: { active: number; cap: number },
+  ): void {
     if (!this.visible) return;
     const road = game.road;
     const traffic = game.traffic;
@@ -97,6 +102,7 @@ export class DebugOverlay {
       `G${activeObstacleCountByKind(traffic, ObstacleKind.Gate)} ` +
       `R${activeObstacleCountByKind(traffic, ObstacleKind.Ramp)}  boost ${game.vehicle.boostTimer.toFixed(1)}s\n` +
       `pup   active ${activePickupCount(powerups)}/${powerups.pool.length}  spawned ${powerups.spawned}  got ${powerups.collected}  culled ${powerups.culled}\n` +
+      `juice trail ${trail ? `${trail.active}/${trail.cap}` : '--'} (bounded, fixed buffer)\n` +
       `fx    shield ${fx.shield ? 'Y' : 'n'}${fx.invulnTimer > 0 ? `(iv ${fx.invulnTimer.toFixed(1)})` : ''}  slow ${fx.slowMoTimer.toFixed(1)}  x2 ${fx.scoreBoostTimer.toFixed(1)}  mag ${fx.magnetTimer.toFixed(1)}\n` +
       `-- COMBO FUNNEL (raw) ----------------\n` +
       `1 evaluated/frame   ${ev.evaluated ?? 0}\n` +

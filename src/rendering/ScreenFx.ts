@@ -10,6 +10,8 @@ export class ScreenFx {
   private readonly flash: HTMLElement;
   private readonly pickup: HTMLElement;
   private edgeTimer = 0;
+  /** Peak opacity (0..1) of the current edge pulse — scaled by near-miss tier. */
+  private edgePeak = 1;
   private flashTimer = 0;
   private pickupTimer = 0;
 
@@ -23,9 +25,12 @@ export class ScreenFx {
     parent.append(this.edge, this.flash, this.pickup);
   }
 
-  /** Trigger the cyan edge-glow pulse (near-miss). */
-  pulseNearMiss(): void {
+  /** Trigger the cyan edge-glow pulse (near-miss). `intensity` (0..1) scales the
+   *  peak brightness so the pulse escalates with the combo tier; defaults to full
+   *  so any existing call is unchanged. */
+  pulseNearMiss(intensity = 1): void {
     this.edgeTimer = JUICE.nearMissPulse;
+    this.edgePeak = Math.max(0, Math.min(1, intensity));
   }
 
   /** Trigger the white crash flash. */
@@ -49,7 +54,7 @@ export class ScreenFx {
 
     if (this.edgeTimer > 0) {
       this.edgeTimer -= dt;
-      this.edge.style.opacity = String(Math.max(0, this.edgeTimer / JUICE.nearMissPulse));
+      this.edge.style.opacity = String(Math.max(0, (this.edgeTimer / JUICE.nearMissPulse) * this.edgePeak));
     } else if (this.edge.style.opacity !== '0') {
       this.edge.style.opacity = '0';
     }

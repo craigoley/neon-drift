@@ -40,6 +40,9 @@ export class HUD {
   private readonly objectiveRows: Record<ObjectiveId, { root: HTMLElement; label: HTMLElement }>;
   /** Transient milestone/biome toast. */
   private readonly toast: HTMLElement;
+  /** Dedicated transient near-miss callout ("CLOSE!"), separate from `toast` so
+   *  frequent near-misses never collide with milestone/biome banners. */
+  private readonly nearMiss: HTMLElement;
   /** Last combo shown, to detect tier-ups for the celebration pulse. */
   private lastCombo = 1;
 
@@ -90,7 +93,11 @@ export class HUD {
     this.toast = el('div', 'hud-toast');
     this.toast.style.opacity = '0';
 
-    root.append(this.stats, this.powerups, this.objectives, this.toast);
+    // Dedicated near-miss callout, sat just under the stats bar near the combo.
+    this.nearMiss = el('div', 'hud-nearmiss');
+    this.nearMiss.style.opacity = '0';
+
+    root.append(this.stats, this.powerups, this.objectives, this.toast, this.nearMiss);
     parent.appendChild(root);
   }
 
@@ -99,6 +106,22 @@ export class HUD {
    * the given palette colour. Uses the Web Animations API (guarded — absent in
    * jsdom/tests, where it's a no-op besides setting the text).
    */
+  /** Flash the dedicated near-miss callout ("CLOSE!"). Short and punchy — fires
+   *  only at high combo tiers (see main's near-miss dispatch). Separate from the
+   *  milestone toast so the two never collide. */
+  showNearMiss(text: string): void {
+    this.nearMiss.textContent = text;
+    if (typeof this.nearMiss.animate !== 'function') return;
+    this.nearMiss.animate(
+      [
+        { opacity: 0, transform: 'translate(-50%, 0) scale(0.85)' },
+        { opacity: 1, transform: 'translate(-50%, -4px) scale(1.08)', offset: 0.25 },
+        { opacity: 0, transform: 'translate(-50%, -10px) scale(1.0)' },
+      ],
+      { duration: JUICE.nearMissCalloutMs, easing: 'ease-out' },
+    );
+  }
+
   showToast(text: string, color: string): void {
     this.toast.textContent = text;
     this.toast.style.setProperty('--toast-color', color);

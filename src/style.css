@@ -168,6 +168,26 @@ body,
     0 2px 4px rgba(0, 0, 0, 0.85);
 }
 
+/* Near-miss callout: just under the stats bar near the combo readout, above the
+   road. Cyan to match the combo/near-miss edge-pulse; smaller than the milestone
+   toast (a quick punch, not a banner). */
+.hud-nearmiss {
+  position: absolute;
+  left: 50%;
+  top: clamp(52px, 11vh, 96px);
+  transform: translate(-50%, 0);
+  pointer-events: none;
+  white-space: nowrap;
+  font-weight: 900;
+  font-size: clamp(16px, 4.5vw, 30px);
+  letter-spacing: 0.14em;
+  color: #00ffff;
+  text-shadow:
+    0 0 8px #00ffff,
+    0 0 18px #00ffff,
+    0 2px 4px rgba(0, 0, 0, 0.85);
+}
+
 /* --- front-end shell (start / settings / car picker / crash) ----------- */
 /* Root never blocks input; only a visible screen captures taps. Sits above the
    HUD; built for mobile portrait first (flex column, clamp() sizing, safe-area

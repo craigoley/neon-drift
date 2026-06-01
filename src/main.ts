@@ -9,6 +9,7 @@
 
 import './style.css';
 import { createGameState, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
+import { nearMissTier } from './game/Scoring';
 import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
 import { AudioEngine } from './audio/AudioEngine';
@@ -46,6 +47,7 @@ import {
   cssHex,
   handlingFor,
   JUICE,
+  POSTFX,
   MAX_FRAME_DT,
   OBSTACLE_DEFS,
   ObstacleKind,
@@ -284,11 +286,18 @@ function frame(now: number): void {
 
   const crashed = game.phase === Phase.Crashed && prevPhase === Phase.Playing;
 
-  // Event-driven juice + audio.
+  // Near-miss CRESCENDO (OPP-13+04): feedback escalates across 4 combo bands —
+  // restrained at low combo, an event at a high streak. The tier comes from the
+  // live combo (scoring is unchanged); each channel scales by the JUICE table.
+  const nmTier = nearMisses > 0 ? nearMissTier(game.score.combo) : 0;
   if (nearMisses > 0) {
-    screenFx.pulseNearMiss();
+    screenFx.pulseNearMiss(JUICE.nearMissEdge[nmTier]); // brighter edge at higher tier
     speedLines.burst(); // a quick whoosh streak reinforcing the near-miss/combo
     slowmo = JUICE.nearMissSlowmo;
+    const shakeMag = JUICE.nearMissShake[nmTier];
+    if (shakeMag > 0) scene.addShake(shakeMag); // tier 0 = no shake (stays slick)
+    if (nmTier >= JUICE.nearMissCalloutTier) hud.showNearMiss(JUICE.nearMissCalloutText[nmTier]);
+    if (nmTier >= JUICE.nearMissCaTier) post.pulseAberration(POSTFX.aberrationPulsePeak); // top tier only
   }
   // Powerup collection juice: a screen glow in the pickup's colour. A shield
   // absorbing a crash flashes the shield colour ("saved!").
@@ -337,7 +346,7 @@ function frame(now: number): void {
         controls.intent.handbrake &&
         game.vehicle.speed > AUDIO.screechMinSpeed,
     );
-    if (nearMisses > 0) audio.playNearMiss();
+    if (nearMisses > 0) audio.playNearMiss(JUICE.nearMissPitch[nmTier]); // riser scales with tier
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
     // Unlock / mission / rank fanfare over the WIPEOUT (milestone three-note chime).

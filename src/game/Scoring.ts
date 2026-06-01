@@ -9,8 +9,22 @@
  */
 
 import { aabbOverlap, intervalsOverlap } from '../utils/math';
-import { GATE, ObstacleKind, RAMP, SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
+import { GATE, JUICE, ObstacleKind, RAMP, SCORING, TRAFFIC, VEHICLE, type PowerupKind } from '../utils/constants';
 import type { Obstacle, TrafficState } from './Traffic';
+
+/**
+ * Near-miss feedback TIER (0..3) for a given combo — the band that drives the
+ * crescendo intensity in the render layer. PURE; does NOT affect scoring or the
+ * combo itself (display/feel only). Tier i applies when combo crosses
+ * JUICE.nearMissTierThresholds[i-1]: <3 → 0, 3-5 → 1, 6-9 → 2, >=10 → 3.
+ */
+export function nearMissTier(combo: number): number {
+  let tier = 0;
+  for (let i = 0; i < JUICE.nearMissTierThresholds.length; i++) {
+    if (combo >= JUICE.nearMissTierThresholds[i]) tier = i + 1;
+  }
+  return tier;
+}
 
 export interface ScoreState {
   /** Accumulated score. */

@@ -405,7 +405,9 @@ body,
 
 .shell-car-dots {
   display: flex;
+  flex-wrap: wrap;
   gap: 10px;
+  justify-content: center;
 }
 
 .shell-dot {

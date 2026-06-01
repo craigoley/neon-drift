@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ProgressStore } from '../Progress';
-import { PROGRESS_STORAGE_KEY, STARTER_CAR_ID } from '../../utils/constants';
+import { CARS, CAR_UNLOCKS, PROGRESS_STORAGE_KEY, STARTER_CAR_ID } from '../../utils/constants';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -53,6 +53,51 @@ describe('ProgressStore — recordRun accumulates + unlocks once', () => {
       'ghost',
     );
     expect(p.isUnlocked('ghost')).toBe(true);
+  });
+});
+
+describe('ProgressStore — new roster cars gate + unlock at their thresholds', () => {
+  it('every car has exactly one unlock entry (table stays in sync with CARS)', () => {
+    expect([...CAR_UNLOCKS].map((u) => u.carId).sort()).toEqual(CARS.map((c) => c.id).sort());
+  });
+
+  it('the new cars are locked for a fresh player', () => {
+    const p = new ProgressStore(memStorage());
+    expect(p.isUnlocked('onyx')).toBe(false);
+    expect(p.isUnlocked('nova')).toBe(false);
+    expect(p.isUnlocked('slipstream')).toBe(false);
+  });
+
+  it('Onyx unlocks at 75 lifetime powerups', () => {
+    const p = new ProgressStore(memStorage());
+    // 70 first — still locked — then cross 75.
+    p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 70, biomesSeen: 1 });
+    expect(p.isUnlocked('onyx')).toBe(false);
+    expect(
+      p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 5, biomesSeen: 1 }).newlyUnlocked,
+    ).toContain('onyx');
+    expect(p.isUnlocked('onyx')).toBe(true);
+  });
+
+  it('Nova unlocks at an ×10 combo', () => {
+    const p = new ProgressStore(memStorage());
+    expect(p.recordRun({ distance: 1, bestCombo: 9, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).not.toContain(
+      'nova',
+    );
+    expect(p.isUnlocked('nova')).toBe(false);
+    expect(p.recordRun({ distance: 1, bestCombo: 10, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).toContain(
+      'nova',
+    );
+  });
+
+  it('Slipstream unlocks at seeing all 4 biomes in a run', () => {
+    const p = new ProgressStore(memStorage());
+    expect(p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 0, biomesSeen: 3 }).newlyUnlocked).not.toContain(
+      'slipstream',
+    );
+    expect(p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 0, biomesSeen: 4 }).newlyUnlocked).toContain(
+      'slipstream',
+    );
   });
 });
 

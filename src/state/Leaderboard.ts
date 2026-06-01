@@ -86,6 +86,7 @@ export class LeaderboardStore {
   private data: LeaderboardData;
   private readonly storage: StorageLike | null;
   private readonly now: () => number;
+  private _bestRun: BestRun = { distance: 0, score: 0 };
 
   constructor(
     storage: StorageLike | null = resolveStorage(),
@@ -94,13 +95,20 @@ export class LeaderboardStore {
     this.storage = storage;
     this.now = now;
     this.data = this.load();
+    this.refreshBestRun();
   }
 
   /** The #1 run as a {distance, score} for the legacy "BEST" readout (zeros if
-   *  the board is empty). */
+   *  the board is empty). Called every frame from hud.sync — returns a cached
+   *  reference (no allocation). */
   bestRun(): BestRun {
+    return this._bestRun;
+  }
+
+  private refreshBestRun(): void {
     const top = this.data.topRuns[0];
-    return top ? { distance: top.distance, score: top.score } : { distance: 0, score: 0 };
+    this._bestRun.distance = top ? top.distance : 0;
+    this._bestRun.score = top ? top.score : 0;
   }
 
   /** The top runs (defensive copy), already sorted by score desc, capped. */
@@ -155,6 +163,7 @@ export class LeaderboardStore {
     }
 
     this.persist();
+    this.refreshBestRun();
     return { rank, isCarBest, carId: run.carId, target };
   }
 

@@ -65,6 +65,16 @@ describe('SettingsStore — default fallback', () => {
     const s = new SettingsStore(storage);
     expect(s.get('soundEnabled')).toBe(DEFAULT_SETTINGS.soundEnabled); // 'yes' rejected
     expect(s.get('selectedCarId')).toBe(DEFAULT_SETTINGS.selectedCarId); // missing -> default
+    expect(s.get('lowFx')).toBe(DEFAULT_SETTINGS.lowFx); // missing -> default (full FX)
+  });
+
+  it('persists the Retro FX (lowFx) setting across reloads', () => {
+    const storage = memoryStorage();
+    expect(DEFAULT_SETTINGS.lowFx).toBe(false); // full cinematic FX by default
+    const a = new SettingsStore(storage);
+    a.set('lowFx', true);
+    const b = new SettingsStore(storage);
+    expect(b.get('lowFx')).toBe(true);
   });
 });
 

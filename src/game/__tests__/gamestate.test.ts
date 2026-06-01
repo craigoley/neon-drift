@@ -215,6 +215,39 @@ describe('GameState — menu/pause state machine', () => {
     expect(slalomGame.score.combo).toBe(SCORING.baseCombo);
   });
 
+  it('a CLASSIC gate thread fires the event but is gated OUT of gate feedback', () => {
+    // The gate-thread EVENT fires in BOTH modes (slalom scoring reads it via the
+    // mode-agnostic resolveTraffic seam). The gate FEEDBACK dispatch in main.ts is
+    // `isSlalom(game) && gateThreaded` — so classic threading a gate must NOT pulse
+    // /chime (restoring the #64 invariant). This pins BOTH inputs to that guard so
+    // the classic leak can't return; the feedback itself lives in the composition
+    // root (untested), so we lock the predicate it combines.
+    const threadAGate = (mode: GameMode) => {
+      const game = startRun(createGameState(5), undefined, undefined, 5, undefined, mode);
+      const g = game.traffic.pool.find((o) => !o.active) ?? game.traffic.pool[0];
+      g.active = true;
+      g.kind = ObstacleKind.Gate;
+      g.openingHalfWidth = 3;
+      g.lateral = 0;
+      g.laneOffset = 0;
+      g.distance = game.distance - 1; // just behind the player → a fresh crossing
+      g.passed = false;
+      resolveTraffic(game.lastEvents, game.score, 0, game.distance, game.traffic);
+      return game;
+    };
+
+    const classic = threadAGate(GameMode.Classic);
+    expect(classic.lastEvents.gateThreaded).toBe(true); // event still fires (scoring needs it)...
+    expect(isSlalom(classic)).toBe(false); // ...but the run isn't slalom...
+    // ...so main's `isSlalom(game) && gateThreaded` feedback guard is FALSE → no pulse/chime.
+    expect(isSlalom(classic) && !!classic.lastEvents.gateThreaded).toBe(false);
+
+    const slalom = threadAGate(GameMode.DailySlalom);
+    expect(slalom.lastEvents.gateThreaded).toBe(true);
+    // Slalom: the same guard is TRUE → gate feedback fires (must NOT be broken).
+    expect(isSlalom(slalom) && !!slalom.lastEvents.gateThreaded).toBe(true);
+  });
+
   it('pause halts the sim; resume continues from the same spot', () => {
     const game = startRun(createGameState(3));
     for (let i = 0; i < 60; i++) update(game, intent, TIMESTEP);

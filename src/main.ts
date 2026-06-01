@@ -343,13 +343,17 @@ function frame(now: number): void {
     if (nmTier >= JUICE.nearMissCaTier) post.pulseAberration(POSTFX.aberrationPulsePeak); // top tier only
   }
   // DAILY SLALOM feedback — its OWN signal (gate threads), NOT the near-miss path.
+  // SLALOM-ONLY: the gate-thread EVENT also fires in classic (slalom scoring reads
+  // it via a mode-agnostic seam), so the FEEDBACK must be guarded by isSlalom here
+  // — otherwise threading a gate in CLASSIC would pulse+chime, which #64 removed
+  // (classic gates: thread = nothing, wall = crash).
   // PER-GATE is deliberately SUBTLE (fires ~every second): a light edge pulse +
   // a chime, both scaled by how centred the thread was. NO per-gate shake or
   // slow-mo (that constant heaviness was the problem we removed with gate near-
   // misses). A STREAK MILESTONE is the loud, earned moment: a bright pulse + a
   // small one-off shake + the milestone fanfare + a callout. (A miss is the crash
   // sting, below.)
-  if (gateThreads > 0) {
+  if (isSlalom(game) && gateThreads > 0) {
     const c = gateCenteredness; // already clamped 0..1 at detection
     screenFx.pulseNearMiss(SLALOM_FX.gatePulseMin + (SLALOM_FX.gatePulseMax - SLALOM_FX.gatePulseMin) * c);
     audio.playNearMiss(SLALOM_FX.gatePitchMin + (SLALOM_FX.gatePitchMax - SLALOM_FX.gatePitchMin) * c);

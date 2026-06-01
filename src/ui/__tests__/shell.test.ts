@@ -6,7 +6,7 @@
 import { describe, expect, it } from 'vitest';
 import { Shell } from '../Shell';
 import { SettingsStore } from '../../state/Settings';
-import { BestStore } from '../../storage/BestStore';
+import { LeaderboardStore } from '../../state/Leaderboard';
 import type { AudioEngine } from '../../audio/AudioEngine';
 
 interface Spy {
@@ -35,7 +35,7 @@ function makeShell(): Spy {
     pickerExit: 0,
     pickerCar: [] as string[],
   };
-  const shell = new Shell(parent, new SettingsStore(), new BestStore(), audio, {
+  const shell = new Shell(parent, new SettingsStore(), new LeaderboardStore(null), audio, {
     isTouch: false,
     shareUrl: 'https://neon.example/',
     onPlay: () => void calls.play++,
@@ -124,7 +124,7 @@ describe('Shell — locked cars cannot be selected', () => {
     const settings = new SettingsStore(null); // in-memory; default selected = starter (pulse)
     const applied: string[] = [];
     // Lock everything except the starter (pulse).
-    const shell = new Shell(parent, settings, new BestStore(), audio, {
+    const shell = new Shell(parent, settings, new LeaderboardStore(null), audio, {
       isTouch: false,
       shareUrl: 'https://neon.example/',
       onPlay: () => {},

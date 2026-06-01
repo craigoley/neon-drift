@@ -509,6 +509,83 @@ body,
   text-shadow: 0 0 8px #ff6600;
 }
 
+/* OPP-15: WIPEOUT placement badge ("NEW #3!" / "BEST IN NOVA") — a bright cyan
+   punch under the score; hidden when the run earned no placement. */
+.shell-crash-placement {
+  margin: 2px 0;
+  font-size: clamp(18px, 5vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: #00ffff;
+  text-shadow:
+    0 0 10px #00ffff,
+    0 0 26px #ff00ff;
+}
+/* The nearest beatable score to chase — a quiet "one more run" nudge. */
+.shell-crash-target {
+  margin: 0 0 2px;
+  font-size: clamp(12px, 3vw, 16px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #ff66ff;
+  text-shadow: 0 0 8px rgba(255, 0, 255, 0.6);
+}
+
+/* --- leaderboard view --------------------------------------------------- */
+.shell-lb-list,
+.shell-lb-cars {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: min(420px, 92vw);
+  margin: 4px 0;
+}
+.shell-lb-heading {
+  margin: 10px 0 2px;
+  font-size: clamp(12px, 3vw, 15px);
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  color: #ff66ff;
+  text-shadow: 0 0 8px rgba(255, 0, 255, 0.6);
+}
+.shell-lb-row {
+  display: grid;
+  grid-template-columns: 2.2em 1fr auto auto auto;
+  gap: 0 10px;
+  align-items: baseline;
+  font-size: clamp(11px, 2.8vw, 14px);
+  padding: 3px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+}
+.shell-lb-row--top {
+  background: rgba(0, 255, 255, 0.12);
+}
+.shell-lb-rank {
+  font-weight: 900;
+  color: #00ffff;
+  text-shadow: 0 0 6px rgba(0, 255, 255, 0.6);
+}
+.shell-lb-score {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #ffffff;
+}
+.shell-lb-dist,
+.shell-lb-date {
+  font-variant-numeric: tabular-nums;
+  color: rgba(255, 255, 255, 0.6);
+}
+.shell-lb-car {
+  font-weight: 700;
+  color: #ff66ff;
+}
+.shell-lb-empty {
+  font-size: clamp(12px, 3vw, 15px);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.5);
+}
+
 /* --- missions panel ----------------------------------------------------- */
 .shell-rank {
   font-size: clamp(13px, 3.2vw, 17px);

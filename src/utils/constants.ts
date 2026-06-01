@@ -1389,6 +1389,55 @@ export interface CarDef {
   cosmetic: CarCosmetic;
   /** Optional — absent this PR; all cars share VEHICLE physics for now. */
   handling?: CarHandling;
+  /** Per-car VISUAL silhouette (rendering only). Absent → BASE_CAR_SHAPE. The
+   *  collision box stays CAR_VIS for every car (fairness lives in `handling`);
+   *  this only changes how the car READS so its shape telegraphs its feel. */
+  shape?: CarShape;
+}
+
+/**
+ * Per-car VISUAL geometry profile (rendering only — NOT the collision box, which
+ * is always CAR_VIS). Drives the procedural CarMesh builder so each car has a
+ * distinct silhouette that telegraphs its handling: speed → long/low/sharp,
+ * grip → wide/planted/blunt, drift → short/compact/tall. All values scale the
+ * shared CAR_GEO base; the same builder produces the in-game car and the picker
+ * preview, so what you preview is what you drive.
+ */
+export interface CarShape {
+  /** Overall visual length scale vs CAR_VIS.length. >1 = longer. */
+  lengthMul: number;
+  /** Overall visual width scale vs CAR_VIS.width. >1 = wider. */
+  widthMul: number;
+  /** Overall visual height scale vs CAR_VIS.height. >1 = taller. */
+  heightMul: number;
+  /** Front hull width as a fraction of rear width — LOWER = sharper wedge nose. */
+  noseFraction: number;
+  /** Cabin length as a fraction of car length. */
+  cabinLengthFraction: number;
+  /** Cabin height as a fraction of car height. */
+  cabinHeightFraction: number;
+  /** Cabin centre offset toward the REAR, fraction of half-length (+ = back). */
+  cabinRearOffset: number;
+  /** Wheel radius scale vs the CAR_GEO base (bigger = beefier/kart-like). */
+  wheelRadiusMul: number;
+}
+
+/** Fallback shape — the balanced "classic" silhouette (Pulse). Used for any car
+ *  with no `shape` block or an unknown id, so the builder never sees undefined. */
+export const BASE_CAR_SHAPE: CarShape = {
+  lengthMul: 1.0,
+  widthMul: 1.0,
+  heightMul: 1.0,
+  noseFraction: 0.66,
+  cabinLengthFraction: 0.42,
+  cabinHeightFraction: 0.5,
+  cabinRearOffset: 0.18,
+  wheelRadiusMul: 1.0,
+};
+
+/** Resolve a car's visual shape, falling back to the base silhouette. */
+export function carShape(car: CarDef): CarShape {
+  return car.shape ?? BASE_CAR_SHAPE;
 }
 
 export const CARS: readonly CarDef[] = [
@@ -1398,6 +1447,11 @@ export const CARS: readonly CarDef[] = [
     cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The reference point.
     handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
+    // Classic mid silhouette — the visual reference the others deviate from.
+    shape: {
+      lengthMul: 1.0, widthMul: 1.0, heightMul: 1.0, noseFraction: 0.66,
+      cabinLengthFraction: 0.42, cabinHeightFraction: 0.5, cabinRearOffset: 0.18, wheelRadiusMul: 1.0,
+    },
   },
   {
     id: 'vapor',
@@ -1406,6 +1460,11 @@ export const CARS: readonly CarDef[] = [
     // Grip / precision: snappy, planted steering — but the slowest, and its
     // handbrake barely slides (you place it, you don't drift it).
     handling: { speedCap: 0.9, lateralAccel: 1.25, lateralFriction: 0.7, drift: 0.85 },
+    // GRIP look: wide, low, planted, blunt nose, beefy wheels — reads stable.
+    shape: {
+      lengthMul: 0.95, widthMul: 1.15, heightMul: 0.82, noseFraction: 0.82,
+      cabinLengthFraction: 0.46, cabinHeightFraction: 0.44, cabinRearOffset: 0.1, wheelRadiusMul: 1.15,
+    },
   },
   {
     id: 'ember',
@@ -1414,6 +1473,11 @@ export const CARS: readonly CarDef[] = [
     // Speed / twitchy: highest top speed, but sluggish steering and a loose tail
     // — fast in a straight line, a handful to place laterally.
     handling: { speedCap: 1.18, lateralAccel: 0.85, lateralFriction: 1.2, drift: 1.0 },
+    // SPEED look: long, low, sleek, sharp nose, long hood (cabin set back).
+    shape: {
+      lengthMul: 1.18, widthMul: 0.92, heightMul: 0.82, noseFraction: 0.5,
+      cabinLengthFraction: 0.36, cabinHeightFraction: 0.46, cabinRearOffset: 0.3, wheelRadiusMul: 0.95,
+    },
   },
   {
     id: 'ghost',
@@ -1422,6 +1486,11 @@ export const CARS: readonly CarDef[] = [
     // Drift specialist: massive handbrake slide for stylish dodges, at the cost
     // of a little top speed and steering bite vs the balanced Pulse.
     handling: { speedCap: 0.95, lateralAccel: 0.95, lateralFriction: 1.1, drift: 1.45 },
+    // DRIFT look: short, compact, tall kart with big wheels — reads tossable.
+    shape: {
+      lengthMul: 0.82, widthMul: 0.95, heightMul: 1.08, noseFraction: 0.7,
+      cabinLengthFraction: 0.48, cabinHeightFraction: 0.62, cabinRearOffset: 0.05, wheelRadiusMul: 1.18,
+    },
   },
   {
     id: 'nova',
@@ -1431,6 +1500,12 @@ export const CARS: readonly CarDef[] = [
     // loose tail — a straight-line terror you can barely place. Ember is only
     // mildly fast and stays controllable; Nova trades nearly all grip for the top end.
     handling: { speedCap: 1.25, lateralAccel: 0.7, lateralFriction: 1.25, drift: 0.9 },
+    // SPEED EXTREME look: longest, lowest, sharpest — a dragster with a tiny
+    // canopy set far back. The most extreme of the long-low pair (vs Ember).
+    shape: {
+      lengthMul: 1.3, widthMul: 0.86, heightMul: 0.72, noseFraction: 0.4,
+      cabinLengthFraction: 0.3, cabinHeightFraction: 0.42, cabinRearOffset: 0.34, wheelRadiusMul: 0.92,
+    },
   },
   {
     id: 'onyx',
@@ -1440,6 +1515,12 @@ export const CARS: readonly CarDef[] = [
     // paying with the lowest top speed — pin it in any gap. The precision extreme
     // beyond Vapor.
     handling: { speedCap: 0.88, lateralAccel: 1.45, lateralFriction: 0.6, drift: 0.8 },
+    // GRIP EXTREME look: widest, lowest, bluntest — a planted brick with big
+    // wheels. The most extreme of the wide-low pair (vs Vapor).
+    shape: {
+      lengthMul: 0.9, widthMul: 1.22, heightMul: 0.76, noseFraction: 0.9,
+      cabinLengthFraction: 0.5, cabinHeightFraction: 0.42, cabinRearOffset: 0.08, wheelRadiusMul: 1.2,
+    },
   },
   {
     id: 'slipstream',
@@ -1449,6 +1530,12 @@ export const CARS: readonly CarDef[] = [
     // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
     // is slow; Ember is fast but doesn't slide).
     handling: { speedCap: 1.1, lateralAccel: 0.9, lateralFriction: 1.15, drift: 1.4 },
+    // RALLY look: tall, chunky, big wheels, medium nose — speed+drift hybrid that
+    // reads as a beefy rally car, distinct from sleek Ember and compact Ghost.
+    shape: {
+      lengthMul: 1.08, widthMul: 1.06, heightMul: 1.08, noseFraction: 0.64,
+      cabinLengthFraction: 0.44, cabinHeightFraction: 0.58, cabinRearOffset: 0.16, wheelRadiusMul: 1.12,
+    },
   },
 ] as const;
 

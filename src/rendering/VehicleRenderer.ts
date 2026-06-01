@@ -29,9 +29,10 @@ export class VehicleRenderer {
   /** Hot drift glow lerp target. */
   private readonly driftGlow = new THREE.Color(CAR_VIS.driftGlow);
 
-  constructor(scene: THREE.Scene) {
-    this.car = new CarMesh();
+  constructor(scene: THREE.Scene, car?: CarDef) {
+    this.car = new CarMesh(car);
     this.group = this.car.group;
+    if (car) this.baseGlow.setHex(car.cosmetic.glow);
     scene.add(this.group);
   }
 

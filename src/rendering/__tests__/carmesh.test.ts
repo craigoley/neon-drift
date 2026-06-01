@@ -11,7 +11,7 @@
 import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { CarMesh } from '../CarMesh';
-import { CARS, carById } from '../../utils/constants';
+import { BASE_CAR_SHAPE, CARS, carById, carShape } from '../../utils/constants';
 
 /** Pull every material instance off a built CarMesh (recursively). */
 function materialsOf(car: CarMesh): THREE.Material[] {
@@ -21,6 +21,25 @@ function materialsOf(car: CarMesh): THREE.Material[] {
     if (m) (Array.isArray(m) ? m : [m]).forEach((x) => out.push(x));
   });
   return out;
+}
+
+/** World-space bounding box of the CHASSIS (the car body, excludes the flat
+ *  ground glow). Measures the silhouette so per-car shapes can be compared. */
+function chassisSize(car: CarMesh): { x: number; y: number; z: number } {
+  const box = new THREE.Box3();
+  car.chassis.updateMatrixWorld(true);
+  car.chassis.traverse((o) => {
+    const m = o as THREE.Mesh;
+    if (m.isMesh && m.geometry) {
+      m.geometry.computeBoundingBox();
+      const b = m.geometry.boundingBox!.clone();
+      b.applyMatrix4(m.matrixWorld);
+      box.union(b);
+    }
+  });
+  const size = new THREE.Vector3();
+  box.getSize(size);
+  return { x: size.x, y: size.y, z: size.z };
 }
 
 /** Perceptual luminance (0..1) from the raw sRGB bytes of a hex colour — this is
@@ -146,5 +165,103 @@ describe('CARS — bodies are readable AND distinct (the playtest fix)', () => {
         expect(dist(bodies[i], bodies[j])).toBeGreaterThan(40);
       }
     }
+  });
+});
+
+describe('CARS — every car has its OWN geometry profile (not just colour)', () => {
+  it('every car defines a shape and they are not all identical', () => {
+    const shapes = CARS.map((c) => carShape(c));
+    for (const s of shapes) expect(s).toBeDefined();
+    // At least the key silhouette axes must vary across the roster.
+    expect(new Set(shapes.map((s) => s.lengthMul)).size).toBeGreaterThan(1);
+    expect(new Set(shapes.map((s) => s.widthMul)).size).toBeGreaterThan(1);
+    expect(new Set(shapes.map((s) => s.noseFraction)).size).toBeGreaterThan(1);
+  });
+
+  it('shape params are all finite and in sane ranges (no NaN / runaway)', () => {
+    for (const c of CARS) {
+      const s = carShape(c);
+      for (const v of Object.values(s)) {
+        expect(Number.isFinite(v)).toBe(true);
+        expect(v).toBeGreaterThan(0);
+        expect(v).toBeLessThan(3); // multipliers/fractions stay bounded
+      }
+    }
+  });
+
+  it('the shape telegraphs handling: fastest car is longest+lowest, grippiest is widest', () => {
+    const byId = (id: string) => CARS.find((c) => c.id === id)!;
+    const nova = carShape(byId('nova')); // speedCap 1.25 — the fastest
+    const onyx = carShape(byId('onyx')); // lateralAccel 1.45 — the grippiest
+    const ghost = carShape(byId('ghost')); // drift 1.45 — the drift king
+    const pulse = carShape(byId('pulse')); // balanced reference
+
+    // Fastest → longer & lower than the balanced reference.
+    expect(nova.lengthMul).toBeGreaterThan(pulse.lengthMul);
+    expect(nova.heightMul).toBeLessThan(pulse.heightMul);
+    // Grippiest → wider than the reference (planted stance).
+    expect(onyx.widthMul).toBeGreaterThan(pulse.widthMul);
+    // Drift → shorter & taller than the reference (compact/tossable).
+    expect(ghost.lengthMul).toBeLessThan(pulse.lengthMul);
+    expect(ghost.heightMul).toBeGreaterThan(pulse.heightMul);
+  });
+});
+
+describe('CarMesh — geometry actually differs per car', () => {
+  it('builds valid (non-empty, finite) geometry for EVERY car', () => {
+    for (const def of CARS) {
+      const car = new CarMesh(def);
+      const size = chassisSize(car);
+      expect(size.x).toBeGreaterThan(0);
+      expect(size.y).toBeGreaterThan(0);
+      expect(size.z).toBeGreaterThan(0);
+      expect(Number.isFinite(size.x + size.y + size.z)).toBe(true);
+      car.dispose();
+    }
+  });
+
+  it('two cars with different shapes produce different chassis bounding boxes', () => {
+    const nova = new CarMesh(CARS.find((c) => c.id === 'nova')); // long/low
+    const onyx = new CarMesh(CARS.find((c) => c.id === 'onyx')); // wide/low
+    const a = chassisSize(nova);
+    const b = chassisSize(onyx);
+    // Nova is clearly longer; Onyx is clearly wider — distinct silhouettes.
+    expect(a.z).toBeGreaterThan(b.z);
+    expect(b.x).toBeGreaterThan(a.x);
+    nova.dispose();
+    onyx.dispose();
+  });
+
+  it('applyCar reshapes the geometry when switching to a different-shaped car', () => {
+    const car = new CarMesh(CARS.find((c) => c.id === 'ghost')); // short/tall
+    const before = chassisSize(car);
+    car.applyCar(CARS.find((c) => c.id === 'nova')!); // long/low
+    const after = chassisSize(car);
+    expect(after.z).toBeGreaterThan(before.z); // got longer
+    expect(after.y).toBeLessThan(before.y); // got lower
+    car.dispose();
+  });
+
+  it('unknown car id builds the base silhouette without throwing', () => {
+    const fallback = carById('nope'); // → CARS[0] (pulse)
+    expect(() => {
+      const car = new CarMesh(fallback);
+      const size = chassisSize(car);
+      expect(size.z).toBeGreaterThan(0);
+      car.dispose();
+    }).not.toThrow();
+    // A car with NO shape block resolves to BASE_CAR_SHAPE.
+    const noShape = { id: 'x', displayName: 'X', cosmetic: { body: 0, glow: 0, accent: 0 } };
+    expect(carShape(noShape)).toBe(BASE_CAR_SHAPE);
+  });
+
+  it('reshaping disposes the old geometry (no leak across many switches)', () => {
+    const car = new CarMesh(CARS[0]);
+    // Cycle the whole roster several times; must not throw or accumulate.
+    for (let round = 0; round < 3; round++) {
+      for (const def of CARS) car.applyCar(def);
+    }
+    expect(chassisSize(car).z).toBeGreaterThan(0);
+    expect(() => car.dispose()).not.toThrow();
   });
 });

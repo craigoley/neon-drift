@@ -24,7 +24,7 @@ export class CarPreview {
   private raf = 0;
   private readonly onResize = () => this.resize();
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, car?: CarDef) {
     this.container = container;
 
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
@@ -36,7 +36,7 @@ export class CarPreview {
     this.camera.position.set(0, CAR_VIS.height * UI.carPreviewCamHeightMul, UI.carPreviewCamZ);
     this.camera.lookAt(0, CAR_VIS.height * UI.carPreviewLookAtMul, 0);
 
-    this.car = new CarMesh();
+    this.car = new CarMesh(car);
     // A slight fixed tilt so the rotation reads as 3D (see top + side + front).
     this.car.group.rotation.x = UI.carPreviewTilt;
     this.scene.add(this.car.group);

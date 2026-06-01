@@ -42,8 +42,10 @@ export const ROAD = {
   segmentsAhead: 12,
   /** Segments kept alive behind the player before recycling. */
   segmentsBehind: 2,
-  /** Amplitude of the gentle deterministic curve, in world units. */
-  curveAmplitude: 4,
+  /** Amplitude of the gentle deterministic curve, in world units. Raised (was 4)
+   *  so the bend is actually visible: halfWidth(9) - amplitude(7) = ±2
+   *  always-safe lane — the curve reads as flavor but is not a steering threat. */
+  curveAmplitude: 7,
   /** Spatial frequency of the curve noise (lower = longer sweeps). */
   curveFrequency: 0.08,
 } as const;

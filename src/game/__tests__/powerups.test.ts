@@ -136,6 +136,13 @@ describe('Powerups — collection toggles the effect', () => {
     );
   });
 
+  it('slow-mo shares MAGNET’s green but a different SHAPE (findability fix)', () => {
+    // The old purple slow-mo was near-invisible on the deep-purple backdrop; it now
+    // matches magnet's green and is told apart by shape (octahedron vs horseshoe).
+    expect(POWERUP_DEFS.slowmo.color).toBe(POWERUP_DEFS.magnet.color);
+    expect(POWERUP_DEFS.slowmo.shape).not.toBe(POWERUP_DEFS.magnet.shape);
+  });
+
   it('a laterally-distant pickup is NOT collected', () => {
     const state = createPowerupState(1);
     const p = state.pool[0];

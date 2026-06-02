@@ -78,7 +78,7 @@ export class Controls {
     surface.addEventListener('touchcancel', (e) => this.onTouchEnd(e));
 
     const btn = document.createElement('button');
-    btn.className = 'touch-handbrake';
+    btn.className = 'touch-slowmo';
     btn.textContent = 'SLOW-MO';
     btn.setAttribute('aria-label', 'deploy slow-mo');
     // Each tap is its own rising edge → arms one deploy. The sim consumes it and

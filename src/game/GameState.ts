@@ -34,6 +34,7 @@ import {
   collectPickups,
   consumeShield,
   createPowerupState,
+  deploySlowMo,
   powerupScoreMultiplier,
   powerupTimeScale,
   tickEffects,
@@ -42,7 +43,7 @@ import {
 } from './Powerups';
 import { createBiomeState, updateBiome, type BiomeState } from './Biome';
 import { createMilestoneState, updateMilestones, type MilestoneState } from './Milestones';
-import { BIOME_CYCLE, DRIFT_MIN_SPEED, POWERUPS, PowerupKind, RAMP, SLALOM, VEHICLE } from '../utils/constants';
+import { BIOME_CYCLE, POWERUPS, PowerupKind, RAMP, SLALOM, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -117,9 +118,9 @@ export interface GameState {
    *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
   startBiome: number;
   /** Per-run stat accumulators the across-run missions read at run end. Only the
-   *  values not already derivable from other state live here (drift time +
-   *  shields collected). Reset each run. */
-  runStats: { driftSeconds: number; shields: number };
+   *  values not already derivable from other state live here (shields collected +
+   *  slow-mo charges deployed). Reset each run. */
+  runStats: { shields: number; slowMosDeployed: number };
   /** Events produced on the most recent update — read by audio/juice. */
   lastEvents: TrafficEvents;
 }
@@ -144,7 +145,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     scoring: BASE_SCORING,
     mode: GameMode.Classic,
     startBiome: 0,
-    runStats: { driftSeconds: 0, shields: 0 },
+    runStats: { shields: 0, slowMosDeployed: 0 },
     lastEvents: { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 },
   };
 }
@@ -183,8 +184,8 @@ export function startRun(
   state.scoring = scoring;
   state.mode = mode;
   state.startBiome = startBiome;
-  state.runStats.driftSeconds = 0;
   state.runStats.shields = 0;
+  state.runStats.slowMosDeployed = 0;
   state.lastEvents = { crashed: false, nearMisses: 0, collected: null, shieldBlocked: false, rampBoosts: 0 };
   return state;
 }
@@ -207,8 +208,8 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();
-  state.runStats.driftSeconds = 0;
   state.runStats.shields = 0;
+  state.runStats.slowMosDeployed = 0;
   state.lastEvents.crashed = false;
   state.lastEvents.nearMisses = 0;
   state.lastEvents.collected = null;
@@ -250,11 +251,19 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.lastEvents.milestone = null;
     state.lastEvents.biomeChanged = false;
     state.lastEvents.objectiveDone = null;
-    state.vehicle.drifting = false; // not driving — no drift visual/audio/screech
     return state;
   }
 
   const effects = state.powerups.effects;
+
+  // DEPLOY a banked slow-mo charge. One-shot: consume (clear) the intent the
+  // first time we act on it, so holding the button — or running several fixed
+  // sub-steps in a single frame — can only ever spend ONE charge per press.
+  // deploySlowMo itself also no-ops while a slow-mo is already running.
+  if (intent.deploySlowMo) {
+    if (deploySlowMo(effects)) state.runStats.slowMosDeployed += 1;
+    intent.deploySlowMo = false;
+  }
 
   // SLOW-MO hook: the whole simulation advances on a scaled timestep, so the
   // vehicle, distance, traffic, pickups and score all slow together and stay
@@ -268,9 +277,6 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   updateVehicle(state.vehicle, intent, state.distance, roadCenter, state.handling, simDt, slalom);
   state.distance += state.vehicle.speed * simDt;
   state.time += simDt;
-
-  // Drift-time accrual for the across-run drift missions (handbrake while moving).
-  if (intent.handbrake && state.vehicle.speed > DRIFT_MIN_SPEED) state.runStats.driftSeconds += simDt;
 
   updateRoad(state.road, state.distance);
   // Biome is shifted by the cosmetic startBiome offset (visuals only — distance
@@ -286,7 +292,6 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
     state.vehicle.lateral,
     state.distance,
     state.traffic,
-    state.vehicle.drifting,
     state.scoring,
   );
   state.lastEvents.collected = null;

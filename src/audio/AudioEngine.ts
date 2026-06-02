@@ -21,10 +21,6 @@ export class AudioEngine {
   /** Engine lowpass — its cutoff shifts per biome for a subtle tone change. */
   private engineFilter: BiquadFilterNode | null = null;
 
-  // Tyre screech (filtered noise, gated by handbrake).
-  private screechSource: AudioBufferSourceNode | null = null;
-  private screechGain: GainNode | null = null;
-
   /** Master mute state (the sound on/off setting). Remembered before the
    *  context exists so it can be applied the moment it's unlocked. */
   private enabled = true;
@@ -78,7 +74,6 @@ export class AudioEngine {
       this.master.connect(this.ctx.destination);
       this.noiseBuffer = this.makeNoiseBuffer();
       this.startEngine();
-      this.startScreech();
     }
     if (this.ctx.state === 'suspended') await this.ctx.resume();
   }
@@ -118,21 +113,6 @@ export class AudioEngine {
     this.engineOscB.start();
   }
 
-  private startScreech(): void {
-    const ctx = this.ctx!;
-    this.screechGain = ctx.createGain();
-    this.screechGain.gain.value = 0;
-    const band = ctx.createBiquadFilter();
-    band.type = 'bandpass';
-    band.frequency.value = AUDIO.screechBandHz;
-    band.Q.value = AUDIO.screechQ;
-    this.screechSource = ctx.createBufferSource();
-    this.screechSource.buffer = this.noiseBuffer;
-    this.screechSource.loop = true;
-    this.screechSource.connect(band).connect(this.screechGain).connect(this.master!);
-    this.screechSource.start();
-  }
-
   /** Map normalised speed (0..1) to engine pitch. */
   setSpeed(normalized: number): void {
     if (!this.ctx || !this.engineOscA || !this.engineOscB) return;
@@ -152,13 +132,6 @@ export class AudioEngine {
     const clamped = t < 0 ? 0 : t > 1 ? 1 : t;
     const hz = AUDIO.biomeToneLowHz + (AUDIO.biomeToneHighHz - AUDIO.biomeToneLowHz) * clamped;
     this.engineFilter.frequency.setTargetAtTime(hz, this.ctx.currentTime, AUDIO.biomeToneGlide);
-  }
-
-  /** Turn tyre screech on/off (handbrake while moving). */
-  setScreech(active: boolean): void {
-    if (!this.ctx || !this.screechGain) return;
-    const t = this.ctx.currentTime;
-    this.screechGain.gain.setTargetAtTime(active ? AUDIO.screechGain : 0, t, AUDIO.screechRamp);
   }
 
   /** Near-miss: a short upward whoosh plus a bright combo-tick blip. */

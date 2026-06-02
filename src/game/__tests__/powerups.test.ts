@@ -126,9 +126,11 @@ describe('Powerups — collection toggles the effect', () => {
 
   it('each kind toggles its own effect on collection', () => {
     expect(plantOverlapping(PowerupKind.Shield).state.effects.shield).toBe(true);
-    expect(plantOverlapping(PowerupKind.SlowMo).state.effects.slowMoTimer).toBeCloseTo(
-      POWERUP_DEFS.slowmo.duration,
-    );
+    // SLOW-MO BANKS on collection (it no longer auto-fires): a charge is stored,
+    // and no slow-mo window starts until the player deploys it.
+    const slow = plantOverlapping(PowerupKind.SlowMo).state.effects;
+    expect(slow.slowMoCharges).toBe(1);
+    expect(slow.slowMoTimer).toBe(0);
     expect(plantOverlapping(PowerupKind.Magnet).state.effects.magnetTimer).toBeCloseTo(
       POWERUP_DEFS.magnet.duration,
     );

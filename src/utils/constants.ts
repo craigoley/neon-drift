@@ -73,8 +73,6 @@ export const VEHICLE = {
   lateralAccel: 90,
   /** Per-second retained fraction of lateral velocity under normal grip. */
   lateralFriction: 0.02,
-  /** Per-second retained fraction while the handbrake is held (drift). */
-  handbrakeFriction: 0.5,
   /**
    * Hard ceiling on the per-car-scaled retained fraction. decay() needs a value
    * in [0, 1); a retained fraction of 1+ would mean lateral velocity never bleeds
@@ -89,31 +87,6 @@ export const VEHICLE = {
    *  while the boost timer is live, so a boosted car can briefly out-run its
    *  normal top speed before settling back. */
   boostBonus: 55,
-} as const;
-
-/**
- * DRIFT (handbrake) tuning. Diagnosis (see PR): the old handbrake only loosened
- * lateral FRICTION, which raises the car's sustained lateral-velocity ceiling —
- * but the road is so narrow (2*ROAD.halfWidth) that the car hits the wall long
- * before that ceiling matters, and the dodge window is dominated by lateral
- * ACCELERATION (identical drift-or-not). So drift was real but imperceptible.
- *
- * The fix attacks the dodge window directly: while the handbrake is held, the
- * steering ACCELERATION is multiplied (scaled by the car's `drift` stat) for a
- * sharp juke normal steering can't match — at the cost of forward speed, so it's
- * a deliberate trade (dodge now, lose distance/score), not a free permanent hold.
- */
-export const DRIFT = {
-  /** Lateral-accel multiplier while drifting, scaled further by the car's `drift`
-   *  stat. ~3x the lateral distance covered in the first 0.2s vs normal steering,
-   *  so a last-second lane juke REQUIRES drift. */
-  accelBoost: 2.4,
-  /** Forward speed scrubbed per second while the handbrake is held (the trade).
-   *  A quick juke costs little; holding it down bleeds speed toward the floor. */
-  speedDrag: 42,
-  /** Drift won't scrub forward speed below this fraction of the current cap, so
-   *  the cost is felt but never tanks the run to a crawl. */
-  minSpeedFraction: 0.6,
 } as const;
 
 /** Traffic spawning + recycled-obstacle-pool tuning. */
@@ -233,10 +206,6 @@ export const SCORING = {
   // (gateThreadWeight removed: gates no longer produce a near-miss — a gate is a
   //  pure obstacle now, thread-or-crash, in both classic and slalom. See Scoring
   //  resolveTraffic gate case.)
-  /** Multiplier applied to a near-miss's combo weight when it's threaded WHILE
-   *  DRIFTING. A drifted dodge is committed/risky, so it pays more — a concrete
-   *  reason to drift through the tightest gaps rather than play it safe. */
-  driftNearMissBonus: 1.5,
   /**
    * GRAZE GRADIENT (OPP-14, Psyvariar model): within the binary near-miss window
    * (nearMissLateral, now 4.0, is the OUTER bound), the reward scales with how
@@ -583,6 +552,9 @@ export const POWERUPS = {
   /** SHIELD: invulnerability window (s) after a shield absorbs a crash, so the
    *  car can clear the very obstacle it just survived instead of re-colliding. */
   shieldInvuln: 1.2,
+  /** SLOW-MO: most charges the player can BANK at once. Collecting a slow-mo
+   *  pickup adds one (capped here); the DEPLOY control spends one on demand. */
+  slowMoMaxCharges: 3,
   /** MAGNET: forward range (world units) within which pickups are pulled in. */
   magnetRange: 80,
   /** MAGNET: per-second easing factor pulling a pickup toward the player. */
@@ -695,22 +667,6 @@ export const CAR_VIS = {
   maxRoll: 0.25,
   /** Lateral velocity that maps to maxRoll. */
   rollReference: 30,
-  /** Yaw (radians) the car angles INTO the slide at full drift — the nose kicks
-   *  out so a drift reads instantly as a slide, not a slide-step. Only applied
-   *  while drifting (normal steering keeps the nose forward). */
-  driftMaxYaw: 0.42,
-  /** Lateral velocity that maps to driftMaxYaw. */
-  driftYawReference: 55,
-  /** Extra roll multiplier while drifting (the car leans harder into a slide). */
-  driftRollBoost: 1.5,
-  /** Glow colour the edge lines shift toward while drifting (hot magenta), so
-   *  the car visibly changes state when you press DRIFT. */
-  driftGlow: 0xff2d95,
-  /** Lerp speed (0–1) for the per-frame glow colour transition into/out of drift. */
-  driftGlowLerp: 0.25,
-  /** Sum-of-channel distance (0–3) within which the glow snaps to its target, so
-   *  the asymptotic lerp settles instead of running a tiny step every frame. */
-  driftGlowSnap: 0.01,
 } as const;
 
 /**
@@ -1283,16 +1239,14 @@ export const JUICE = {
   trailY: 0.3,
   /** Normalised speed below which the trail is invisible (parked/slow = none). */
   trailSpeedFloor: 0.12,
-  /** Peak trail opacity at top speed when cruising vs while drifting. */
+  /** Peak trail opacity at top speed. */
   trailMaxOpacity: 0.5,
-  trailDriftOpacity: 1.0,
   /** Per-second ease rate for trail opacity (smooth fade in/out). */
   trailOpacityRate: 8,
   /** Intensity below which the trail is hidden (avoids near-invisible draws). */
   trailMinIntensity: 0.003,
-  /** Trail colours: cruising (cool) vs drifting (hot). */
+  /** Trail colour (cool cyan). */
   trailColor: 0x00ffff,
-  trailDriftColor: 0xff2db8,
 } as const;
 
 /** Synthesized audio tuning (Web Audio API — no files). */
@@ -1316,13 +1270,6 @@ export const AUDIO = {
   biomeToneLowHz: 520,
   biomeToneHighHz: 1200,
   biomeToneGlide: 0.4,
-  /** Tyre-screech filtered-noise gain on handbrake, bandpass centre (Hz), Q,
-   *  gain ramp time constant (s), and the min speed at which it's audible. */
-  screechGain: 0.05,
-  screechBandHz: 2200,
-  screechQ: 2,
-  screechMinSpeed: 1,
-  screechRamp: 0.05,
   /** Near-miss whoosh + combo-tick blip. */
   whooshHz: 520,
   whooshGain: 0.08,
@@ -1498,12 +1445,12 @@ export interface CarHandling {
   speedCap: number;
   /** Multiplier on lateral acceleration — steering responsiveness / grip. */
   lateralAccel: number;
-  /** Multiplier on the NORMAL retained-friction fraction. <1 settles quicker
-   *  (planted/precise); >1 holds lateral velocity longer (looser/slidier). */
+  /** Multiplier on the retained-lateral-velocity fraction — the AGILITY/looseness
+   *  lever. <1 settles quicker (planted/precise); >1 holds lateral velocity
+   *  longer (a looser, slidier, more tossable tail). Folds in the old `drift`
+   *  stat now that the handbrake-drift mechanic is gone, so the former drift
+   *  specialists still feel loose and agile to throw around. */
   lateralFriction: number;
-  /** Multiplier on the handbrake slide (drift effectiveness). >1 = longer slide.
-   *  Scales the drift; never removes it — handbrake always loosens grip. */
-  drift: number;
 }
 
 /** Fallback handling: identical to base on every axis (the pre-stats behaviour).
@@ -1512,7 +1459,6 @@ export const BASE_HANDLING: CarHandling = {
   speedCap: 1,
   lateralAccel: 1,
   lateralFriction: 1,
-  drift: 1,
 };
 
 /**
@@ -1565,23 +1511,28 @@ export const BASE_SCORING: CarScoring = { buildMul: 1, windowMul: 1 };
  */
 
 /*
- * TRADEOFF-TRIANGLE BALANCE (reviewable at a glance — feel confirmed on device):
+ * TRADEOFF-TRIANGLE BALANCE (three axes after the drift→slow-mo PR; the former
+ * per-car `drift` stat was folded into lateralFriction, so the loose cars stay
+ * loose). Picker bars map 1:1 to the three levers (see carStats):
  *
- *   car     speedCap  lateralAccel  lateralFriction  drift   identity
- *   Pulse     1.00       1.00           1.00          1.00    balanced all-rounder
- *   Vapor     0.90       1.25           0.70          0.85    grip / precise, slow
- *   Ember     1.18       0.85           1.20          1.00    fast / twitchy, sluggish steer
- *   Ghost     0.95       0.95           1.10          1.45    drift specialist
+ *   car         speedCap  lateralAccel  lateralFriction(=oldLF×oldDrift)  identity
+ *   Pulse         1.00       1.00          1.00   balanced all-rounder
+ *   Vapor         0.84       1.40          0.43   grip / precise, planted, slow
+ *   Ember         1.28       0.78          1.35   fast, loose tail, sluggish steer
+ *   Ghost         0.92       0.92          1.98   loosest tail — slides through gaps
+ *   Nova          1.38       0.60          1.23   glass cannon — speed, no steer
+ *   Onyx          0.82       1.62          0.33   surgical grip, most planted
+ *   Slipstream    1.16       0.86          2.02   fast & slidey rally hybrid
  *
- * Desirability (↑good): speedCap↑, lateralAccel↑, lateralFriction↓, drift↑.
- * No row is ≥ another on all four axes, so no car strictly dominates:
- *   - Pulse trades nothing but is beaten on each axis by that axis's specialist.
- *   - Vapor wins steer+control, loses speed+drift.
- *   - Ember wins speed, loses steer+control.
- *   - Ghost wins drift, loses speed+steer.
- * NOTE: base lateralFriction is already very low (0.02), so the lateralFriction
- * multiplier is a subtle settle difference; lateralAccel is the dominant control
- * lever and `drift` the dominant slide lever.
+ * Picker bars: Speed = speedCap, Grip = lateralAccel (steering bite), Agility =
+ * lateralFriction (looseness/slide). Desirability per a playstyle: speedCap↑
+ * good, lateralAccel↑ good (control), lateralFriction↑ good (agile/tossable —
+ * the trait the loose cars are built around). No row is ≥ another on all three
+ * axes, so no car strictly dominates — each wins one or two and loses the rest
+ * (verified pairwise in the PR's dominance check).
+ * NOTE: base lateralFriction is 0.02 and the retained fraction is base^dt, so
+ * across the roster the per-frame retention spans ~0.92–0.95 — a real, felt
+ * difference in how long the tail carries sideways momentum.
  */
 
 export interface CarCosmetic {
@@ -1670,9 +1621,9 @@ export const CARS: readonly CarDef[] = [
     // Neutral scoring baseline — the fair reference every other car deviates from.
     scoring: { buildMul: 1.0, windowMul: 1.0 },
     cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
-    // Balanced all-rounder: no weakness, no specialty. The 1.0 reference point —
-    // unchanged by OPP-07a (the others widen away from it).
-    handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0, drift: 1.0 },
+    // Balanced all-rounder: no weakness, no specialty. The 1.0 reference point
+    // every other car deviates from.
+    handling: { speedCap: 1.0, lateralAccel: 1.0, lateralFriction: 1.0 },
     // Classic mid silhouette — the visual reference the others deviate from.
     shape: {
       lengthMul: 1.0, widthMul: 1.0, heightMul: 1.0, noseFraction: 0.66,
@@ -1688,10 +1639,10 @@ export const CARS: readonly CarDef[] = [
     // a precise, unhurried scorer that doesn't punish a quiet stretch.
     scoring: { buildMul: 0.85, windowMul: 1.25 },
     cosmetic: { body: 0x6e1a60, glow: 0xff00ff, accent: 0x00ffff },
-    // Grip / precision: snappy, planted steering — but the slowest, and its
-    // handbrake barely slides (you place it, you don't drift it).
-    // OPP-07a widen (was 0.90/1.25/0.70/0.85): sharpen the grip+slow identity.
-    handling: { speedCap: 0.84, lateralAccel: 1.4, lateralFriction: 0.55, drift: 0.78 },
+    // Grip / precision: snappy, planted steering — the slowest, but the tightest
+    // settling tail (folded lateralFriction 0.55×0.78 = 0.43): you place it, it
+    // never slides out from under you.
+    handling: { speedCap: 0.84, lateralAccel: 1.4, lateralFriction: 0.43 },
     // GRIP look: wide, low, planted, blunt nose, beefy wheels — reads stable.
     shape: {
       lengthMul: 0.95, widthMul: 1.15, heightMul: 0.82, noseFraction: 0.82,
@@ -1708,9 +1659,9 @@ export const CARS: readonly CarDef[] = [
     scoring: { buildMul: 1.2, windowMul: 0.8 },
     cosmetic: { body: 0x6e3208, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: high top speed, but sluggish steering and a loose tail
-    // — fast in a straight line, a handful to place laterally.
-    // OPP-07a widen (was 1.18/0.85/1.20/1.00): sharpen the fast+loose identity.
-    handling: { speedCap: 1.28, lateralAccel: 0.78, lateralFriction: 1.35, drift: 1.0 },
+    // (folded lateralFriction 1.35×1.00 = 1.35) — fast in a straight line, a
+    // handful to place laterally.
+    handling: { speedCap: 1.28, lateralAccel: 0.78, lateralFriction: 1.35 },
     // SPEED look: long, low, sleek, sharp nose, long hood (cabin set back).
     shape: {
       lengthMul: 1.18, widthMul: 0.92, heightMul: 0.82, noseFraction: 0.5,
@@ -1720,18 +1671,18 @@ export const CARS: readonly CarDef[] = [
   {
     id: 'ghost',
     displayName: 'Ghost',
-    tagline: 'Holds drifts forever. Commits hard.',
+    tagline: 'Loosest tail — slides through gaps.',
     scoringTagline: 'Combo builds fast, fades fast.',
     // Drift-commit identity in scoring: the strongest build of any car, paid for
     // with the shortest survival window — a high-skill sustain car that rewards
     // relentless near-misses and punishes coasting.
     scoring: { buildMul: 1.25, windowMul: 0.75 },
     cosmetic: { body: 0x46606e, glow: 0xffffff, accent: 0x00ffff },
-    // Drift specialist: massive handbrake slide for stylish dodges, at the cost
-    // of a little top speed and steering bite vs the balanced Pulse.
-    // OPP-07a widen (was 0.95/0.95/1.10/1.45): sharpen the drift identity.
-    handling: { speedCap: 0.92, lateralAccel: 0.92, lateralFriction: 1.2, drift: 1.65 },
-    // DRIFT look: short, compact, tall kart with big wheels — reads tossable.
+    // Looseness specialist: the slidiest tail of the roster (folded lateralFriction
+    // 1.2×1.65 = 1.98) for stylish, tossable dodges, at the cost of a little top
+    // speed and steering bite vs the balanced Pulse.
+    handling: { speedCap: 0.92, lateralAccel: 0.92, lateralFriction: 1.98 },
+    // LOOSE look: short, compact, tall kart with big wheels — reads tossable.
     shape: {
       lengthMul: 0.82, widthMul: 0.95, heightMul: 1.08, noseFraction: 0.7,
       cabinLengthFraction: 0.48, cabinHeightFraction: 0.62, cabinRearOffset: 0.05, wheelRadiusMul: 1.18,
@@ -1748,10 +1699,10 @@ export const CARS: readonly CarDef[] = [
     scoring: { buildMul: 1.3, windowMul: 0.7 },
     cosmetic: { body: 0x202e7e, glow: 0x4d6bff, accent: 0x00ffff },
     // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
-    // loose tail — a straight-line terror you can barely place. Ember is only
-    // mildly fast and stays controllable; Nova trades nearly all grip for the top end.
-    // OPP-07a widen (was 1.25/0.70/1.25/0.90): sharpen the glass-cannon identity.
-    handling: { speedCap: 1.38, lateralAccel: 0.6, lateralFriction: 1.4, drift: 0.88 },
+    // loose tail (folded lateralFriction 1.4×0.88 = 1.23) — a straight-line terror
+    // you can barely place. Ember is only mildly fast and stays controllable; Nova
+    // trades nearly all grip for the top end.
+    handling: { speedCap: 1.38, lateralAccel: 0.6, lateralFriction: 1.23 },
     // SPEED EXTREME look: longest, lowest, sharpest — a dragster with a tiny
     // canopy set far back. The most extreme of the long-low pair (vs Ember).
     shape: {
@@ -1769,11 +1720,11 @@ export const CARS: readonly CarDef[] = [
     // stretches; rewards patient, consistent placement over spikes.
     scoring: { buildMul: 0.8, windowMul: 1.35 },
     cosmetic: { body: 0x4a1f70, glow: 0xb84dff, accent: 0x00ffaa },
-    // SURGICAL: maxes grip (sharpest accel + tightest settle) and kills the slide,
+    // SURGICAL: maxes grip (sharpest accel) and the tightest, most planted tail of
+    // the roster (folded lateralFriction 0.45×0.74 = 0.33 — kills the slide),
     // paying with the lowest top speed — pin it in any gap. The precision extreme
     // beyond Vapor.
-    // OPP-07a widen (was 0.88/1.45/0.60/0.80): sharpen the surgical-grip identity.
-    handling: { speedCap: 0.82, lateralAccel: 1.62, lateralFriction: 0.45, drift: 0.74 },
+    handling: { speedCap: 0.82, lateralAccel: 1.62, lateralFriction: 0.33 },
     // GRIP EXTREME look: widest, lowest, bluntest — a planted brick with big
     // wheels. The most extreme of the wide-low pair (vs Vapor).
     shape: {
@@ -1791,11 +1742,11 @@ export const CARS: readonly CarDef[] = [
     // knife-edge of Nova/Ghost. Sits between the aggressive and steady camps.
     scoring: { buildMul: 1.15, windowMul: 0.85 },
     cosmetic: { body: 0x3c5e0a, glow: 0xaaff00, accent: 0xff0066 },
-    // RALLY HYBRID: fast AND slidey with loose grip — power-slides through gaps,
-    // but committed steering. Fills the empty speed+drift corner (Ghost drifts but
-    // is slow; Ember is fast but doesn't slide).
-    // OPP-07a widen (was 1.10/0.90/1.15/1.40): sharpen the rally-hybrid identity.
-    handling: { speedCap: 1.16, lateralAccel: 0.86, lateralFriction: 1.28, drift: 1.58 },
+    // RALLY HYBRID: fast AND the slidiest tail of all (folded lateralFriction
+    // 1.28×1.58 = 2.02) with loose grip — power-slides through gaps, but committed
+    // steering. Fills the empty speed+looseness corner (Ghost is loose but slow;
+    // Ember is fast but less slidey).
+    handling: { speedCap: 1.16, lateralAccel: 0.86, lateralFriction: 2.02 },
     // RALLY look: tall, chunky, big wheels, medium nose — speed+drift hybrid that
     // reads as a beefy rally car, distinct from sleek Ember and compact Ghost.
     shape: {
@@ -1900,17 +1851,13 @@ export const MISSIONS_STORAGE_KEY = 'neon-drift.missions';
 /** How many missions are active (and shown) at once. */
 export const MISSION_ACTIVE_COUNT = 3;
 
-/** Minimum speed (world units/s) at which a held handbrake counts as drifting,
- *  for the drift-time missions. */
-export const DRIFT_MIN_SPEED = 1;
-
 /** Cumulative lifetime counters the missions read (the store's own accumulators,
  *  independent of the car-unlock LifetimeStats). */
 export interface MissionStats {
   nearMisses: number;
   powerups: number;
   shields: number;
-  driftSeconds: number;
+  slowMosDeployed: number;
   midnightReaches: number;
   distance: number;
 }
@@ -1920,7 +1867,7 @@ export const EMPTY_MISSION_STATS: MissionStats = {
   nearMisses: 0,
   powerups: 0,
   shields: 0,
-  driftSeconds: 0,
+  slowMosDeployed: 0,
   midnightReaches: 0,
   distance: 0,
 };
@@ -1940,12 +1887,12 @@ export const MISSION_POOL: readonly MissionDef[] = [
   { id: 'nm25', label: 'Thread 25 near-misses', target: 25, kind: 'cumulative', metric: 'nearMisses' },
   { id: 'pu15', label: 'Collect 15 powerups', target: 15, kind: 'cumulative', metric: 'powerups' },
   { id: 'sh5', label: 'Collect 5 shields', target: 5, kind: 'cumulative', metric: 'shields' },
-  { id: 'dr20', label: 'Drift for 20s', target: 20, kind: 'cumulative', metric: 'driftSeconds' },
+  { id: 'sm5', label: 'Deploy 5 slow-mos', target: 5, kind: 'cumulative', metric: 'slowMosDeployed' },
   { id: 'mid3', label: 'Reach the Midnight biome 3×', target: 3, kind: 'cumulative', metric: 'midnightReaches' },
   { id: 'run6k', label: 'Score 6,000 in one run', target: 6000, kind: 'perRun', metric: 'score' },
   { id: 'nm60', label: 'Thread 60 near-misses', target: 60, kind: 'cumulative', metric: 'nearMisses' },
   { id: 'pu40', label: 'Collect 40 powerups', target: 40, kind: 'cumulative', metric: 'powerups' },
-  { id: 'dr60', label: 'Drift for 60s', target: 60, kind: 'cumulative', metric: 'driftSeconds' },
+  { id: 'sm15', label: 'Deploy 15 slow-mos', target: 15, kind: 'cumulative', metric: 'slowMosDeployed' },
   { id: 'rd3k', label: 'Drive 3,000m in one run', target: 3000, kind: 'perRun', metric: 'distance' },
 ] as const;
 
@@ -1962,7 +1909,7 @@ export interface RankDef {
 export const RANKS: readonly RankDef[] = [
   { name: 'Rookie', missionsRequired: 0, reward: { title: 'Rookie' } },
   { name: 'Cruiser', missionsRequired: 3, reward: { title: 'Cruiser', startBiome: 1 } }, // Midnight
-  { name: 'Drifter', missionsRequired: 6, reward: { title: 'Drifter', startBiome: 2 } }, // Toxic
+  { name: 'Time Bender', missionsRequired: 6, reward: { title: 'Time Bender', startBiome: 2 } }, // Toxic
   { name: 'Veteran', missionsRequired: 9, reward: { title: 'Veteran', startBiome: 3 } }, // Dawn
   { name: 'Legend', missionsRequired: 12, reward: { title: 'Legend' } },
 ] as const;
@@ -1991,29 +1938,27 @@ export function scoringFor(id: string): CarScoring {
 }
 
 /**
- * Normalisation ranges for the picker's Speed / Grip / Drift bars. The bars are
+ * Normalisation ranges for the picker's Speed / Grip / Agility bars. The bars are
  * DERIVED from the same `handling` multipliers the sim uses (see carStats) — the
  * single source of truth — so they can never be hand-authored out of sync with
- * the physics. Chosen to span the roster's spread with a little headroom.
+ * the physics. Each bar now maps 1:1 to one physics lever (no ratios), chosen to
+ * span the roster's spread with a little headroom.
  */
 export const CAR_STAT_RANGE = {
-  // Widened alongside the OPP-07a handling spread (was 0.85-1.25 / 0.6-2.0 /
-  // 0.8-1.5): the sharpened roster now spans wider raw values, and these ranges
-  // must enclose it with headroom or multiple cars would clamp to identical
-  // full/empty bars — defeating the legibility goal. Span the new extremes
-  // (speedCap 0.82-1.38; grip ratio 0.43-3.6; drift 0.74-1.65) so every car's
-  // bars stay distinct.
+  /** Speed = speedCap (top speed). Roster spans 0.82–1.38. */
   speed: { min: 0.8, max: 1.4 },
-  /** Grip = steering authority / how loose the car is = lateralAccel / lateralFriction. */
-  grip: { min: 0.4, max: 3.7 },
-  drift: { min: 0.72, max: 1.7 },
+  /** Grip = lateralAccel (steering authority / bite). Roster spans 0.60–1.62. */
+  grip: { min: 0.55, max: 1.7 },
+  /** Agility = lateralFriction (looseness / slide — folds in the old drift stat).
+   *  Roster spans 0.33–2.02; higher = a looser, more tossable tail. */
+  agility: { min: 0.3, max: 2.1 },
 } as const;
 
 export interface CarStats {
   /** 0..1 bar fills. */
   speed: number;
   grip: number;
-  drift: number;
+  agility: number;
 }
 
 function norm01(v: number, min: number, max: number): number {
@@ -2021,17 +1966,17 @@ function norm01(v: number, min: number, max: number): number {
 }
 
 /**
- * Derive the 0..1 Speed / Grip / Drift bars from a car's handling multipliers.
+ * Derive the 0..1 Speed / Grip / Agility bars from a car's handling multipliers.
  * The picker MUST read its bars from here so a change to a handling number moves
- * both the physics and the displayed bar together. Grip combines steering
- * authority (lateralAccel) with how fast the car settles (lower lateralFriction
- * = grippier), i.e. lateralAccel / lateralFriction.
+ * both the physics and the displayed bar together. Each bar is one lever: Speed =
+ * speedCap, Grip = lateralAccel (steering bite), Agility = lateralFriction (how
+ * loose / slidey the tail is — higher = more tossable).
  */
 export function carStats(h: CarHandling): CarStats {
   return {
     speed: norm01(h.speedCap, CAR_STAT_RANGE.speed.min, CAR_STAT_RANGE.speed.max),
-    grip: norm01(h.lateralAccel / h.lateralFriction, CAR_STAT_RANGE.grip.min, CAR_STAT_RANGE.grip.max),
-    drift: norm01(h.drift, CAR_STAT_RANGE.drift.min, CAR_STAT_RANGE.drift.max),
+    grip: norm01(h.lateralAccel, CAR_STAT_RANGE.grip.min, CAR_STAT_RANGE.grip.max),
+    agility: norm01(h.lateralFriction, CAR_STAT_RANGE.agility.min, CAR_STAT_RANGE.agility.max),
   };
 }
 

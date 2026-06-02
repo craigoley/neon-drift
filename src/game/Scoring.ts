@@ -227,14 +227,10 @@ export function resolveTraffic(
   playerLateral: number,
   playerDistance: number,
   traffic: TrafficState,
-  drifting = false,
   scoring: CarScoring = BASE_SCORING,
 ): void {
-  // A near-miss threaded WHILE DRIFTING is a committed, risky dodge, so it pays
-  // a combo bonus — a concrete reason to drift through the tightest gaps.
-  const driftMul = drifting ? SCORING.driftNearMissBonus : 1;
   // Per-car scoring tradeoff (OPP-07b): buildMul scales the combo weight (on top
-  // of mover/gate/drift/graze — never replacing them); windowMul scales the
+  // of the mover/graze multipliers — never replacing them); windowMul scales the
   // combo survival window. BASE_SCORING (1/1) leaves the base loop unchanged.
   const { buildMul, windowMul } = scoring;
   events.crashed = false;
@@ -277,7 +273,7 @@ export function resolveTraffic(
             // scales the reward by how close the pass was (OPP-14); the per-car
             // buildMul composes on top (OPP-07b) without replacing either.
             const weight = o.kind === ObstacleKind.Mover ? SCORING.moverNearMissWeight : 1;
-            registerNearMiss(score, weight * driftMul * grazeMultiplier(gap) * buildMul, windowMul);
+            registerNearMiss(score, weight * grazeMultiplier(gap) * buildMul, windowMul);
             events.nearMisses++;
             events.nearMissClosest = Math.min(events.nearMissClosest ?? Infinity, gap);
           }

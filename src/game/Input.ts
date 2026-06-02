@@ -9,12 +9,16 @@
 export interface InputIntent {
   /** Steering magnitude in [-1, 1]: -1 = full left, +1 = full right, 0 = none. */
   steer: number;
-  /** True while the handbrake (drift) control is held. */
-  handbrake: boolean;
+  /** One-shot DEPLOY request for a banked slow-mo charge: set true on the rising
+   *  edge of the button (Space / touch), and CONSUMED (cleared) by the sim the
+   *  first time it acts on it. A latch, not a held level — so holding the button
+   *  or running several fixed-update sub-steps in one frame can only ever spend
+   *  ONE charge per press (see GameState.update). */
+  deploySlowMo: boolean;
   /** True on the frame the player asks to (re)start a run. */
   restart: boolean;
 }
 
 export function createIntent(): InputIntent {
-  return { steer: 0, handbrake: false, restart: false };
+  return { steer: 0, deploySlowMo: false, restart: false };
 }

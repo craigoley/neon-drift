@@ -814,10 +814,10 @@ body,
   background: #ffffff;
 }
 
-/* --- on-screen touch handbrake ----------------------------------------- */
+/* --- on-screen touch SLOW-MO button ------------------------------------ */
 /* Hidden by default; shown only while a run is in progress (body.playing),
    so it never overlaps the start / settings / car-picker / crash screens. */
-.touch-handbrake {
+.touch-slowmo {
   display: none;
   position: absolute;
   right: 24px;
@@ -837,16 +837,16 @@ body,
   -webkit-tap-highlight-color: transparent;
 }
 
-body.playing .touch-handbrake {
+body.playing .touch-slowmo {
   display: block;
 }
 
-.touch-handbrake:active {
+.touch-slowmo:active {
   background: rgba(255, 102, 0, 0.35);
 }
 
 /* --- in-run PAUSE button ----------------------------------------------- */
-/* Top-left, clear of the centred HUD stats and the bottom-right DRIFT button.
+/* Top-left, clear of the centred HUD stats and the bottom-right SLOW-MO button.
    Shown only while a run is in progress (keyboard users use Esc/P). */
 .shell-pause-btn {
   display: none;

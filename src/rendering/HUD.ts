@@ -210,10 +210,17 @@ export class HUD {
   }
 
   /** Show a chip per active effect with its remaining time (SHIELD shows "1",
-   *  the held charge count, since it has no duration). */
+   *  the held charge count, since it has no duration). SLOW-MO is BANKED: its chip
+   *  shows the stored charge count ("x2") while idle, and the live countdown
+   *  ("3s") while a deployed charge is running. */
   private syncPowerups(effects: PowerupEffects): void {
     this.setChip(PowerupKind.Shield, effects.shield, effects.shield ? '1' : '');
-    this.setChip(PowerupKind.SlowMo, effects.slowMoTimer > 0, secs(effects.slowMoTimer));
+    const slowActive = effects.slowMoTimer > 0;
+    this.setChip(
+      PowerupKind.SlowMo,
+      slowActive || effects.slowMoCharges > 0,
+      slowActive ? secs(effects.slowMoTimer) : `x${effects.slowMoCharges}`,
+    );
     this.setChip(PowerupKind.ScoreBoost, effects.scoreBoostTimer > 0, secs(effects.scoreBoostTimer));
     this.setChip(PowerupKind.Magnet, effects.magnetTimer > 0, secs(effects.magnetTimer));
   }

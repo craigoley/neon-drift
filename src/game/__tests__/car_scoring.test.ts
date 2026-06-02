@@ -35,7 +35,7 @@ function passOnce(gap: number, scoring: CarScoring): { combo: number; comboTimer
   o.distance = -50;
   const score = createScoreState();
   const events: TrafficEvents = { crashed: false, nearMisses: 0 };
-  resolveTraffic(events, score, 0, 0, traffic, false, scoring);
+  resolveTraffic(events, score, 0, 0, traffic, scoring);
   return { combo: score.combo, comboTimer: score.comboTimer };
 }
 

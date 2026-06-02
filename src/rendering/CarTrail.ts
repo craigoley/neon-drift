@@ -1,7 +1,6 @@
 /**
  * Car light-trail: a glowing ribbon of the car's recent path that lengthens with
- * speed and burns brighter/hotter while DRIFTING (so a drift leaves a visible
- * streak — ties to the drift skill). Reads vehicle state; never mutates it.
+ * speed. Reads vehicle state; never mutates it.
  *
  * Bounded by construction: a FIXED ring buffer of `count` points (touch devices
  * use fewer). Each frame the stored points stream backward (+z) at the world
@@ -28,11 +27,10 @@ export class CarTrail {
   private readonly pz: Float32Array;
   private head = 0;
   private filled = 0;
-  /** Eased global brightness (0..1), driven by speed + drift. */
+  /** Eased global brightness (0..1), driven by speed. */
   private intensity = 0;
 
   private readonly cool = new THREE.Color(JUICE.trailColor);
-  private readonly hot = new THREE.Color(JUICE.trailDriftColor);
   private readonly scratch = new THREE.Color();
 
   constructor(scene: THREE.Scene, isTouch: boolean) {
@@ -62,9 +60,9 @@ export class CarTrail {
   /**
    * Emit the car's current position, stream the trail backward by `speed*dt`,
    * and rewrite the geometry newest→oldest with a brightness fade. `normSpeed`
-   * (0..1) + `drifting` set the colour and how strongly the trail shows.
+   * (0..1) sets how strongly the trail shows.
    */
-  update(lateral: number, speed: number, normSpeed: number, drifting: boolean, dt: number): void {
+  update(lateral: number, speed: number, normSpeed: number, dt: number): void {
     // Stream existing points backward (toward / past the camera).
     for (let i = 0; i < this.filled; i++) this.pz[i] += speed * dt;
 
@@ -75,14 +73,12 @@ export class CarTrail {
     this.pz[this.head] = 0;
     if (this.filled < this.count) this.filled++;
 
-    // Target brightness: fades in above the speed floor, peaks higher while
-    // drifting (the streak). Eased so it never pops.
+    // Target brightness: fades in above the speed floor. Eased so it never pops.
     const speedFactor = clamp(inverseLerp(JUICE.trailSpeedFloor, 1, normSpeed), 0, 1);
-    const peak = drifting ? JUICE.trailDriftOpacity : JUICE.trailMaxOpacity;
-    const target = speedFactor * peak;
+    const target = speedFactor * JUICE.trailMaxOpacity;
     this.intensity += (target - this.intensity) * Math.min(1, dt * JUICE.trailOpacityRate);
 
-    const base = drifting ? this.hot : this.cool;
+    const base = this.cool;
     if (this.intensity <= JUICE.trailMinIntensity) {
       this.line.visible = false;
       return;

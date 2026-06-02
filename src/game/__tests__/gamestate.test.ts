@@ -158,13 +158,10 @@ describe('GameState — menu/pause state machine', () => {
     expect(curvesB).toEqual(curvesA);
   });
 
-  it('slalom mode pins speed to the constant every step (no ramp, no drift scrub)', () => {
+  it('slalom mode pins speed to the constant every step (no ramp)', () => {
     const game = startRun(createGameState(7), undefined, undefined, 7, undefined, GameMode.DailySlalom);
-    // Drift held the whole time — in classic this would scrub speed; in slalom the
-    // constant must hold regardless (only the lateral juke survives).
-    const drifting = { ...intent, handbrake: true };
     for (let i = 0; i < 600; i++) {
-      update(game, drifting, TIMESTEP);
+      update(game, intent, TIMESTEP);
       if (game.phase !== Phase.Playing) break; // a straight run eventually clips a gate
       expect(game.vehicle.speed).toBeCloseTo(SLALOM.constantSpeed, 6);
     }

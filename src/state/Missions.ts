@@ -44,7 +44,7 @@ export interface RunContribution {
   nearMisses: number;
   powerups: number;
   shields: number;
-  driftSeconds: number;
+  slowMosDeployed: number;
   distance: number;
   score: number;
   /** True if the run drove far enough to reveal the Midnight biome. */
@@ -124,7 +124,7 @@ export function commitRun(state: ProgressionState, run: RunContribution): Commit
   s.nearMisses += Math.max(0, run.nearMisses);
   s.powerups += Math.max(0, run.powerups);
   s.shields += Math.max(0, run.shields);
-  s.driftSeconds += Math.max(0, run.driftSeconds);
+  s.slowMosDeployed += Math.max(0, run.slowMosDeployed);
   s.distance += Math.max(0, run.distance);
   if (run.reachedMidnight) s.midnightReaches += 1;
 

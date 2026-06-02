@@ -444,7 +444,9 @@ export type PowerupShape = 'ring' | 'diamond' | 'chevron' | 'horseshoe';
  */
 export const POWERUP_COLORS = {
   shield: PALETTE.cyan, // 0x00ffff — cool/defensive
-  slowmo: 0xb46bff, // neon purple — "time" feel, distinct from the deep-purple bg
+  slowmo: 0x39ff14, // neon green (matches magnet) — the old purple (0xb46bff) was
+  // near-invisible on the deep-purple backdrop; distinguished from magnet by SHAPE
+  // (slow-mo octahedron vs magnet horseshoe), not colour.
   scoreBoost: PALETTE.magenta, // 0xff00ff — reward
   magnet: 0x39ff14, // neon green — clearly not a threat
 } as const;
@@ -1203,6 +1205,12 @@ export const JUICE = {
   comboPulseMs: 280,
   comboPulseScale: 1.35,
   comboPulseBrightness: 1.6,
+  /** Slow-mo BANK collect cue: a light scale/glow pulse on the HUD slow-mo count
+   *  chip when a charge is banked, so collecting reads as "you got one" even
+   *  though banking fires nothing immediately. Lighter than the combo pulse. */
+  bankPulseMs: 260,
+  bankPulseScale: 1.25,
+  bankPulseBrightness: 1.5,
   /**
    * Minimum fraction of the full magnitude for randomised spreads (shard speed,
    * speed-line radius): value = spreadMinFraction + (1 - spreadMinFraction)*rand.

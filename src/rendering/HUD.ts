@@ -231,6 +231,23 @@ export class HUD {
     chip.timer.textContent = timerText;
   }
 
+  /** Light scale + glow pulse on the SLOW-MO bank chip when a charge is collected,
+   *  so banking a charge reads as "you got one" even though it fires nothing
+   *  immediately (it banks for later deploy). Driven by the collect event in main
+   *  (collectedKind === SlowMo). Guarded — Web Animations absent in jsdom/tests. */
+  pulseSlowMoBank(): void {
+    const chip = this.chips[PowerupKind.SlowMo].root;
+    if (typeof chip.animate !== 'function') return;
+    chip.animate(
+      [
+        { transform: 'scale(1)' },
+        { transform: `scale(${JUICE.bankPulseScale})`, filter: `brightness(${JUICE.bankPulseBrightness})` },
+        { transform: 'scale(1)' },
+      ],
+      { duration: JUICE.bankPulseMs, easing: 'ease-out' },
+    );
+  }
+
   /** Brief scale + glow pulse on the combo readout when it tiers up. Uses the
    *  Web Animations API (guarded — not present in jsdom/tests). */
   private pulseCombo(): void {

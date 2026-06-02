@@ -507,6 +507,11 @@ function frame(now: number): void {
   shards.update(realDt);
   screenFx.update(realDt);
   hud.sync(game, leaderboard.bestRun());
+  // Bank-collect cue: a slow-mo BANKS silently (no immediate effect), so pulse its
+  // HUD count chip as the bank ticks up — fired from the existing collect event.
+  // Runs after sync so the chip is shown/updated first. At cap (x3) the chip still
+  // flashes and the number stays x3 (the extra charge is spent — see Powerups).
+  if (collectedKind === PowerupKind.SlowMo) hud.pulseSlowMoBank();
   trailInfo.active = trail.activeCount();
   trailInfo.cap = trail.capacity();
   debug.update(game, telemetry, hud.comboText(), trailInfo, scenery.activeCount);

@@ -438,9 +438,10 @@ export type PowerupShape = 'ring' | 'diamond' | 'chevron' | 'horseshoe';
 
 /**
  * Signature pickup colours. CLAUDE.md's named palette carries only two neons
- * (magenta + cyan); to keep four pickups instantly distinguishable we add two
- * more BRIGHT NEON hues here. All four read as GOOD — and the orange accent
- * (#ff6600) stays reserved for THREATS, never used on a pickup.
+ * (magenta + cyan); we add neon green to fill out the set. Three distinct hues
+ * cover four pickups — slow-mo and magnet share green (distinguished by SHAPE:
+ * octahedron vs horseshoe). All read as GOOD — the orange accent (#ff6600)
+ * stays reserved for THREATS, never used on a pickup.
  */
 export const POWERUP_COLORS = {
   shield: PALETTE.cyan, // 0x00ffff — cool/defensive

@@ -389,8 +389,8 @@ export class Shell {
   private buildStart(): HTMLElement {
     const s = screen('shell-start');
     const hint = this.opts.isTouch
-      ? 'drag to steer · hold DRIFT to juke (costs speed)'
-      : '← → / A D to steer · hold SPACE to drift-juke (costs speed)';
+      ? 'drag to steer · tap SLOW-MO to deploy a banked charge'
+      : '← → / A D to steer · SPACE to deploy a banked slow-mo';
     s.innerHTML =
       `<h1 class="shell-title">NEON DRIFT</h1>` +
       `<p class="shell-best"></p>` +
@@ -498,7 +498,7 @@ export class Shell {
       `<div class="shell-car-stats">` +
       this.statRow('SPEED', 'speed') +
       this.statRow('GRIP', 'grip') +
-      this.statRow('DRIFT', 'drift') +
+      this.statRow('AGILITY', 'agility') +
       `</div>` +
       `<div class="shell-car-dots"></div>` +
       `<button class="shell-btn shell-close" type="button">DONE</button>`;
@@ -575,7 +575,7 @@ export class Shell {
     };
     setBar('speed');
     setBar('grip');
-    setBar('drift');
+    setBar('agility');
 
     // Page dots.
     this.carDotsEl.innerHTML = CARS.map(

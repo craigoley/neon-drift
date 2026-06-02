@@ -193,7 +193,7 @@ describe('CARS — every car has its OWN geometry profile (not just colour)', ()
     const byId = (id: string) => CARS.find((c) => c.id === id)!;
     const nova = carShape(byId('nova')); // speedCap 1.25 — the fastest
     const onyx = carShape(byId('onyx')); // lateralAccel 1.45 — the grippiest
-    const ghost = carShape(byId('ghost')); // drift 1.45 — the drift king
+    const ghost = carShape(byId('ghost')); // loosest tail — the compact, tossable kart
     const pulse = carShape(byId('pulse')); // balanced reference
 
     // Fastest → longer & lower than the balanced reference.

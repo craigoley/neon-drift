@@ -54,7 +54,7 @@ describe('HUD combo funnel (detection -> increment -> display)', () => {
     const parent = document.createElement('div');
     const hud = new HUD(parent);
     const game = startRun(createGameState(7));
-    const intent: InputIntent = { steer: 0, handbrake: false, restart: false };
+    const intent: InputIntent = { steer: 0, deploySlowMo: false, restart: false };
 
     // Replicate main.ts: fixed-timestep update loop, then hud.sync once per frame.
     // Invariant under test: the HUD combo text MIRRORS the internal combo on

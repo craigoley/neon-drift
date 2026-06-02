@@ -1,13 +1,12 @@
 /**
  * Player vehicle physics. PURE — no three, no DOM. Mutates its state in place
  * (the game update owns the only mutation path; renderers only read). Free
- * lateral movement with acceleration + friction so steering feels weighty; the
- * handbrake reduces lateral friction for sharp drift dodges. Forward speed
- * auto-accelerates toward a cap that rises with distance.
+ * lateral movement with acceleration + friction so steering feels weighty.
+ * Forward speed auto-accelerates toward a cap that rises with distance.
  */
 
 import { clamp, decay } from '../utils/math';
-import { DRIFT, ROAD, SLALOM, VEHICLE, type CarHandling } from '../utils/constants';
+import { ROAD, SLALOM, VEHICLE, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 
 export interface VehicleState {
@@ -21,13 +20,10 @@ export interface VehicleState {
    *  by VEHICLE.boostBonus so the car can briefly ride above its normal top
    *  speed; 0 = no boost. */
   boostTimer: number;
-  /** True while a drift is active (handbrake held mid-run). Read by the renderer
-   *  (yaw/trail/colour), audio (screech) and scoring (drifted near-miss bonus). */
-  drifting: boolean;
 }
 
 export function createVehicleState(): VehicleState {
-  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed, boostTimer: 0, drifting: false };
+  return { lateral: 0, lateralVel: 0, speed: VEHICLE.startSpeed, boostTimer: 0 };
 }
 
 /**
@@ -70,33 +66,14 @@ export function updateVehicle(
   state.speed = slalom ? SLALOM.constantSpeed : clamp(state.speed + VEHICLE.acceleration * dt, 0, cap);
   if (state.boostTimer > 0) state.boostTimer = Math.max(0, state.boostTimer - dt);
 
-  state.drifting = intent.handbrake;
-
-  // DRIFT speed cost (the trade): holding the handbrake scrubs forward speed
-  // toward a floor (a fraction of the cap), so a juke costs distance/score and
-  // can't just be held forever. Normal acceleration recovers it once released.
-  // Suppressed in SLALOM so the constant speed truly holds — the drift's LATERAL
-  // juke (below) still applies, so gates can still be threaded with a slide.
-  if (state.drifting && !slalom) {
-    // Clamp the floor to the current speed so a drift can only ever REMOVE
-    // speed — never nudge it up to the floor on the rare frame speed sits just
-    // below it (the cap, and thus the floor, rises with distance).
-    const floor = Math.min(state.speed, cap * DRIFT.minSpeedFraction);
-    state.speed = Math.max(floor, state.speed - DRIFT.speedDrag * dt);
-  }
-
-  // Lateral: steer applies acceleration (scaled by grip); friction bleeds
-  // velocity. While DRIFTING the steering accel is multiplied (DRIFT.accelBoost,
-  // scaled by the car's `drift` stat) for a sharp juke — this is what makes a
-  // last-second dodge possible and is the felt difference normal steering can't
-  // match. The handbrake also retains far more lateral velocity (the slide).
-  // Clamp the retained fraction below 1 so no multiplier can make the car
+  // Lateral: steer applies acceleration (scaled by the car's grip), friction
+  // bleeds velocity. The per-car `lateralFriction` multiplier is the looseness
+  // lever — a higher value retains lateral velocity longer (a slidier, more
+  // "agile"/tossable tail), a lower one settles quickly (planted/precise). Clamp
+  // the retained fraction below 1 so no multiplier can make the car
   // uncontrollable or blow up to NaN/Infinity.
-  const accelMul = state.drifting ? DRIFT.accelBoost * handling.drift : 1;
-  state.lateralVel += intent.steer * VEHICLE.lateralAccel * handling.lateralAccel * accelMul * dt;
-  const requested = intent.handbrake
-    ? VEHICLE.handbrakeFriction * handling.drift
-    : VEHICLE.lateralFriction * handling.lateralFriction;
+  state.lateralVel += intent.steer * VEHICLE.lateralAccel * handling.lateralAccel * dt;
+  const requested = VEHICLE.lateralFriction * handling.lateralFriction;
   const retained = clamp(requested, 0, VEHICLE.maxRetainedFriction);
   state.lateralVel *= decay(retained, dt);
   state.lateral += state.lateralVel * dt;

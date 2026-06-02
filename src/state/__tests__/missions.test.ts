@@ -11,7 +11,7 @@ import {
 import { MISSION_ACTIVE_COUNT, RANKS } from '../../utils/constants';
 
 function noRun(): RunContribution {
-  return { nearMisses: 0, powerups: 0, shields: 0, driftSeconds: 0, distance: 0, score: 0, reachedMidnight: false };
+  return { nearMisses: 0, powerups: 0, shields: 0, slowMosDeployed: 0, distance: 0, score: 0, reachedMidnight: false };
 }
 
 describe('Missions — fresh progression', () => {
@@ -37,7 +37,7 @@ describe('Missions — completion fires once + replaces the mission', () => {
     const r1 = commitRun(s, { ...noRun(), nearMisses: 1 });
     expect(r1.completedMissions).toEqual(['Thread 25 near-misses']);
     expect(s.completed).toBe(1);
-    expect(s.active[0].defId).toBe('dr20'); // pool[3]
+    expect(s.active[0].defId).toBe('sm5'); // pool[3]
 
     // Further near-misses do NOT re-complete the (now replaced) mission.
     const r2 = commitRun(s, { ...noRun(), nearMisses: 100 });
@@ -46,12 +46,12 @@ describe('Missions — completion fires once + replaces the mission', () => {
 
   it('a cumulative mission tracks from its activation baseline ("do N more")', () => {
     const s = createProgressionState();
-    commitRun(s, { ...noRun(), nearMisses: 25 }); // nm25 done → dr20 active (baseline drift=0)
-    // dr20 needs 20 MORE drift seconds from now.
+    commitRun(s, { ...noRun(), nearMisses: 25 }); // nm25 done → sm5 active (baseline 0)
+    // sm5 needs 5 MORE slow-mo deploys from now.
     const prog = missionProgress(s.active[0], s.stats);
-    expect(prog.label).toBe('Drift for 20s');
+    expect(prog.label).toBe('Deploy 5 slow-mos');
     expect(prog.have).toBe(0);
-    expect(prog.need).toBe(20);
+    expect(prog.need).toBe(5);
   });
 });
 
@@ -85,9 +85,9 @@ describe('Missions — rank advances across mission-set boundaries (rewards once
 describe('Missions — per-run missions complete on a single run value', () => {
   it('a "score N in one run" mission completes when a run hits the mark', () => {
     const s = createProgressionState();
-    // Clear the first 3 → active becomes [dr20, mid3, run6k].
+    // Clear the first 3 → active becomes [sm5, mid3, run6k].
     commitRun(s, { ...noRun(), nearMisses: 25, powerups: 15, shields: 5 });
-    expect(s.active.map((m) => m.defId)).toEqual(['dr20', 'mid3', 'run6k']);
+    expect(s.active.map((m) => m.defId)).toEqual(['sm5', 'mid3', 'run6k']);
 
     // A run scoring 6,000 completes the per-run mission; a 5,999 run would not.
     const r = commitRun(s, { ...noRun(), score: 6000 });
@@ -100,7 +100,7 @@ describe('Missions — starting-biome unlock (cosmetic gating only)', () => {
     expect(isStartBiomeUnlocked(0, 0)).toBe(true);
     expect(isStartBiomeUnlocked(1, 0)).toBe(false); // Midnight needs Cruiser
     expect(isStartBiomeUnlocked(1, 1)).toBe(true);
-    expect(isStartBiomeUnlocked(2, 1)).toBe(false); // Toxic needs Drifter
+    expect(isStartBiomeUnlocked(2, 1)).toBe(false); // Toxic needs Time Bender
     expect(isStartBiomeUnlocked(2, 2)).toBe(true);
     expect(startBiomeUnlockRank(1)).toBe(1);
     expect(startBiomeUnlockRank(0)).toBeNull();
@@ -114,6 +114,6 @@ describe('Missions — no NaN / negative inputs are clamped', () => {
     expect(s.stats.nearMisses).toBe(0);
     expect(s.stats.powerups).toBe(0);
     expect(s.stats.distance).toBe(0);
-    expect(Number.isFinite(s.stats.driftSeconds)).toBe(true);
+    expect(Number.isFinite(s.stats.slowMosDeployed)).toBe(true);
   });
 });

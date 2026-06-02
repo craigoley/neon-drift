@@ -96,7 +96,7 @@ export class MissionStore {
         nearMisses: num(ps.nearMisses),
         powerups: num(ps.powerups),
         shields: num(ps.shields),
-        driftSeconds: num(ps.driftSeconds),
+        slowMosDeployed: num(ps.slowMosDeployed),
         midnightReaches: num(ps.midnightReaches),
         distance: num(ps.distance),
       };

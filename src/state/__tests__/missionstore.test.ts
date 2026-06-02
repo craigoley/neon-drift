@@ -21,7 +21,7 @@ const RUN = {
   nearMisses: 25,
   powerups: 15,
   shields: 5,
-  driftSeconds: 0,
+  slowMosDeployed: 0,
   distance: 1000,
   score: 0,
   reachedMidnight: false,
@@ -122,7 +122,7 @@ describe('Missions NEVER gate gameplay — the core run is always startable', ()
     expect(rookie.state().rank).toBe(0);
 
     const maxed = new MissionStore(memStorage());
-    for (let i = 0; i < 6; i++) maxed.commitRun({ ...RUN, score: 6000, driftSeconds: 100, reachedMidnight: true });
+    for (let i = 0; i < 6; i++) maxed.commitRun({ ...RUN, score: 6000, slowMosDeployed: 100, reachedMidnight: true });
     expect(maxed.state().rank).toBeGreaterThan(0);
 
     const intent = createIntent();

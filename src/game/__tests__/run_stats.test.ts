@@ -4,18 +4,18 @@ import { roadCenterAt } from '../Road';
 import { createIntent } from '../Input';
 import { BIOME_CYCLE, PowerupKind, TIMESTEP } from '../../utils/constants';
 
-describe('Run stats — drift + shields accumulate during a run', () => {
-  it('drift seconds accrue while the handbrake is held and moving, and reset each run', () => {
+describe('Run stats — slow-mo deploys + shields accumulate during a run', () => {
+  it('deploying a banked slow-mo increments the run count once per press, and resets each run', () => {
     const game = startRun(createGameState(5));
+    game.powerups.effects.slowMoCharges = 2;
     const intent = createIntent();
-    intent.handbrake = true;
+    intent.deploySlowMo = true; // one press, held across several sub-steps
     for (let i = 0; i < 60; i++) update(game, intent, TIMESTEP);
-    expect(game.runStats.driftSeconds).toBeGreaterThan(0.9); // ~1s of drift
-    expect(game.runStats.driftSeconds).toBeLessThan(1.1);
+    expect(game.runStats.slowMosDeployed).toBe(1); // edge-triggered: exactly one
 
-    // A fresh run zeroes the accumulator.
+    // A fresh run zeroes the accumulators.
     startRun(game);
-    expect(game.runStats.driftSeconds).toBe(0);
+    expect(game.runStats.slowMosDeployed).toBe(0);
     expect(game.runStats.shields).toBe(0);
   });
 

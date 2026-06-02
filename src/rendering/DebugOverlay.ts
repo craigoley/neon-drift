@@ -13,7 +13,7 @@ import { activeObstacleCount, activeObstacleCountByKind } from '../game/Traffic'
 import { activePickupCount } from '../game/Powerups';
 import type { GameState } from '../game/GameState';
 import type { Telemetry } from '../utils/Telemetry';
-import { BIOMES, CSS_PALETTE, DRIFT, ObstacleKind, SCORING, VEHICLE } from '../utils/constants';
+import { BIOMES, CSS_PALETTE, ObstacleKind, SCORING, VEHICLE } from '../utils/constants';
 
 export class DebugOverlay {
   private readonly el: HTMLElement;
@@ -87,13 +87,12 @@ export class DebugOverlay {
       `NEON DRIFT · debug (\` to toggle)\n` +
       `fps ${telemetry.fps.toFixed(0).padStart(3)}  frame ${telemetry.lastMs.toFixed(1)}ms  avg ${telemetry.avgMs.toFixed(1)}ms\n` +
       `phase ${game.phase}  dist ${game.distance.toFixed(0)}  spd ${game.vehicle.speed.toFixed(0)}\n` +
-      // DRIFT diagnosis: lateral velocity + the retained-friction fraction (per
-      // second) and steer-accel multiplier WITH vs WITHOUT drift, so the actual
-      // effect of holding DRIFT is visible on device.
-      `drift ${game.vehicle.drifting ? 'ON ' : 'off'}  latVel ${game.vehicle.lateralVel.toFixed(1).padStart(6)}  ` +
-      `accelx ${(game.vehicle.drifting ? DRIFT.accelBoost * game.handling.drift : 1).toFixed(2)}  ` +
-      `fric/s grip ${(VEHICLE.lateralFriction * game.handling.lateralFriction).toFixed(2)} | ` +
-      `drift ${(VEHICLE.handbrakeFriction * game.handling.drift).toFixed(2)}\n` +
+      // LATERAL diagnosis: lateral velocity + the per-car retained-friction
+      // fraction (per second) — the looseness/agility lever — so the actual feel
+      // of each car is visible on device.
+      `latVel ${game.vehicle.lateralVel.toFixed(1).padStart(6)}  ` +
+      `accel ${(VEHICLE.lateralAccel * game.handling.lateralAccel).toFixed(0)}  ` +
+      `fric/s ${(VEHICLE.lateralFriction * game.handling.lateralFriction).toFixed(3)}\n` +
       `biome ${BIOMES[game.biome.from].displayName}` +
       `${game.biome.blend > 0 ? ` → ${BIOMES[game.biome.to].displayName} ${(game.biome.blend * 100).toFixed(0)}%` : ''}\n` +
       `road  active ${activeSegmentCount(road)}  spawned ${road.spawned}  recycled ${road.recycled}\n` +
@@ -105,7 +104,7 @@ export class DebugOverlay {
       `pup   active ${activePickupCount(powerups)}/${powerups.pool.length}  spawned ${powerups.spawned}  got ${powerups.collected}  culled ${powerups.culled}\n` +
       `juice trail ${trail ? `${trail.active}/${trail.cap}` : '--'} (bounded, fixed buffer)\n` +
       `scen  active ${sceneryActive} (fixed pool — bounded)\n` +
-      `fx    shield ${fx.shield ? 'Y' : 'n'}${fx.invulnTimer > 0 ? `(iv ${fx.invulnTimer.toFixed(1)})` : ''}  slow ${fx.slowMoTimer.toFixed(1)}  x2 ${fx.scoreBoostTimer.toFixed(1)}  mag ${fx.magnetTimer.toFixed(1)}\n` +
+      `fx    shield ${fx.shield ? 'Y' : 'n'}${fx.invulnTimer > 0 ? `(iv ${fx.invulnTimer.toFixed(1)})` : ''}  slow ${fx.slowMoTimer.toFixed(1)} (bank ${fx.slowMoCharges})  x2 ${fx.scoreBoostTimer.toFixed(1)}  mag ${fx.magnetTimer.toFixed(1)}\n` +
       `-- COMBO FUNNEL (raw) ----------------\n` +
       `1 evaluated/frame   ${ev.evaluated ?? 0}\n` +
       `2 closest lat/lon    ${closeLat} / ${closeLon}\n` +

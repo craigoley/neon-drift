@@ -47,7 +47,10 @@ export interface PowerupEffects {
   shield: boolean;
   /** Post-shield invulnerability window (s) — crashes are ignored while > 0. */
   invulnTimer: number;
-  /** SLOW-MO remaining (s). */
+  /** Banked SLOW-MO charges (0..POWERUPS.slowMoMaxCharges). Collecting a slow-mo
+   *  pickup adds one (capped); the DEPLOY control spends one to start a slow-mo. */
+  slowMoCharges: number;
+  /** SLOW-MO remaining (s) on the currently-deployed charge. */
   slowMoTimer: number;
   /** SCORE-BOOST remaining (s). */
   scoreBoostTimer: number;
@@ -75,7 +78,7 @@ export interface PowerupState {
 }
 
 export function createPowerupEffects(): PowerupEffects {
-  return { shield: false, invulnTimer: 0, slowMoTimer: 0, scoreBoostTimer: 0, magnetTimer: 0 };
+  return { shield: false, invulnTimer: 0, slowMoCharges: 0, slowMoTimer: 0, scoreBoostTimer: 0, magnetTimer: 0 };
 }
 
 export function createPowerupState(seed: number): PowerupState {
@@ -214,7 +217,10 @@ function applyEffect(effects: PowerupEffects, def: PowerupDef): void {
       effects.shield = true;
       break;
     case PowerupKind.SlowMo:
-      effects.slowMoTimer = def.duration;
+      // Slow-mo BANKS instead of firing on pickup: stash a charge (capped) for
+      // the player to DEPLOY on demand. Covers milestone-granted slow-mo too,
+      // since grantPowerup routes through here.
+      effects.slowMoCharges = Math.min(effects.slowMoCharges + 1, POWERUPS.slowMoMaxCharges);
       break;
     case PowerupKind.ScoreBoost:
       effects.scoreBoostTimer = def.duration;
@@ -287,5 +293,19 @@ export function powerupScoreMultiplier(effects: PowerupEffects): number {
 export function consumeShield(effects: PowerupEffects): boolean {
   if (!effects.shield) return false;
   effects.shield = false;
+  return true;
+}
+
+/**
+ * DEPLOY one banked SLOW-MO charge: spend a charge and start a slow-mo window
+ * (the same window collecting one used to start automatically — reuses the
+ * powerupTimeScale / simDt seam). No-op (returns false) when the bank is empty
+ * OR a slow-mo is already running, so a charge can't be wasted stacking on an
+ * active one. Mirrors consumeShield's held-charge pattern. Pure.
+ */
+export function deploySlowMo(effects: PowerupEffects): boolean {
+  if (effects.slowMoCharges <= 0 || effects.slowMoTimer > 0) return false;
+  effects.slowMoCharges -= 1;
+  effects.slowMoTimer = POWERUP_DEFS.slowmo.duration;
   return true;
 }

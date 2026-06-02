@@ -5,7 +5,8 @@
  *
  * Touch reaches the full steering range (parity with keyboard): a horizontal
  * drag from the touch origin maps linearly to [-1, 1] over `maxDragPx`. An
- * on-screen handbrake button and tap-to-(re)start complete parity.
+ * on-screen SLOW-MO button (deploy a banked charge) and tap-to-(re)start
+ * complete parity.
  *
  * Lives outside src/game/ deliberately (it touches the DOM). No three imports.
  */
@@ -20,6 +21,9 @@ export class Controls {
   // Keyboard steering (held keys).
   private leftHeld = false;
   private rightHeld = false;
+  // Deploy key (Space) physical state, so key-repeat while held only arms the
+  // one-shot deploy intent ONCE per press (the rising edge).
+  private deployHeld = false;
 
   // Touch steering (continuous).
   private touchActive = false;
@@ -45,7 +49,15 @@ export class Controls {
         this.rightHeld = down;
         break;
       case ' ':
-        this.intent.handbrake = down;
+        // DEPLOY a banked slow-mo charge — armed on the rising edge only (the
+        // deployHeld guard makes OS key-repeat while held a no-op), so one press
+        // can only ever spend one charge. The sim clears the intent when it acts.
+        if (down) {
+          if (!this.deployHeld) this.intent.deploySlowMo = true;
+          this.deployHeld = true;
+        } else {
+          this.deployHeld = false;
+        }
         break;
       default:
         break;
@@ -56,7 +68,7 @@ export class Controls {
   }
 
   /**
-   * Wire touch steering on `surface` and build an on-screen handbrake button
+   * Wire touch steering on `surface` and build an on-screen SLOW-MO button
    * inside `uiParent`. Drag-to-steer; tap (no drag) acts as start/restart.
    */
   attachTouch(surface: HTMLElement, uiParent: HTMLElement): void {
@@ -67,15 +79,18 @@ export class Controls {
 
     const btn = document.createElement('button');
     btn.className = 'touch-handbrake';
-    btn.textContent = 'DRIFT';
-    btn.setAttribute('aria-label', 'handbrake');
-    const press = (v: boolean) => (e: Event) => {
-      e.preventDefault();
-      this.intent.handbrake = v;
-    };
-    btn.addEventListener('touchstart', press(true), { passive: false });
-    btn.addEventListener('touchend', press(false));
-    btn.addEventListener('touchcancel', press(false));
+    btn.textContent = 'SLOW-MO';
+    btn.setAttribute('aria-label', 'deploy slow-mo');
+    // Each tap is its own rising edge → arms one deploy. The sim consumes it and
+    // no-ops if the bank is empty or a slow-mo is already running.
+    btn.addEventListener(
+      'touchstart',
+      (e) => {
+        e.preventDefault();
+        this.intent.deploySlowMo = true;
+      },
+      { passive: false },
+    );
     uiParent.appendChild(btn);
   }
 

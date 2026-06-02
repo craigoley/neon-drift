@@ -43,7 +43,6 @@ import { biomesSeenForDistance } from './game/Biome';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
 import {
-  AUDIO,
   BIOMES,
   carById,
   cssHex,
@@ -323,6 +322,10 @@ function frame(now: number): void {
     }
   } else {
     accumulator = 0;
+    // Not playing: drop any deploy armed off the track (menu / pause / crash) so
+    // it can't fire on the next run's first step. (The sim consumes it while
+    // playing; here there are no sub-steps to do so.)
+    controls.intent.deploySlowMo = false;
   }
   controls.endFrame();
 
@@ -419,7 +422,7 @@ function frame(now: number): void {
       nearMisses: game.score.nearMisses,
       powerups: game.powerups.collected,
       shields: game.runStats.shields,
-      driftSeconds: game.runStats.driftSeconds,
+      slowMosDeployed: game.runStats.slowMosDeployed,
       distance: game.distance,
       score: game.score.score,
       reachedMidnight: biomesSeenForDistance(game.distance) >= 2,
@@ -444,11 +447,6 @@ function frame(now: number): void {
     audio.setSpeed(normalizedSpeed(game.vehicle.speed));
     // Biome-aware tone: glide the engine voicing between the current → next biome.
     audio.setBiomeTone(lerp(BIOMES[game.biome.from].audioTone, BIOMES[game.biome.to].audioTone, game.biome.blend));
-    audio.setScreech(
-      game.phase === Phase.Playing &&
-        controls.intent.handbrake &&
-        game.vehicle.speed > AUDIO.screechMinSpeed,
-    );
     if (nearMisses > 0) audio.playNearMiss(JUICE.nearMissPitch[nmTier]); // riser scales with tier
     if (collectedKind || shieldBlocked || rampBoosts > 0) audio.playPickup();
     if (crashed) audio.playCrash();
@@ -486,13 +484,12 @@ function frame(now: number): void {
   biomeView.apply(game.biome); // environment palette + stars + traffic tint follow the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
-  // Car light-trail: lengthens with speed, hotter while drifting. Fed 0 speed
-  // when not playing so it fades out on the menu / pause / WIPEOUT screens.
+  // Car light-trail: lengthens with speed. Fed 0 speed when not playing so it
+  // fades out on the menu / pause / WIPEOUT screens.
   trail.update(
     game.vehicle.lateral,
     playing ? game.vehicle.speed : 0,
     playing ? normalizedSpeed(game.vehicle.speed) : 0,
-    playing && game.vehicle.drifting,
     realDt,
   );
   traffic.sync(game.traffic, game.distance);

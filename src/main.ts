@@ -298,24 +298,30 @@ if (import.meta.env.DEV) {
   const urlScreen = new URLSearchParams(window.location.search).get('screen');
   if (urlScreen) {
     const best = { distance: 3000, score: 12000 };
-    const fixtures: Record<string, () => void> = {
+    // A Map (not an object literal) so the user-controlled `urlScreen` is looked up
+    // via Map.get — which only returns explicitly-set entries. An object's
+    // `fixtures[urlScreen]` could dispatch to an inherited member
+    // (?screen=constructor / toString / __proto__); Map.get cannot, so there is no
+    // prototype-dispatch hole (clears CodeQL js/unvalidated-dynamic-method-call).
+    const fixtures = new Map<string, () => void>([
       // classic board placement + a chase target
-      'wipeout-rank': () =>
-        shell.showCrash(8200, 1640, best, 4.5, [], [], { rank: 3, isCarBest: false, carId: 'pulse', target: { rank: 2, score: 9400, gap: 1200 } }, null),
+      ['wipeout-rank', () =>
+        shell.showCrash(8200, 1640, best, 4.5, [], [], { rank: 3, isCarBest: false, carId: 'pulse', target: { rank: 2, score: 9400, gap: 1200 } }, null)],
       // the #1 "NEW BEST!" punch
-      'wipeout-best': () =>
-        shell.showCrash(15000, 2600, best, 6.0, [], [], { rank: 1, isCarBest: true, carId: 'pulse', target: null }, null),
+      ['wipeout-best', () =>
+        shell.showCrash(15000, 2600, best, 6.0, [], [], { rank: 1, isCarBest: true, carId: 'pulse', target: null }, null)],
       // a per-car best with no board rank
-      'wipeout-carbest': () =>
-        shell.showCrash(5400, 1100, best, 2.5, [], [], { rank: null, isCarBest: true, carId: 'nova', target: null }, null),
+      ['wipeout-carbest', () =>
+        shell.showCrash(5400, 1100, best, 2.5, [], [], { rank: null, isCarBest: true, carId: 'nova', target: null }, null)],
       // unlock + mission/rank celebration lines
-      'wipeout-unlock': () =>
-        shell.showCrash(9100, 1800, best, 3.5, ['Nova'], ['MISSION COMPLETE: Thread 25 near-misses', 'RANK UP: Runner!', 'UNLOCKED: Nova'], { rank: 5, isCarBest: false, carId: 'pulse', target: { rank: 4, score: 9300, gap: 200 } }, null),
+      ['wipeout-unlock', () =>
+        shell.showCrash(9100, 1800, best, 3.5, ['Nova'], ['MISSION COMPLETE: Thread 25 near-misses', 'RANK UP: Runner!', 'UNLOCKED: Nova'], { rank: 5, isCarBest: false, carId: 'pulse', target: { rank: 4, score: 9300, gap: 200 } }, null)],
       // daily-result card (new daily best)
-      'wipeout-daily': () =>
-        shell.showCrash(6400, 1200, { distance: 1200, score: 6400 }, 1.0, [], [], null, { isBest: true, runs: 1, bestScore: 6400, bestDistance: 1200 }),
-    };
-    fixtures[urlScreen]?.();
+      ['wipeout-daily', () =>
+        shell.showCrash(6400, 1200, { distance: 1200, score: 6400 }, 1.0, [], [], null, { isBest: true, runs: 1, bestScore: 6400, bestDistance: 1200 })],
+    ]);
+    // Unknown / inherited-name values safely no-op (get returns undefined → ?.()).
+    fixtures.get(urlScreen)?.();
   }
 }
 

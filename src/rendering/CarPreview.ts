@@ -20,7 +20,13 @@ export class CarPreview {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly car: CarMesh;
-  private readonly clock = new THREE.Clock();
+  // Timer (replaces the deprecated Clock). Unlike Clock, Timer must be update()'d
+  // once per frame BEFORE getDelta() — an un-updated Timer returns 0. No-arg
+  // update() uses performance.now() internally, exactly as Clock.getDelta() did,
+  // so the spin speed is unchanged. (We deliberately don't call connect(document):
+  // that would add Page-Visibility delta-clamping, a behaviour change beyond this
+  // Clock→Timer swap.)
+  private readonly timer = new THREE.Timer();
   private raf = 0;
   private readonly onResize = () => this.resize();
 
@@ -52,8 +58,11 @@ export class CarPreview {
   }
 
   private loop = (): void => {
+    // Advance the timer once this frame, then read the delta (Timer requires the
+    // update() before getDelta(), unlike the old Clock).
+    this.timer.update();
     // Spin the chassis only, so the ground-glow blob stays flat under the car.
-    this.car.chassis.rotation.y += UI.carPreviewSpinPerSec * this.clock.getDelta();
+    this.car.chassis.rotation.y += UI.carPreviewSpinPerSec * this.timer.getDelta();
     this.renderer.render(this.scene, this.camera);
     this.raf = requestAnimationFrame(this.loop);
   };

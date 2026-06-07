@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { assertButtonsLabelled, boot, invisibleTextIn, trackErrors } from './_helpers';
 
 /**
  * L2 DOM / MENU coverage (automated bug hunt, Phase 2+3). Exercises everything
@@ -9,62 +10,6 @@ import { expect, test, type Page } from '@playwright/test';
  * tests assert NOTHING about in-scene gameplay, visuals, or feel — only the DOM
  * overlay (menus/HUD chrome) and console health. In-scene correctness is L1's job.
  */
-
-/** Collect console errors + uncaught page errors for the whole test. */
-function trackErrors(page: Page): string[] {
-  const errors: string[] = [];
-  page.on('console', (msg) => {
-    if (msg.type() === 'error') errors.push(`console.error: ${msg.text()}`);
-  });
-  page.on('pageerror', (err) => errors.push(`pageerror: ${err.message}`));
-  return errors;
-}
-
-async function boot(page: Page): Promise<void> {
-  await page.goto('/?seed=123');
-  await page.waitForFunction(() => window.__READY__ === true, null, { timeout: 30_000 });
-  await expect(page.locator('.shell-start')).toBeVisible();
-}
-
-/**
- * Scan a visible screen for the "invisible text" bug class: an element with
- * non-empty text whose computed color equals its OWN opaque background-color
- * (e.g. cyan text on a cyan-filled button). Returns offending {tag,text} list.
- */
-async function invisibleTextIn(page: Page, scope: string): Promise<Array<{ text: string; color: string }>> {
-  return page.$eval(scope, (root) => {
-    const opaque = (c: string) => c !== 'rgba(0, 0, 0, 0)' && !c.startsWith('rgba(0, 0, 0, 0');
-    const bad: Array<{ text: string; color: string }> = [];
-    const walk = (el: Element) => {
-      const cs = getComputedStyle(el);
-      // Only direct text (not text from descendants) matters for this element's color.
-      const ownText = Array.from(el.childNodes)
-        .filter((n) => n.nodeType === Node.TEXT_NODE)
-        .map((n) => n.textContent ?? '')
-        .join('')
-        .trim();
-      if (ownText && opaque(cs.backgroundColor) && cs.color === cs.backgroundColor && cs.opacity !== '0') {
-        bad.push({ text: ownText, color: cs.color });
-      }
-      for (const c of Array.from(el.children)) walk(c);
-    };
-    walk(root);
-    return bad;
-  });
-}
-
-/** Every VISIBLE button inside a scope must have a non-empty accessible label. */
-async function assertButtonsLabelled(page: Page, scope: string): Promise<void> {
-  const buttons = page.locator(`${scope} button:visible`);
-  const n = await buttons.count();
-  expect(n, `${scope} has buttons`).toBeGreaterThan(0);
-  for (let i = 0; i < n; i++) {
-    const b = buttons.nth(i);
-    const text = (await b.textContent())?.trim() ?? '';
-    const aria = (await b.getAttribute('aria-label'))?.trim() ?? '';
-    expect(text.length + aria.length, `button ${i} in ${scope} has a label`).toBeGreaterThan(0);
-  }
-}
 
 test('start menu: every nav button present, visible, labelled, and not invisible-text', async ({ page }) => {
   const errors = trackErrors(page);

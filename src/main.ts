@@ -62,13 +62,34 @@ import {
   TIMESTEP,
 } from './utils/constants';
 
+// TEST HOOKS (render-layer only — these live in the composition root, NEVER in
+// the pure src/game/ layer): `window.__READY__` is flipped true once the first
+// frame has actually been drawn, so an automated browser smoke test can wait for
+// a real rendered scene before asserting/screenshotting.
+declare global {
+  interface Window {
+    __READY__?: boolean;
+  }
+}
+
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
 
 const isTouch = window.matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 
-// Pure game layer.
-const game = createGameState();
+// Optional ?seed= URL override (test hook): pins the seed so a browser smoke test
+// boots a DETERMINISTIC scene. null when absent (the normal case). Coerced to a
+// 32-bit unsigned int to match the pure layer's seed handling.
+const urlSeed = ((): number | null => {
+  const raw = new URLSearchParams(window.location.search).get('seed');
+  if (raw === null) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n >>> 0 : null;
+})();
+
+// Pure game layer. A ?seed= override makes the initial (menu) scene deterministic;
+// otherwise the default seed is used until the first PLAY.
+const game = urlSeed !== null ? createGameState(urlSeed) : createGameState();
 
 // A fresh 32-bit run seed per PLAY so every run generates a DIFFERENT course.
 // (The generator is fully seeded/deterministic; without this the seed stayed at
@@ -77,6 +98,9 @@ const game = createGameState();
 // impurity (Math.random) lives only here in the composition root; tests pass
 // explicit seeds.
 const randomSeed = (): number => (Math.random() * 0x1_0000_0000) >>> 0;
+// With a ?seed= override every PLAY reuses it (deterministic runs for tests);
+// otherwise a fresh random course each play.
+const playSeed = (): number => (urlSeed !== null ? urlSeed : randomSeed());
 
 // Device input. Keyboard always; touch additionally on touch devices (parity).
 // Touch steering binds to the CANVAS (not `app`) so taps on the shell overlays
@@ -175,7 +199,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     const carId = resolvePlayCarId();
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
     // Fresh random seed each run → a genuinely different course every time.
-    startRun(game, handlingFor(carId), missions.startBiome(), randomSeed(), scoringFor(carId));
+    startRun(game, handlingFor(carId), missions.startBiome(), playSeed(), scoringFor(carId));
   },
   // OPP-09 / Daily Slalom: start TODAY'S daily challenge — same fixed seed all day
   // (replayable). mode='dailySlalom' makes the sim a constant-speed, gates-only
@@ -272,6 +296,7 @@ let last = performance.now();
 let accumulator = 0;
 let prevPhase = game.phase;
 let slowmo = 0;
+let ready = false; // flips true after the first rendered frame (test hook)
 const NO_UNLOCKS: string[] = [];
 
 function frame(now: number): void {
@@ -517,6 +542,12 @@ function frame(now: number): void {
   debug.update(game, telemetry, hud.comboText(), trailInfo, scenery.activeCount);
 
   post.render(realDt);
+  // First-frame-ready signal for the browser smoke test — set once, AFTER a
+  // successful render, so a test never screenshots an undrawn canvas.
+  if (!ready) {
+    ready = true;
+    window.__READY__ = true;
+  }
   requestAnimationFrame(frame);
 }
 

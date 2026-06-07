@@ -9,6 +9,11 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Serialize on CI. The whole suite shares one Vite DEV server, and on a cold
+  // start ~5 parallel workers contend on its first-request lazy compile — which
+  // intermittently flakes the screenshot specs (smoke/visual). This is a gated/
+  // nightly job, so reliability beats wall-time; devs keep parallel locally.
+  workers: process.env.CI ? 1 : undefined,
   // Generous per-test timeout: the menu/crash specs drive many interactions
   // against the Vite DEV server, whose first-request lazy compile is slow under
   // parallel workers (a cold start can push a heavy test well past the 30s

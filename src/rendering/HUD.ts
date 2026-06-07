@@ -219,7 +219,9 @@ export class HUD {
     this.setChip(
       PowerupKind.SlowMo,
       slowActive || effects.slowMoCharges > 0,
-      slowActive ? secs(effects.slowMoTimer) : `x${effects.slowMoCharges}`,
+      // Idle: banked count over the PER-CAR cap (e.g. "1/1" for a low-cap car,
+      // "2/4" for a deep banker) so the car's bank depth is legible, not just felt.
+      slowActive ? secs(effects.slowMoTimer) : `${effects.slowMoCharges}/${effects.slowMoCap}`,
     );
     this.setChip(PowerupKind.ScoreBoost, effects.scoreBoostTimer > 0, secs(effects.scoreBoostTimer));
     this.setChip(PowerupKind.Magnet, effects.magnetTimer > 0, secs(effects.magnetTimer));

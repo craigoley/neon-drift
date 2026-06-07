@@ -11,7 +11,7 @@
  */
 
 import { Rng } from '../utils/rng';
-import { BASE_HANDLING, BASE_SCORING, DEFAULT_SEED, type CarHandling, type CarScoring } from '../utils/constants';
+import { BASE_HANDLING, BASE_SCORING, BASE_SLOWMO, DEFAULT_SEED, type CarHandling, type CarScoring, type CarSlowMo } from '../utils/constants';
 import type { InputIntent } from './Input';
 import { createVehicleState, updateVehicle, type VehicleState } from './Vehicle';
 import { createRoadState, roadCenterAt, updateRoad, type RoadState } from './Road';
@@ -109,6 +109,11 @@ export interface GameState {
    *  Separate from handling (physics): this scales the combo build rate +
    *  survival window. Defaults to BASE_SCORING (neutral 1/1). */
   scoring: CarScoring;
+  /** Active car SLOW-MO identity for this run (PR2) — resolved from the selected
+   *  car by the composition root and passed in, like `handling`/`scoring`. Its cap
+   *  + strength are stamped onto powerups.effects at startRun; kept here too so a
+   *  fresh run / returnToMenu can re-stamp them. Defaults to BASE_SLOWMO. */
+  slowMo: CarSlowMo;
   /** This run's MODE (set at startRun). 'classic' = the normal racer; 'dailySlalom'
    *  = the Daily Challenge gates-only slalom (constant speed). The composition
    *  root routes the run-end result to the daily store for 'dailySlalom' (it's
@@ -143,6 +148,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     lives: SLALOM.lives,
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
+    slowMo: BASE_SLOWMO,
     mode: GameMode.Classic,
     startBiome: 0,
     runStats: { shields: 0, slowMosDeployed: 0 },
@@ -162,6 +168,7 @@ export function startRun(
   seed: number = state.seed,
   scoring: CarScoring = state.scoring,
   mode: GameMode = GameMode.Classic,
+  slowMo: CarSlowMo = state.slowMo,
 ): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
@@ -174,7 +181,7 @@ export function startRun(
   // Classic seeds one easy static obstacle so the opening isn't empty road. The
   // slalom is gates-only (a static here would violate that), so it's skipped.
   if (mode !== GameMode.DailySlalom) seedOpeningObstacle(state.traffic, seed);
-  state.powerups = createPowerupState(seed);
+  state.powerups = createPowerupState(seed, slowMo);
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();
@@ -182,6 +189,7 @@ export function startRun(
   state.lives = SLALOM.lives; // full lives each run (inert in classic)
   state.handling = handling;
   state.scoring = scoring;
+  state.slowMo = slowMo;
   state.mode = mode;
   state.startBiome = startBiome;
   state.runStats.shields = 0;
@@ -204,7 +212,9 @@ export function returnToMenu(state: GameState, seed: number = state.seed): GameS
   state.vehicle = createVehicleState();
   state.road = createRoadState(seed);
   state.traffic = createTrafficState();
-  state.powerups = createPowerupState(seed);
+  // Keep the selected car's slow-mo profile (like handling) so the menu's car
+  // choice persists into the next run.
+  state.powerups = createPowerupState(seed, state.slowMo);
   state.biome = createBiomeState();
   state.milestones = createMilestoneState();
   state.score = createScoreState();

@@ -1500,6 +1500,58 @@ export interface CarScoring {
  *  with no `scoring` block or an unknown id — Pulse and the fallback are 1 / 1. */
 export const BASE_SCORING: CarScoring = { buildMul: 1, windowMul: 1 };
 
+/**
+ * Per-car SLOW-MO identity (drift→slow-mo PR2) — a THIRD tradeoff axis, opposed to
+ * AGILITY (handling.lateralFriction). Two ABSOLUTE values, expressed the same way
+ * the uniform PR1 baseline is (a charge COUNT and a sim TIME-SCALE), so there is no
+ * magic conversion and the deploy mechanism is reused verbatim:
+ *   - cap        max banked charges this car holds (baseline 3). Higher = banks
+ *                deeper, so it can stockpile slow-mo for clutch moments.
+ *   - timeScale  the sim time-scale while a deployed charge runs (baseline 0.5).
+ *                LOWER = a STRONGER slow (more time dilation); higher = milder.
+ *
+ * The axis is anti-correlated with AGILITY (see CAR_SLOWMO_TABLE): a car that
+ * leans on slow-mo (high cap, strong/low timeScale) is LOW-agility, and the loose,
+ * agile cars get only a shallow, mild slow-mo. So the roster spans "relies on
+ * slow-mo ↔ relies on raw handling," and NO car is strong on both. Pulse sits at
+ * the exact baseline (the neutral reference) and trades nothing.
+ */
+export interface CarSlowMo {
+  /** Max banked slow-mo charges (absolute; baseline POWERUPS.slowMoMaxCharges). */
+  cap: number;
+  /** Sim time-scale while a deployed charge runs (absolute; baseline
+   *  POWERUP_DEFS.slowmo.timeScale). LOWER = stronger slow. */
+  timeScale: number;
+}
+
+/** Neutral slow-mo: the uniform PR1 baseline (cap 3, half-speed). Used for Pulse,
+ *  any car with no `slowMo` block, and the unknown-id fallback — so the pure sim
+ *  always gets a complete, finite profile and behaves exactly as PR1 did. */
+export const BASE_SLOWMO: CarSlowMo = {
+  cap: POWERUPS.slowMoMaxCharges,
+  timeScale: POWERUP_DEFS.slowmo.timeScale,
+};
+
+/*
+ * PER-CAR SLOW-MO vs AGILITY (PR2) — the anti-correlated tradeoff, reviewable:
+ *
+ *   car         agility(LF)  slowMoCap  timeScale   identity
+ *   Slipstream    2.02          1         0.70      most agile → least slow-mo
+ *   Ghost         1.98          2         0.65      loose tail → shallow, mild slow-mo
+ *   Ember         1.35          2         0.60      fast & loose → light slow-mo
+ *   Nova          1.23          2         0.55      speed → modest slow-mo
+ *   Pulse         1.00          3         0.50      neutral baseline (the reference)
+ *   Vapor         0.43          4         0.40      planted grip → deep, strong slow-mo
+ *   Onyx          0.33          4         0.35      most planted → deepest, strongest slow-mo
+ *
+ * Desirability: cap↑ good (banks more), timeScale↓ good (slows harder), agility↑
+ * good (looser/tossable). Sorted by agility ASCENDING the cap column is monotone
+ * NON-INCREASING and the timeScale column monotone NON-DECREASING — i.e. more
+ * agility always costs slow-mo and vice versa, so no car is high on BOTH (the
+ * no-dominance invariant, asserted in per_car_slowmo.test.ts). Pulse is the only
+ * neutral row; it never wins the slow-mo axis but never loses agility to gain it.
+ */
+
 /*
  * PER-CAR SCORING TRADEOFF (OPP-07b) — opposed build/window axis, reviewable:
  *
@@ -1564,12 +1616,19 @@ export interface CarDef {
   /** Short SCORING-playstyle descriptor (OPP-07b) shown in the picker beneath
    *  the handling tagline, so the combo build/window tradeoff is READABLE too. */
   scoringTagline?: string;
+  /** Short SLOW-MO descriptor (PR2) shown in the picker beneath the scoring line,
+   *  so the slow-mo↔agility tradeoff is READABLE (e.g. "Agile — light on slow-mo"
+   *  vs "Stiff but banks deep slow-mo"). */
+  slowMoTagline?: string;
   cosmetic: CarCosmetic;
   /** Optional — absent this PR; all cars share VEHICLE physics for now. */
   handling?: CarHandling;
   /** Optional per-car SCORING tradeoff (OPP-07b). Absent → BASE_SCORING (neutral
    *  1/1), so Pulse and any unset car score identically to the base loop. */
   scoring?: CarScoring;
+  /** Optional per-car SLOW-MO identity (PR2). Absent → BASE_SLOWMO (the uniform
+   *  PR1 baseline), so Pulse and any unset car play exactly as PR1 did. */
+  slowMo?: CarSlowMo;
   /** Per-car VISUAL silhouette (rendering only). Absent → BASE_CAR_SHAPE. The
    *  collision box stays CAR_VIS for every car (fairness lives in `handling`);
    *  this only changes how the car READS so its shape telegraphs its feel. */
@@ -1629,6 +1688,9 @@ export const CARS: readonly CarDef[] = [
     scoringTagline: 'Combo scores by the book.',
     // Neutral scoring baseline — the fair reference every other car deviates from.
     scoring: { buildMul: 1.0, windowMul: 1.0 },
+    slowMoTagline: 'Slow-mo by the book.',
+    // Neutral slow-mo baseline (cap 3, half-speed) — the uniform PR1 reference.
+    slowMo: { cap: 3, timeScale: 0.5 },
     cosmetic: { body: 0x0a5560, glow: 0x00ffff, accent: 0xff00ff },
     // Balanced all-rounder: no weakness, no specialty. The 1.0 reference point
     // every other car deviates from.
@@ -1647,6 +1709,10 @@ export const CARS: readonly CarDef[] = [
     // Grip identity carried into scoring: builds slower but the combo lingers —
     // a precise, unhurried scorer that doesn't punish a quiet stretch.
     scoring: { buildMul: 0.85, windowMul: 1.25 },
+    slowMoTagline: 'Planted — banks deep, strong slow.',
+    // Grip car leans on slow-mo to offset its low agility: a deep bank (4) and a
+    // strong slow (0.40). Pairs with the planted, low-lateralFriction handling.
+    slowMo: { cap: 4, timeScale: 0.4 },
     cosmetic: { body: 0x6e1a60, glow: 0xff00ff, accent: 0x00ffff },
     // Grip / precision: snappy, planted steering — the slowest, but the tightest
     // settling tail (folded lateralFriction 0.55×0.78 = 0.43): you place it, it
@@ -1666,6 +1732,10 @@ export const CARS: readonly CarDef[] = [
     // Fast-and-loose identity: combo builds quick but the window is short — you
     // have to keep feeding near-misses or it slips away (matches the twitchy feel).
     scoring: { buildMul: 1.2, windowMul: 0.8 },
+    slowMoTagline: 'Loose & fast — light on slow-mo.',
+    // Loose, agile tail → only a light slow-mo crutch: a shallow bank (2) and a
+    // mild slow (0.60). It relies on its handling, not on dilating time.
+    slowMo: { cap: 2, timeScale: 0.6 },
     cosmetic: { body: 0x6e3208, glow: 0xff6600, accent: 0xff00ff },
     // Speed / twitchy: high top speed, but sluggish steering and a loose tail
     // (folded lateralFriction 1.35×1.00 = 1.35) — fast in a straight line, a
@@ -1686,6 +1756,10 @@ export const CARS: readonly CarDef[] = [
     // with the shortest survival window — a high-skill sustain car that rewards
     // relentless near-misses and punishes coasting.
     scoring: { buildMul: 1.25, windowMul: 0.75 },
+    slowMoTagline: 'Agile tail — shallow, mild slow-mo.',
+    // The roster's loosest tail relies on raw handling, so it gets the shallowest
+    // useful bank (2) and a mild slow (0.65) — agility IS its dodge tool.
+    slowMo: { cap: 2, timeScale: 0.65 },
     cosmetic: { body: 0x46606e, glow: 0xffffff, accent: 0x00ffff },
     // Looseness specialist: the slidiest tail of the roster (folded lateralFriction
     // 1.2×1.65 = 1.98) for stylish, tossable dodges, at the cost of a little top
@@ -1706,6 +1780,10 @@ export const CARS: readonly CarDef[] = [
     // window — the most extreme of the boom-or-bust pair (vs Ghost). Spikes hard
     // when you're threading, collapses the instant you stop.
     scoring: { buildMul: 1.3, windowMul: 0.7 },
+    slowMoTagline: 'Straight-line speed — modest slow-mo.',
+    // Fast and fairly loose → a modest slow-mo: a shallow bank (2) but a slightly
+    // stronger slow than Ember/Ghost (0.55), to help place the twitchy top end.
+    slowMo: { cap: 2, timeScale: 0.55 },
     cosmetic: { body: 0x202e7e, glow: 0x4d6bff, accent: 0x00ffff },
     // GLASS CANNON: the speed-cap ceiling, but almost no steering authority and a
     // loose tail (folded lateralFriction 1.4×0.88 = 1.23) — a straight-line terror
@@ -1728,6 +1806,10 @@ export const CARS: readonly CarDef[] = [
     // longest window — the steady-scorer extreme (vs Vapor). Forgives dry
     // stretches; rewards patient, consistent placement over spikes.
     scoring: { buildMul: 0.8, windowMul: 1.35 },
+    slowMoTagline: 'Stiff tail — banks the deepest, strongest slow.',
+    // The most planted car leans hardest on slow-mo: the deepest bank (4) and the
+    // strongest slow (0.35) of the roster — slow-mo compensates for its stiffness.
+    slowMo: { cap: 4, timeScale: 0.35 },
     cosmetic: { body: 0x4a1f70, glow: 0xb84dff, accent: 0x00ffaa },
     // SURGICAL: maxes grip (sharpest accel) and the tightest, most planted tail of
     // the roster (folded lateralFriction 0.45×0.74 = 0.33 — kills the slide),
@@ -1750,6 +1832,10 @@ export const CARS: readonly CarDef[] = [
     // slightly short window — rewards a steady flow of near-misses without the
     // knife-edge of Nova/Ghost. Sits between the aggressive and steady camps.
     scoring: { buildMul: 1.15, windowMul: 0.85 },
+    slowMoTagline: 'Most agile — barely banks slow-mo.',
+    // The most agile car of the roster leans entirely on its tail: the shallowest
+    // bank (1 — can't stockpile) and the mildest slow (0.70). Pure handling car.
+    slowMo: { cap: 1, timeScale: 0.7 },
     cosmetic: { body: 0x3c5e0a, glow: 0xaaff00, accent: 0xff0066 },
     // RALLY HYBRID: fast AND the slidiest tail of all (folded lateralFriction
     // 1.28×1.58 = 2.02) with loose grip — power-slides through gaps, but committed
@@ -1944,6 +2030,15 @@ export function handlingFor(id: string): CarHandling {
  */
 export function scoringFor(id: string): CarScoring {
   return CARS.find((c) => c.id === id)?.scoring ?? BASE_SCORING;
+}
+
+/**
+ * Resolve the SLOW-MO identity for a car id (PR2). Falls back to BASE_SLOWMO (the
+ * uniform PR1 baseline) for an unknown id or a car with no `slowMo` block — so the
+ * pure sim always gets a complete, finite profile and Pulse plays exactly as PR1.
+ */
+export function slowMoFor(id: string): CarSlowMo {
+  return CARS.find((c) => c.id === id)?.slowMo ?? BASE_SLOWMO;
 }
 
 /**

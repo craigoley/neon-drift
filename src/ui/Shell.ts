@@ -93,6 +93,9 @@ export interface ShellOptions {
   missions?: MissionsPanel;
   /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
   onLowFxChange?: (lowFx: boolean) => void;
+  /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
+   *  the composition root react immediately if it wants (optional). */
+  onGhostRaceChange?: (on: boolean) => void;
   /** Start TODAY'S daily challenge (OPP-09). Absent → no DAILY button (tests). */
   onPlayDaily?: () => void;
   /** Daily-challenge panel data. Absent → no DAILY button / screen (tests). */
@@ -148,6 +151,7 @@ export class Shell {
   private readonly sbReqEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
   private readonly fxValueEl: HTMLElement;
+  private readonly ghostValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
   private readonly leaderboard: LeaderboardStore;
@@ -209,6 +213,7 @@ export class Shell {
     this.sbReqEl = this.missionsScreen.querySelector('.shell-sb-req')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
     this.fxValueEl = this.settingsScreen.querySelector('.shell-fx-value')!;
+    this.ghostValueEl = this.settingsScreen.querySelector('.shell-ghost-value')!;
 
     // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
     // only while playing, gated by `body.playing` like the touch DRIFT button.
@@ -239,6 +244,7 @@ export class Shell {
     this.renderCar();
     this.renderSound();
     this.renderFx();
+    this.renderGhost();
   }
 
   // --- public screen transitions ----------------------------------------
@@ -434,7 +440,7 @@ export class Shell {
       `<h2 class="shell-subtitle">SETTINGS</h2>` +
       `<div class="shell-setting">` +
       `<span class="shell-setting-label">Sound</span>` +
-      `<button class="shell-btn shell-toggle" type="button" role="switch">` +
+      `<button class="shell-btn shell-toggle shell-toggle-sound" type="button" role="switch">` +
       `<span class="shell-toggle-value">ON</span></button>` +
       `</div>` +
       // Retro FX: cinematic post-processing (aberration / scanlines / grain /
@@ -444,12 +450,34 @@ export class Shell {
       `<button class="shell-btn shell-toggle shell-toggle-fx" type="button" role="switch">` +
       `<span class="shell-fx-value">ON</span></button>` +
       `</div>` +
+      // Rival Ghost: race a translucent replay of your best run for the mode.
+      `<div class="shell-setting">` +
+      `<span class="shell-setting-label">Rival Ghost</span>` +
+      `<button class="shell-btn shell-toggle shell-toggle-ghost" type="button" role="switch">` +
+      `<span class="shell-ghost-value">OFF</span></button>` +
+      `</div>` +
       `<button class="shell-btn shell-close" type="button">CLOSE</button>`;
 
-    s.querySelector('.shell-toggle')!.addEventListener('click', () => this.toggleSound());
+    s.querySelector('.shell-toggle-sound')!.addEventListener('click', () => this.toggleSound());
     s.querySelector('.shell-toggle-fx')!.addEventListener('click', () => this.toggleFx());
+    s.querySelector('.shell-toggle-ghost')!.addEventListener('click', () => this.toggleGhost());
     s.querySelector('.shell-close')!.addEventListener('click', () => this.go('start'));
     return s;
+  }
+
+  private toggleGhost(): void {
+    const next = !this.settings.get('ghostRace');
+    this.settings.set('ghostRace', next);
+    this.opts.onGhostRaceChange?.(next);
+    this.renderGhost();
+  }
+
+  private renderGhost(): void {
+    const on = this.settings.get('ghostRace');
+    this.ghostValueEl.textContent = on ? 'ON' : 'OFF';
+    const toggle = this.settingsScreen.querySelector('.shell-toggle-ghost')!;
+    toggle.classList.toggle('shell-toggle--on', on);
+    toggle.setAttribute('aria-checked', String(on));
   }
 
   private toggleFx(): void {
@@ -477,7 +505,7 @@ export class Shell {
   private renderSound(): void {
     const on = this.settings.get('soundEnabled');
     this.soundValueEl.textContent = on ? 'ON' : 'OFF';
-    const toggle = this.settingsScreen.querySelector('.shell-toggle')!;
+    const toggle = this.settingsScreen.querySelector('.shell-toggle-sound')!;
     toggle.classList.toggle('shell-toggle--on', on);
     toggle.setAttribute('aria-checked', String(on));
   }

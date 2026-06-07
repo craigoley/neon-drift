@@ -34,7 +34,7 @@
  */
 
 import * as THREE from 'three';
-import { BASE_CAR_SHAPE, CAR_GEO, CAR_VIS, PALETTE, carShape, type CarDef, type CarShape } from '../utils/constants';
+import { BASE_CAR_SHAPE, CAR_GEO, CAR_VIS, GHOST, PALETTE, carShape, type CarDef, type CarShape } from '../utils/constants';
 
 /** A tapered hexahedron (lofted box): rear face wider than front, top inset. */
 function taperedHull(
@@ -274,6 +274,33 @@ export class CarMesh {
       this.builtShape = shape;
     }
     this.applyColours(car);
+  }
+
+  /** Re-style this mesh as the translucent RIVAL GHOST: a distinct cool colour +
+   *  low opacity so it reads clearly as a phantom, not the player. Keeps the car's
+   *  recorded SILHOUETTE (built from its shape) but overrides colours/opacity.
+   *  depthWrite off on the translucent body avoids sorting artifacts over the road. */
+  applyGhostStyle(): void {
+    this.bodyMat.color.setHex(GHOST.bodyColor);
+    this.bodyMat.transparent = true;
+    this.bodyMat.opacity = GHOST.bodyOpacity;
+    this.bodyMat.depthWrite = false;
+    this.edgesMat.color.setHex(GHOST.glowColor);
+    this.edgesMat.transparent = true;
+    this.edgesMat.opacity = GHOST.edgeOpacity;
+    this.accentLineMat.color.setHex(GHOST.accentColor);
+    this.accentLineMat.opacity = GHOST.edgeOpacity;
+    this.groundGlowMat.color.setHex(GHOST.glowColor);
+    this.groundGlowMat.opacity = GHOST.bodyOpacity * 0.5;
+  }
+
+  /** Fade the ghost further once its recording has ended (still faintly visible as
+   *  it recedes behind the still-running player). */
+  setGhostEnded(): void {
+    this.bodyMat.opacity = GHOST.endedOpacity;
+    this.edgesMat.opacity = GHOST.endedOpacity;
+    this.accentLineMat.opacity = GHOST.endedOpacity;
+    this.groundGlowMat.opacity = GHOST.endedOpacity * 0.5;
   }
 
   /** Set the material colours from a car's cosmetic (no geometry work). */

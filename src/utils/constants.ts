@@ -1472,6 +1472,9 @@ export const NET = {
   signalTimeoutMs: 60000,
   /** Heartbeat ping interval over the data channel (ms) → drives the RTT readout. */
   heartbeatMs: 1000,
+  /** Safety timeout (ms) for ICE gathering — resolves if the browser stalls on
+   *  'gathering' state so signaling isn't blocked indefinitely. */
+  iceGatheringTimeoutMs: 3000,
   /** Public STUN for NAT traversal (free). TURN (relay fallback for symmetric NAT,
    *  ~1-in-6 pairs) is configured separately + optionally via env — see iceServers. */
   stunUrls: ['stun:stun.l.google.com:19302'],

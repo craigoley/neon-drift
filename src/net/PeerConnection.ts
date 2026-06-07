@@ -149,7 +149,7 @@ export class PeerConnection {
         }
       };
       this.pc.addEventListener('icegatheringstatechange', done);
-      setTimeout(resolve, 3000);
+      setTimeout(resolve, NET.iceGatheringTimeoutMs);
     });
   }
 

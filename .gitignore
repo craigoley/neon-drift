@@ -17,6 +17,10 @@ playwright-report
 test-results
 /blob-report
 .playwright
+# Dev-machine visual baselines are NOT the source of truth — only CI Linux
+# (-linux.png) baselines are committed. Locally-generated -darwin snapshots are
+# ignored so they never pollute the repo (see e2e/visual.spec.ts header).
+e2e/**/*-darwin.png
 
 # Editor directories and files
 .vscode/*

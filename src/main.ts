@@ -40,11 +40,11 @@ import {
   createGhostState,
   createRecordingBuffer,
   deploySetOf,
-  intentAtFrame,
   recordFrame,
   type GhostRecording,
   type RecordingBuffer,
 } from './game/Replay';
+import { createIntent } from './game/Input';
 import { SettingsStore } from './state/Settings';
 import { ProgressStore } from './state/Progress';
 import { unlockProgress } from './state/Unlocks';
@@ -217,6 +217,7 @@ let ghostDeploySet = new Set<number>();
 let ghostFrame = 0;
 let ghostActive = false; // still feeding recorded intents (false once the recording ends)
 let ghostBeaten = false; // latched the moment the live run out-scores the ghost's final score
+const ghostScratchIntent = createIntent(); // reused each sub-step (no per-frame allocation)
 
 /**
  * Set up recording + (optionally) the rival ghost for a starting run, returning the
@@ -447,7 +448,9 @@ function frame(now: number): void {
       // REPLAY the rival ghost in LOCKSTEP — one ghost step per live step, same dt,
       // feeding the next recorded intent. Same seed + inputs ⇒ its exact run (#73).
       if (liveStep && ghostActive && ghostGame && ghostRec) {
-        update(ghostGame, intentAtFrame(ghostRec, ghostFrame, ghostDeploySet), TIMESTEP);
+        ghostScratchIntent.steer = ghostRec.steers[ghostFrame];
+        ghostScratchIntent.deploySlowMo = ghostDeploySet.has(ghostFrame);
+        update(ghostGame, ghostScratchIntent, TIMESTEP);
         ghostFrame++;
         if (ghostFrame >= ghostRec.steers.length) {
           ghostActive = false; // recording exhausted — freeze + fade the ghost car

@@ -1458,6 +1458,32 @@ export const GHOST = {
   maxFrames: 36000,
 } as const;
 
+/**
+ * Multiplayer connection foundation (MP-1 PR1 — see MULTIPLAYER_DECISION.md). This
+ * PR only CONNECTS two peers + runs a determinism probe; no gameplay/lockstep yet.
+ */
+export const NET = {
+  /** Match-code length (host-generated, joiner-typed). Short + human-shareable;
+   *  unambiguous alphabet (no 0/O/1/I) to avoid mistyping. */
+  codeLength: 5,
+  codeAlphabet: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
+  /** Signaling poll interval + timeout (ms) while waiting for the peer's SDP. */
+  signalPollMs: 800,
+  signalTimeoutMs: 60000,
+  /** Heartbeat ping interval over the data channel (ms) → drives the RTT readout. */
+  heartbeatMs: 1000,
+  /** Public STUN for NAT traversal (free). TURN (relay fallback for symmetric NAT,
+   *  ~1-in-6 pairs) is configured separately + optionally via env — see iceServers. */
+  stunUrls: ['stun:stun.l.google.com:19302'],
+  /** Cross-engine determinism PROBE (the top risk): both peers run this seed + a
+   *  scripted input for N frames, then compare checksums. Long enough that any
+   *  float divergence has time to surface (and perturb the RNG spawn cadence). */
+  probeSeed: 0x5eed1234,
+  probeFrames: 1200,
+  /** Tolerance for float-derived probe fields (rngState is compared EXACTLY). */
+  probeEpsilon: 1e-6,
+} as const;
+
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
 

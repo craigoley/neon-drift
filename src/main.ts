@@ -356,6 +356,15 @@ const shell = new Shell(app, settings, leaderboard, audio, {
 });
 shell.showStart();
 
+// MULTIPLAYER CONNECTION TEST (MP-1 PR1): a standalone overlay reached via ?mp=1.
+// Connection foundation only — connect two peers, measure RTT, run the cross-engine
+// determinism probe. No gameplay. Available in production builds so it can be tested
+// on real devices against the deployed signaling function (lazy-loaded so the netcode
+// never ships in the normal play path).
+if (new URLSearchParams(window.location.search).get('mp') === '1') {
+  void import('./net/MultiplayerTestUI').then((m) => m.mountMultiplayerTest(app));
+}
+
 // TEST-ONLY screen hook (DEV builds ONLY). `import.meta.env.DEV` is false in the
 // production `vite build`, so this whole block is dead-code-eliminated from the
 // shipped bundle — a real user can never spoof a screen with fabricated data. It

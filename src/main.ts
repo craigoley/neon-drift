@@ -57,6 +57,7 @@ import {
   PowerupKind,
   RANKS,
   scoringFor,
+  slowMoFor,
   SLALOM_FX,
   STARTER_CAR_ID,
   TIMESTEP,
@@ -199,7 +200,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     const carId = resolvePlayCarId();
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
     // Fresh random seed each run → a genuinely different course every time.
-    startRun(game, handlingFor(carId), missions.startBiome(), playSeed(), scoringFor(carId));
+    startRun(game, handlingFor(carId), missions.startBiome(), playSeed(), scoringFor(carId), GameMode.Classic, slowMoFor(carId));
   },
   // OPP-09 / Daily Slalom: start TODAY'S daily challenge — same fixed seed all day
   // (replayable). mode='dailySlalom' makes the sim a constant-speed, gates-only
@@ -208,7 +209,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   onPlayDaily: () => {
     audio.setMuted(false);
     const carId = resolvePlayCarId();
-    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), GameMode.DailySlalom);
+    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), GameMode.DailySlalom, slowMoFor(carId));
   },
   onPause: () => {
     pause(game);

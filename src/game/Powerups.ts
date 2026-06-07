@@ -14,12 +14,14 @@
 
 import { aabbOverlap, clamp, lerp } from '../utils/math';
 import {
+  BASE_SLOWMO,
   POWERUPS,
   POWERUP_DEFS,
   POWERUP_ORDER,
   PowerupKind,
   ROAD,
   VEHICLE,
+  type CarSlowMo,
   type PowerupDef,
 } from '../utils/constants';
 import { roadCenterAt } from './Road';
@@ -47,9 +49,17 @@ export interface PowerupEffects {
   shield: boolean;
   /** Post-shield invulnerability window (s) — crashes are ignored while > 0. */
   invulnTimer: number;
-  /** Banked SLOW-MO charges (0..POWERUPS.slowMoMaxCharges). Collecting a slow-mo
-   *  pickup adds one (capped); the DEPLOY control spends one to start a slow-mo. */
+  /** Banked SLOW-MO charges (0..slowMoCap). Collecting a slow-mo pickup adds one
+   *  (capped at the per-car slowMoCap); the DEPLOY control spends one. */
   slowMoCharges: number;
+  /** Per-car bank CAP for slow-mo charges (PR2). Set at run start from the
+   *  selected car's slowMo profile (BASE_SLOWMO.cap when unset). Travels on the
+   *  effects so applyEffect/deploy stay self-contained and per-car automatically. */
+  slowMoCap: number;
+  /** Per-car slow-mo STRENGTH (PR2): the sim time-scale applied while a deployed
+   *  charge runs (LOWER = stronger slow). Set at run start from the car's slowMo
+   *  profile (BASE_SLOWMO.timeScale when unset); read by powerupTimeScale. */
+  slowMoTimeScale: number;
   /** SLOW-MO remaining (s) on the currently-deployed charge. */
   slowMoTimer: number;
   /** SCORE-BOOST remaining (s). */
@@ -77,19 +87,37 @@ export interface PowerupState {
   collected: number;
 }
 
+/** Fresh effects. The slow-mo cap/strength default to BASE_SLOWMO (the uniform PR1
+ *  baseline); a run overrides them per-car via createPowerupState's `slowMo` arg. */
 export function createPowerupEffects(): PowerupEffects {
-  return { shield: false, invulnTimer: 0, slowMoCharges: 0, slowMoTimer: 0, scoreBoostTimer: 0, magnetTimer: 0 };
+  return {
+    shield: false,
+    invulnTimer: 0,
+    slowMoCharges: 0,
+    slowMoCap: BASE_SLOWMO.cap,
+    slowMoTimeScale: BASE_SLOWMO.timeScale,
+    slowMoTimer: 0,
+    scoreBoostTimer: 0,
+    magnetTimer: 0,
+  };
 }
 
-export function createPowerupState(seed: number): PowerupState {
+/** Build the pickup pool + effects for a run. `slowMo` is the selected car's
+ *  slow-mo identity (PR2) — its cap/strength are stamped onto the effects so the
+ *  whole slow-mo loop is per-car without threading the profile through every call.
+ *  Defaults to BASE_SLOWMO so existing callers/tests get the uniform baseline. */
+export function createPowerupState(seed: number, slowMo: CarSlowMo = BASE_SLOWMO): PowerupState {
   const pool: Pickup[] = [];
   for (let i = 0; i < POWERUPS.poolSize; i++) {
     pool.push({ active: false, id: -1, kind: PowerupKind.Shield, lateral: 0, laneOffset: 0, distance: 0 });
   }
+  const effects = createPowerupEffects();
+  effects.slowMoCap = slowMo.cap;
+  effects.slowMoTimeScale = slowMo.timeScale;
   return {
     pool,
     rng: new Rng((seed ^ POWERUPS.rngSalt) >>> 0),
-    effects: createPowerupEffects(),
+    effects,
     sinceSpawn: 0,
     nextId: 0,
     spawned: 0,
@@ -217,10 +245,10 @@ function applyEffect(effects: PowerupEffects, def: PowerupDef): void {
       effects.shield = true;
       break;
     case PowerupKind.SlowMo:
-      // Slow-mo BANKS instead of firing on pickup: stash a charge (capped) for
-      // the player to DEPLOY on demand. Covers milestone-granted slow-mo too,
-      // since grantPowerup routes through here.
-      effects.slowMoCharges = Math.min(effects.slowMoCharges + 1, POWERUPS.slowMoMaxCharges);
+      // Slow-mo BANKS instead of firing on pickup: stash a charge (capped at the
+      // PER-CAR slowMoCap) for the player to DEPLOY on demand. Covers milestone-
+      // granted slow-mo too, since grantPowerup routes through here.
+      effects.slowMoCharges = Math.min(effects.slowMoCharges + 1, effects.slowMoCap);
       break;
     case PowerupKind.ScoreBoost:
       effects.scoreBoostTimer = def.duration;
@@ -276,9 +304,11 @@ export function tickEffects(effects: PowerupEffects, dt: number): PowerupEffects
   return effects;
 }
 
-/** Sim time scale from the active effects (SLOW-MO). 1 = normal. */
+/** Sim time scale from the active effects (SLOW-MO). 1 = normal. While a deployed
+ *  charge runs, returns the PER-CAR strength (slowMoTimeScale) — lower = a stronger
+ *  slow. (Reuses the existing simDt time-scale seam; no new mechanism.) */
 export function powerupTimeScale(effects: PowerupEffects): number {
-  return effects.slowMoTimer > 0 ? POWERUP_DEFS.slowmo.timeScale : 1;
+  return effects.slowMoTimer > 0 ? effects.slowMoTimeScale : 1;
 }
 
 /** Score-gain multiplier from the active effects (SCORE-BOOST). 1 = normal. */

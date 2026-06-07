@@ -424,6 +424,24 @@ body,
   text-shadow: none;
 }
 
+/* Slow-mo line (PR2) — under the scoring line, tinted the slow-mo neon green so it
+   reads as the SLOW-MO↔agility tradeoff, distinct from the cyan scoring line. */
+.shell-car-slowmo {
+  min-height: 1em;
+  margin: 1px 0 0;
+  font-size: clamp(11px, 2.8vw, 14px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #39ff14;
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
+  opacity: 0.92;
+}
+.shell-carpicker.locked .shell-car-slowmo {
+  opacity: 0.4;
+  color: #7a9aa0;
+  text-shadow: none;
+}
+
 /* Locked-car requirement line (hidden/empty for unlocked cars). */
 .shell-car-lock {
   min-height: 1.2em;

@@ -9,6 +9,10 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
+  // Generous per-test timeout: the menu spec drives many interactions against the
+  // Vite DEV server, whose first-request lazy compile is slow under parallel
+  // workers (a cold start can push a heavy test past the 30s default).
+  timeout: 60_000,
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:4173',

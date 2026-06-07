@@ -1,0 +1,45 @@
+name: E2E (smoke)
+
+# GATED browser smoke (L2). Playwright drives a real Chromium against the app to
+# catch blank-screen / visual-boot bugs that the pure Vitest suite can't see.
+# Browser jobs are slow, so this NEVER blocks the fast per-PR lint/test/build
+# checks (in ci.yml). It runs nightly, on manual dispatch, or on a PR explicitly
+# labelled `e2e`.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 6 * * *' # nightly (06:00 UTC)
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: Playwright smoke
+    # Non-PR events always run; PR events only when the `e2e` label is present.
+    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Chromium + its OS deps. Pinned to chromium only (the smoke needs one engine).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e
+      # Surface the report/traces on failure for debugging.
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

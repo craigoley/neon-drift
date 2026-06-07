@@ -36,10 +36,32 @@ export class VehicleRenderer {
     this.car.applyCar(car);
   }
 
-  /** Mirror pure state onto the transform. Roll leans the chassis into the steer
-   *  for feel; the outer group carries the lateral position. */
-  sync(state: VehicleState): void {
+  /** Re-style as the translucent rival ghost (PR: rival-ghost). Keeps the car's
+   *  silhouette; overrides colours + opacity. */
+  makeGhost(): void {
+    this.car.applyGhostStyle();
+  }
+
+  /** Fade the ghost once its recording ends. */
+  markEnded(): void {
+    this.car.setGhostEnded();
+  }
+
+  /** Show / hide (e.g. hide the ghost when not racing one). */
+  setVisible(visible: boolean): void {
+    this.group.visible = visible;
+  }
+
+  /**
+   * Mirror pure state onto the transform. Roll leans the chassis into the steer
+   * for feel; the outer group carries the lateral position. `forwardOffset` shifts
+   * the car along z (world-units, same mapping as traffic: ahead = -z) — 0 for the
+   * player (screen-fixed), and `-(ghostDistance - playerDistance)` for the ghost so
+   * it appears ahead/behind on the SAME course by how far apart the two runs are.
+   */
+  sync(state: VehicleState, forwardOffset = 0): void {
     this.group.position.x = state.lateral;
+    this.group.position.z = forwardOffset;
 
     const chassis = this.car.chassis;
     chassis.rotation.z = clamp(-state.lateralVel / CAR_VIS.rollReference, -1, 1) * CAR_VIS.maxRoll;

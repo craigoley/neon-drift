@@ -90,7 +90,7 @@ test('settings: sound + Retro FX toggles flip their ON/OFF readout', async ({ pa
   await page.locator('.shell-settings-open').click();
   await expect(page.locator('.shell-settings')).toBeVisible();
 
-  for (const [btn, value] of [['.shell-toggle:not(.shell-toggle-fx)', '.shell-toggle-value'], ['.shell-toggle-fx', '.shell-fx-value']] as const) {
+  for (const [btn, value] of [['.shell-toggle-sound', '.shell-toggle-value'], ['.shell-toggle-fx', '.shell-fx-value']] as const) {
     const before = (await page.locator(value).textContent())?.trim();
     expect(before === 'ON' || before === 'OFF', `${value} reads ON/OFF`).toBe(true);
     await page.locator(btn).click();

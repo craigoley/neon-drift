@@ -104,7 +104,7 @@ test('settings: sound toggle persists to localStorage and survives a reload', as
   await boot(page);
   await page.locator('.shell-settings-open').click();
   const before = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}').soundEnabled ?? true, SETTINGS_KEY);
-  await page.locator('.shell-toggle:not(.shell-toggle-fx)').click();
+  await page.locator('.shell-toggle-sound').click();
   const after = await page.evaluate((k) => JSON.parse(localStorage.getItem(k) ?? '{}').soundEnabled, SETTINGS_KEY);
   expect(after, 'soundEnabled flipped + persisted').toBe(!before);
 

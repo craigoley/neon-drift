@@ -22,6 +22,9 @@ export interface Settings {
   /** "Retro FX" off → disables the cinematic post-FX pass (aberration / scanlines
    *  / grain / vignette) for a guaranteed-cheap fallback on weaker GPUs. */
   lowFx: boolean;
+  /** "Rival Ghost" on → race a translucent replay of your best run for the mode.
+   *  Off by default so the seed/course behaviour is unchanged until opted in. */
+  ghostRace: boolean;
   // Future (not built this PR): difficulty?: 'chill' | 'normal' | 'intense';
 }
 
@@ -29,6 +32,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   selectedCarId: DEFAULT_CAR_ID,
   lowFx: false,
+  ghostRace: false,
 };
 
 /** The slice of the Storage API this module needs. */
@@ -90,6 +94,8 @@ export class SettingsStore {
             ? parsed.selectedCarId
             : DEFAULT_SETTINGS.selectedCarId,
         lowFx: typeof parsed.lowFx === 'boolean' ? parsed.lowFx : DEFAULT_SETTINGS.lowFx,
+        ghostRace:
+          typeof parsed.ghostRace === 'boolean' ? parsed.ghostRace : DEFAULT_SETTINGS.ghostRace,
       };
     } catch {
       return { ...DEFAULT_SETTINGS };

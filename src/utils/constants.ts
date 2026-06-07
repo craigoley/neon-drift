@@ -1435,6 +1435,29 @@ export const DAILY_HISTORY_SIZE = 7;
 /** localStorage key for player settings (sound, selected car, future toggles). */
 export const SETTINGS_STORAGE_KEY = 'neon-drift.settings';
 
+/** localStorage key for the RIVAL GHOST recordings (best input-replay per mode). */
+export const GHOST_STORAGE_KEY = 'neon-drift.ghost';
+
+/**
+ * Rival ghost (input-replay) tuning. The ghost records a run's per-frame intents +
+ * seed and re-runs the pure sim in lockstep to reproduce it exactly (leans on the
+ * #73 determinism guarantee). Visual-only here — no gameplay/collision (a phantom).
+ */
+export const GHOST = {
+  /** Translucent ghost-car colours (a cool, clearly-not-the-player look). */
+  bodyColor: 0x223355,
+  glowColor: 0x88ccff,
+  accentColor: 0x88ccff,
+  /** Opacities for the ghost car's materials (1 = opaque). Low = phantom. */
+  bodyOpacity: 0.3,
+  edgeOpacity: 0.45,
+  /** Opacity the ghost fades to once its recording ends (still faintly visible). */
+  endedOpacity: 0.15,
+  /** Safety cap on recorded frames (~10 min at 60Hz) — bounds memory/storage for a
+   *  pathological never-ending run. A normal run is far shorter. */
+  maxFrames: 36000,
+} as const;
+
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
 

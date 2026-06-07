@@ -8,7 +8,7 @@
  */
 
 import './style.css';
-import { createGameState, GameMode, isSlalom, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
+import { createGameState, type GameState, GameMode, isSlalom, pause, Phase, resume, returnToMenu, startRun, update } from './game/GameState';
 import { nearMissTier } from './game/Scoring';
 import { normalizedSpeed } from './game/Vehicle';
 import { Controls } from './input/Controls';
@@ -34,6 +34,17 @@ import { Shell } from './ui/Shell';
 import { LeaderboardStore, type RunPlacement } from './state/Leaderboard';
 import { DailyStore, type DailyResult } from './state/DailyStore';
 import { dailyDateKey, dailySeed } from './utils/daily';
+import { GhostStore } from './state/GhostStore';
+import {
+  buildRecording,
+  createGhostState,
+  createRecordingBuffer,
+  deploySetOf,
+  recordFrame,
+  type GhostRecording,
+  type RecordingBuffer,
+} from './game/Replay';
+import { createIntent } from './game/Input';
 import { SettingsStore } from './state/Settings';
 import { ProgressStore } from './state/Progress';
 import { unlockProgress } from './state/Unlocks';
@@ -46,6 +57,7 @@ import {
   BIOMES,
   carById,
   cssHex,
+  GHOST,
   handlingFor,
   JUICE,
   POSTFX,
@@ -144,6 +156,11 @@ if (!progress.isUnlocked(settings.get('selectedCarId'))) {
 // Seed the renderer with the persisted car so the initial silhouette + colours
 // are correct from the first frame (no flash of the base shape).
 const vehicle = new VehicleRenderer(scene.scene, carById(settings.get('selectedCarId')));
+// RIVAL GHOST: a SECOND translucent car, drawn from a SECOND sim state replayed in
+// lockstep with the live run (input-replay — see game/Replay.ts). Built once;
+// restyled to the recorded car's silhouette + ghost look at each race start.
+const ghostRenderer = new VehicleRenderer(scene.scene);
+ghostRenderer.setVisible(false);
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic
@@ -171,6 +188,9 @@ const leaderboard = new LeaderboardStore();
 // the leaderboard (fixed per-date seed, not comparable to random runs).
 const daily = new DailyStore();
 
+// Rival-ghost recordings: the best input-replay per mode (classic / daily).
+const ghosts = new GhostStore();
+
 // Front-end shell (start / settings / car picker / crash overlays).
 const canonicalUrl = window.location.origin + window.location.pathname;
 // The car-picker 3D preview's renderer — created when the picker opens, disposed
@@ -189,6 +209,49 @@ const resolvePlayCarId = (): string => {
   }
   return carId;
 };
+// --- Rival ghost run-state (spans the frame loop) -------------------------------
+let recBuf: RecordingBuffer = createRecordingBuffer(); // the live run's recorded intents
+let ghostGame: GameState | null = null; // the replaying ghost sim (null = not racing one)
+let ghostRec: GhostRecording | null = null;
+let ghostDeploySet = new Set<number>();
+let ghostFrame = 0;
+let ghostActive = false; // still feeding recorded intents (false once the recording ends)
+let ghostBeaten = false; // latched the moment the live run out-scores the ghost's final score
+const ghostScratchIntent = createIntent(); // reused each sub-step (no per-frame allocation)
+
+/**
+ * Set up recording + (optionally) the rival ghost for a starting run, returning the
+ * SEED the live run should use. When racing a ghost we run on ITS seed so both race
+ * the SAME course: classic adopts the ghost's recorded seed; daily already shares
+ * today's fixed seed, so we only race a ghost recorded on today's seed (a stale
+ * ghost from another day is skipped). Sets module run-state only.
+ */
+function setupRunGhost(mode: GameMode, defaultSeed: number): number {
+  recBuf = createRecordingBuffer();
+  ghostGame = null;
+  ghostRec = null;
+  ghostActive = false;
+  ghostBeaten = false;
+  ghostRenderer.setVisible(false);
+
+  const rec = settings.get('ghostRace') ? ghosts.get(mode) : null;
+  if (!rec || (mode === GameMode.DailySlalom && rec.seed !== defaultSeed)) return defaultSeed;
+
+  const liveSeed = mode === GameMode.Classic ? rec.seed : defaultSeed;
+  ghostRec = rec;
+  ghostDeploySet = deploySetOf(rec);
+  ghostFrame = 0;
+  ghostActive = true;
+  ghostGame = createGhostState(rec, {
+    handling: handlingFor(rec.carId),
+    scoring: scoringFor(rec.carId),
+    slowMo: slowMoFor(rec.carId),
+  });
+  ghostRenderer.applyCar(carById(rec.carId)); // the recorded car's silhouette...
+  ghostRenderer.makeGhost(); // ...restyled as the translucent phantom
+  return liveSeed;
+}
+
 const shell = new Shell(app, settings, leaderboard, audio, {
   isTouch,
   shareUrl: canonicalUrl,
@@ -199,8 +262,10 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     audio.setMuted(false); // a fresh run is never muted (defensive)
     const carId = resolvePlayCarId();
     // The chosen starting biome is a cosmetic mission/rank reward (visual only).
-    // Fresh random seed each run → a genuinely different course every time.
-    startRun(game, handlingFor(carId), missions.startBiome(), playSeed(), scoringFor(carId), GameMode.Classic, slowMoFor(carId));
+    // Fresh random seed each run — UNLESS racing the ghost, which adopts the ghost's
+    // recorded seed so both run the same course (setupRunGhost returns the seed).
+    const seed = setupRunGhost(GameMode.Classic, playSeed());
+    startRun(game, handlingFor(carId), missions.startBiome(), seed, scoringFor(carId), GameMode.Classic, slowMoFor(carId));
   },
   // OPP-09 / Daily Slalom: start TODAY'S daily challenge — same fixed seed all day
   // (replayable). mode='dailySlalom' makes the sim a constant-speed, gates-only
@@ -209,7 +274,10 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   onPlayDaily: () => {
     audio.setMuted(false);
     const carId = resolvePlayCarId();
-    startRun(game, handlingFor(carId), missions.startBiome(), dailySeed(new Date()), scoringFor(carId), GameMode.DailySlalom, slowMoFor(carId));
+    // Daily seed is fixed for the day; setupRunGhost races a ghost only if it was
+    // recorded on THIS seed (today), and returns that same seed.
+    const seed = setupRunGhost(GameMode.DailySlalom, dailySeed(new Date()));
+    startRun(game, handlingFor(carId), missions.startBiome(), seed, scoringFor(carId), GameMode.DailySlalom, slowMoFor(carId));
   },
   onPause: () => {
     pause(game);
@@ -222,6 +290,8 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   onMenu: () => {
     returnToMenu(game); // fully reset — no stale run carries into the menu
     audio.setMuted(false);
+    ghostGame = null; // drop any rival ghost; the next run sets up its own
+    ghostRenderer.setVisible(false);
   },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
   // 3D car-picker preview (own light renderer; created on enter, disposed on
@@ -368,7 +438,34 @@ function frame(now: number): void {
     if (slowmo > 0) slowmo -= realDt;
     accumulator += realDt * simScale;
     while (accumulator >= TIMESTEP) {
+      // Only record / advance the ghost on REAL playing sub-steps — a crash mid-loop
+      // turns later sub-steps into no-ops (update() freezes once Crashed), which we
+      // must not record or step the ghost through.
+      const liveStep = game.phase === Phase.Playing;
+      // RECORD this sub-step's intent BEFORE update() consumes the deploy latch.
+      if (liveStep) recordFrame(recBuf, controls.intent);
       update(game, controls.intent, TIMESTEP);
+      // REPLAY the rival ghost in LOCKSTEP — one ghost step per live step, same dt,
+      // feeding the next recorded intent. Same seed + inputs ⇒ its exact run (#73).
+      if (liveStep && ghostActive && ghostGame && ghostRec) {
+        ghostScratchIntent.steer = ghostRec.steers[ghostFrame];
+        ghostScratchIntent.deploySlowMo = ghostDeploySet.has(ghostFrame);
+        update(ghostGame, ghostScratchIntent, TIMESTEP);
+        ghostFrame++;
+        if (ghostFrame >= ghostRec.steers.length) {
+          ghostActive = false; // recording exhausted — freeze + fade the ghost car
+          ghostRenderer.markEnded();
+        }
+        // Beat-the-ghost moment: the first instant the live score passes the ghost's
+        // FINAL score (you've out-scored its whole run). A phantom — no collision.
+        if (!ghostBeaten) {
+          const liveScore = isSlalom(game) ? game.slalomScore.score : game.score.score;
+          if (liveScore > ghostRec.score) {
+            ghostBeaten = true;
+            hud.showToast('GHOST BEATEN!', cssHex(GHOST.glowColor));
+          }
+        }
+      }
       nearMisses += game.lastEvents.nearMisses;
       nearMissClosest = Math.min(nearMissClosest, game.lastEvents.nearMissClosest ?? Infinity);
       if (game.lastEvents.gateThreaded) {
@@ -492,7 +589,23 @@ function frame(now: number): void {
       score: game.score.score,
       reachedMidnight: biomesSeenForDistance(game.distance) >= 2,
     });
+    // RIVAL GHOST: assemble this run's recording and save it as the mode's new
+    // ghost if it out-scored the stored one. Recorded on the seed actually played
+    // (game.seed) + the car used, so a future replay reproduces it exactly.
+    const ghostScore = isSlalom(game) ? game.slalomScore.score : game.score.score;
+    const recording = buildRecording(recBuf, {
+      seed: game.seed,
+      mode: game.mode,
+      carId: carIdNow,
+      score: ghostScore,
+      distance: game.distance,
+      date: Date.now(),
+    });
+    const becameGhost = ghosts.submit(recording);
     missionLines = [
+      // Surface the satisfying ghost moments first (only when a ghost was raced/set).
+      ...(ghostBeaten ? ['RIVAL GHOST BEATEN!'] : []),
+      ...(becameGhost && ghostRec ? ['NEW RIVAL GHOST SET'] : []),
       ...mission.completedMissions.map((l) => `MISSION COMPLETE: ${l}`),
       ...mission.rankUps.map((n) => `RANK UP: ${n}!`),
       ...mission.unlocked.map((u) => `UNLOCKED: ${u}`),
@@ -549,6 +662,13 @@ function frame(now: number): void {
   biomeView.apply(game.biome); // environment palette + stars + traffic tint follow the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);
+  // RIVAL GHOST: place the phantom on the SAME course offset by how far apart the
+  // two runs are (ahead = -z, same mapping as traffic). Visible only while playing.
+  // It non-interacting: a separate sim state, never read by the live sim.
+  if (ghostGame) {
+    ghostRenderer.setVisible(playing);
+    ghostRenderer.sync(ghostGame.vehicle, -(ghostGame.distance - game.distance));
+  }
   // Car light-trail: lengthens with speed. Fed 0 speed when not playing so it
   // fades out on the menu / pause / WIPEOUT screens.
   trail.update(

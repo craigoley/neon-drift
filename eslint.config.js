@@ -18,7 +18,7 @@ export default tseslint.config(
   },
   {
     // Tooling configs + Playwright e2e specs run under Node, not the browser.
-    files: ['*.config.{js,ts}', 'e2e/**/*.ts'],
+    files: ['*.config.{js,ts}', 'e2e/**/*.ts', 'api/**/*.ts'],
     languageOptions: {
       globals: { ...globals.node },
     },

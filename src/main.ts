@@ -161,14 +161,17 @@ if (!progress.isUnlocked(settings.get('selectedCarId'))) {
 // Seed the renderer with the persisted car so the initial silhouette + colours
 // are correct from the first frame (no flash of the base shape).
 const vehicle = new VehicleRenderer(scene.scene, carById(settings.get('selectedCarId')));
+if (settings.get('lowFx')) vehicle.setDetail('simple'); // honour persisted LOW quality at boot
 // RIVAL GHOST: a SECOND translucent car, drawn from a SECOND sim state replayed in
 // lockstep with the live run (input-replay — see game/Replay.ts). Built once;
 // restyled to the recorded car's silhouette + ghost look at each race start.
-const ghostRenderer = new VehicleRenderer(scene.scene);
+// Rival/ghost use the deliberately SIMPLER 'simple' silhouette (gfx PR2): distinct from
+// the hero player car at a glance + cheaper to render.
+const ghostRenderer = new VehicleRenderer(scene.scene, undefined, 'simple');
 ghostRenderer.setVisible(false);
 // LIVE 2P (MP-1 PR2): the remote player's car — a SOLID rival (its own car cosmetic,
 // not a translucent ghost), drawn from the remote GameState stepped in lockstep.
-const rivalRenderer = new VehicleRenderer(scene.scene);
+const rivalRenderer = new VehicleRenderer(scene.scene, undefined, 'simple');
 rivalRenderer.setVisible(false);
 // LIVE 2P (PR3-pt2): the finish line, drawn at the shared finish distance.
 const finishLine = new FinishLine(scene.scene);
@@ -350,7 +353,10 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   // Picker lock state: a persisted-unlocked car is null (selectable); otherwise
   // show its requirement + live progress. Monotonic — once earned, never locked.
   carLock: (carId) => (progress.isUnlocked(carId) ? null : unlockProgress(carId, progress.getStats())),
-  onLowFxChange: (lowFx) => post.setQuality(!lowFx),
+  onLowFxChange: (lowFx) => {
+    post.setQuality(!lowFx);
+    vehicle.setDetail(lowFx ? 'simple' : 'hero'); // LOW drops the player car to the cheap silhouette
+  },
   // MISSIONS panel data (read fresh each time the panel opens). All cosmetic —
   // nothing here gates the core run.
   missions: {

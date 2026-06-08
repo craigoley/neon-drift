@@ -34,7 +34,7 @@
  */
 
 import * as THREE from 'three';
-import { BASE_CAR_SHAPE, CAR_GEO, CAR_VIS, GHOST, PALETTE, carShape, type CarDef, type CarShape } from '../utils/constants';
+import { BASE_CAR_SHAPE, CAR_GEO, CAR_VIS, GHOST, PALETTE, carShape, type CarDef, type CarDetail, type CarShape } from '../utils/constants';
 
 /** A tapered hexahedron (lofted box): rear face wider than front, top inset. */
 function taperedHull(
@@ -130,20 +130,32 @@ export class CarMesh {
   private readonly bodyMat: THREE.MeshBasicMaterial;
   private readonly accentLineMat: THREE.LineBasicMaterial;
   private readonly groundGlowMat: THREE.MeshBasicMaterial;
+  /** HERO taillight bar — a bright additive emissive bar that catches the bloom. */
+  private readonly taillightMat: THREE.MeshBasicMaterial;
   /** Shape-independent ground-glow geometry (disposed only on full dispose). */
   private readonly groundGlowGeo: THREE.BufferGeometry;
   /** Geometry owned by the CURRENT silhouette — freed + replaced on a reshape. */
   private geometries: THREE.BufferGeometry[] = [];
   /** The shape the chassis geometry was last built for (skip rebuild if same). */
   private builtShape: CarShape;
+  /** Render detail the chassis was last built for ('hero' = player, 'simple' = rival). */
+  private builtDetail: CarDetail;
 
-  constructor(car?: CarDef) {
+  constructor(car?: CarDef, detail: CarDetail = 'hero') {
     this.bodyMat = new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple, side: THREE.DoubleSide });
     this.edgesMat = new THREE.LineBasicMaterial({ color: PALETTE.cyan });
     this.accentLineMat = new THREE.LineBasicMaterial({
       color: PALETTE.magenta,
       transparent: true,
       opacity: CAR_GEO.sideStrips.opacity,
+    });
+    this.taillightMat = new THREE.MeshBasicMaterial({
+      color: PALETTE.cyan,
+      transparent: true,
+      opacity: CAR_GEO.taillight.opacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      fog: false,
     });
     this.groundGlowMat = new THREE.MeshBasicMaterial({
       color: PALETTE.cyan,
@@ -166,16 +178,21 @@ export class CarMesh {
     groundGlow.position.y = CAR_GEO.groundGlow.y;
     this.group.add(groundGlow, this.chassis);
 
-    // Build the chassis for this car's silhouette, then apply its colours.
+    // Build the chassis for this car's silhouette + detail, then apply its colours.
     const shape = car ? carShape(car) : BASE_CAR_SHAPE;
     this.builtShape = shape;
-    this.build(shape);
+    this.builtDetail = detail;
+    this.applyGlowIntensity();
+    this.build(shape, detail);
     if (car) this.applyColours(car);
   }
 
-  /** Build the chassis (hull + cabin + wheels + strips) for a given silhouette.
-   *  Clears any previous chassis geometry first. */
-  private build(shape: CarShape): void {
+  /** Build the chassis for a silhouette + detail. HERO (player) = hull + cabin +
+   *  wheels + side strips + the bright taillight bar (the full glowing supercar).
+   *  SIMPLE (rival / LOW player) = the tapered hull wedge + its neon edges ONLY — a
+   *  stripped, schematic, cheaper silhouette that's clearly "the other car". Clears
+   *  any previous chassis geometry first. */
+  private build(shape: CarShape, detail: CarDetail): void {
     const width = CAR_VIS.width * shape.widthMul;
     const height = CAR_VIS.height * shape.heightMul;
     const length = CAR_VIS.length * shape.lengthMul;
@@ -186,12 +203,16 @@ export class CarMesh {
     const wheelR = height * G.wheels.radiusFraction * shape.wheelRadiusMul;
     const rideHeight = wheelR * G.wheels.rideHeightFraction;
 
-    // --- Lower hull (tapered wedge; nose width = shape.noseFraction of rear) ---
+    // --- Lower hull (tapered wedge; nose width = shape.noseFraction of rear) — both ---
     const hullH = height * G.hull.heightFraction;
     const rearHW = halfW * G.hull.rearWidthFraction;
     const frontHW = halfW * shape.noseFraction;
     const hullGeo = taperedHull(rearHW, frontHW, halfL, rideHeight, hullH, G.hull.topInsetFraction);
     this.addBody(hullGeo, 0);
+
+    // SIMPLE rival stops here: a clean low-poly neon wedge (no cabin/wheels/strips/
+    // taillight) — cheaper to render and never confusable with the hero.
+    if (detail !== 'hero') return;
 
     // --- Cabin (raked greenhouse, set back toward the rear) ---
     const hullTopY = rideHeight + hullH;
@@ -236,8 +257,17 @@ export class CarMesh {
       this.chassis.add(new THREE.LineSegments(stripGeo, this.accentLineMat));
     }
 
-    // NOTE: no headlights — forward light quads/cones regressed to opaque
-    // artifacts twice (#13, #42), so they were removed entirely.
+    // --- HERO taillight bar: a bright additive bar across the rear in the glow
+    // colour — the signature outrun rear light. A SOLID bright surface (unlike the
+    // 1px edge lines), so it catches the bloom (#95) and the player car reads as a
+    // glowing neon supercar. (Rear-only — headlights were cut, #13/#42.)
+    const T = G.taillight;
+    const barW = rearHW * 2 * T.widthFraction;
+    const barGeo = new THREE.BoxGeometry(barW, T.height, T.depth);
+    this.geometries.push(barGeo);
+    const taillight = new THREE.Mesh(barGeo, this.taillightMat);
+    taillight.position.set(0, height * T.yFraction, halfL);
+    this.chassis.add(taillight);
   }
 
   /** Add a body mesh + its neon edge outline (sharing bodyMat/edgesMat), both
@@ -263,6 +293,22 @@ export class CarMesh {
     this.geometries = [];
   }
 
+  /** Switch render detail (hero ⇄ simple) — e.g. the player drops to 'simple' on LOW
+   *  quality, or the rival is built 'simple'. Rebuilds the chassis only on a change. */
+  setDetail(detail: CarDetail): void {
+    if (detail === this.builtDetail) return;
+    this.builtDetail = detail;
+    this.applyGlowIntensity();
+    this.clearChassis();
+    this.build(this.builtShape, detail);
+  }
+
+  /** Hero gets a brighter underglow than the rival (visual focus on the player). */
+  private applyGlowIntensity(): void {
+    this.groundGlowMat.opacity =
+      CAR_GEO.groundGlow.opacity * (this.builtDetail === 'hero' ? CAR_GEO.heroGroundGlowMul : 1);
+  }
+
   /** Apply a car's cosmetic colours AND silhouette. Colours are always set;
    *  geometry is rebuilt only when the car's shape differs from the current one
    *  (car-switch / picker-cycle — never per frame). */
@@ -270,7 +316,7 @@ export class CarMesh {
     const shape = carShape(car);
     if (shape !== this.builtShape) {
       this.clearChassis();
-      this.build(shape);
+      this.build(shape, this.builtDetail);
       this.builtShape = shape;
     }
     this.applyColours(car);
@@ -308,6 +354,7 @@ export class CarMesh {
     this.bodyMat.color.setHex(car.cosmetic.body);
     this.edgesMat.color.setHex(car.cosmetic.glow);
     this.groundGlowMat.color.setHex(car.cosmetic.glow);
+    this.taillightMat.color.setHex(car.cosmetic.glow); // hero taillight tinted per car
     this.accentLineMat.color.setHex(car.cosmetic.accent);
   }
 
@@ -318,6 +365,7 @@ export class CarMesh {
     this.bodyMat.dispose();
     this.edgesMat.dispose();
     this.accentLineMat.dispose();
+    this.taillightMat.dispose();
     this.groundGlowMat.dispose();
   }
 }

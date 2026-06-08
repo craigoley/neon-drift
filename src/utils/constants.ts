@@ -824,7 +824,33 @@ export const CAR_GEO = {
     /** Opacity of the side accent line. */
     opacity: 0.9,
   },
+  /**
+   * HERO taillight bar (gfx PR2, player car only) — a bright emissive bar across the
+   * rear in the car's glow colour. This is the signature outrun/Testarossa rear light
+   * and, being a SOLID bright surface (not a 1px edge line), it catches the bloom
+   * (#95) strongly so the player car reads as a glowing neon supercar. Render-only.
+   */
+  taillight: {
+    /** Bar width as a fraction of the rear hull width. */
+    widthFraction: 0.86,
+    /** Bar thickness (world units, y). */
+    height: 0.11,
+    /** Bar depth (world units, z) — sits just proud of the rear face. */
+    depth: 0.1,
+    /** Bar centre height as a fraction of CAR_VIS.height (up the rear). */
+    yFraction: 0.62,
+    /** Emissive opacity (additive) — bright enough to bloom. */
+    opacity: 0.95,
+  },
+  /** HERO underglow: the player car's ground glow is brighter than the rival's
+   *  (visual focus on the hero). The simple (rival) build uses the base opacity. */
+  heroGroundGlowMul: 1.7,
 } as const;
+
+/** Car render detail: 'hero' = the full detailed glowing supercar (the PLAYER); 'simple'
+ *  = a stripped low-poly wedge (the RIVAL — distinct + cheaper, and the LOW-quality
+ *  fallback for the player). */
+export type CarDetail = 'hero' | 'simple';
 
 /** Traffic obstacle visual tuning (rendering only). */
 export const TRAFFIC_VIS = {

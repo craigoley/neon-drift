@@ -28,9 +28,37 @@ export interface StateSum {
   speed: number; // suspected ROOT: a sub-ULP transcendental drift surfaces here first
   trafficSince: number; // seconds since last obstacle spawn (drifts before the gate flips)
   powerupSince: number; // seconds since last pickup spawn
+  // Digests of the ACTIVE obstacle/powerup FIELD (kind + position) — order-independent.
+  // The detector was previously BLIND to per-obstacle layout (it only hashed rng/counts),
+  // which hid the "different obstacles, no DESYNC" bug. These make field divergence visible.
+  trafficField: number; // uint32 digest of active obstacles
+  powerupField: number; // uint32 digest of active pickups
   dist: number;
   lat: number;
   score: number;
+}
+
+/** Stable uint32 hash of a kind value (string enum or number). */
+function kindCode(kind: unknown): number {
+  const s = String(kind);
+  let c = 0;
+  for (let i = 0; i < s.length; i++) c = (Math.imul(c, 31) + s.charCodeAt(i)) | 0;
+  return c >>> 0;
+}
+
+/** Order-independent uint32 digest of an active field (commutative sum of per-item
+ *  hashes of kind + quantized distance + quantized lateral). Pool-slot order can
+ *  differ between peers without changing the digest; the FIELD content cannot. */
+function fieldDigest(items: ReadonlyArray<{ active: boolean; kind: unknown; distance: number; lateral: number }>): number {
+  let h = 0;
+  for (const o of items) {
+    if (!o.active) continue;
+    let k = Math.imul(kindCode(o.kind) + 1, 0x9e3779b1);
+    k ^= Math.imul((Math.round(o.distance * 16) | 0) >>> 0, 0x85ebca6b);
+    k ^= Math.imul((Math.round(o.lateral * 16) | 0) >>> 0, 0xc2b2ae35);
+    h = (h + (k >>> 0)) >>> 0; // commutative → order-independent
+  }
+  return h >>> 0;
 }
 
 /** Hash one sim's key state (everything in the suspected causal chain). */
@@ -43,6 +71,8 @@ export function stateSum(g: GameState): StateSum {
     speed: g.vehicle.speed,
     trafficSince: g.traffic.sinceSpawn,
     powerupSince: g.powerups.sinceSpawn,
+    trafficField: fieldDigest(g.traffic.pool),
+    powerupField: fieldDigest(g.powerups.pool),
     dist: g.distance,
     lat: g.vehicle.lateral,
     score: g.score.score,
@@ -75,6 +105,8 @@ const FIELDS: ReadonlyArray<{ key: string; exact: boolean; get: (s: StateSum) =>
   { key: 'powerupSpawned', exact: true, get: (s) => s.powerupSpawned },
   { key: 'trafficRng', exact: true, get: (s) => s.trafficRng },
   { key: 'powerupRng', exact: true, get: (s) => s.powerupRng },
+  { key: 'trafficField', exact: true, get: (s) => s.trafficField },
+  { key: 'powerupField', exact: true, get: (s) => s.powerupField },
   { key: 'dist', exact: false, get: (s) => s.dist },
   { key: 'lat', exact: false, get: (s) => s.lat },
   { key: 'score', exact: false, get: (s) => s.score },

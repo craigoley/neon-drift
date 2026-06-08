@@ -300,8 +300,8 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   // Biome is shifted by the cosmetic startBiome offset (visuals only — distance
   // and difficulty are untouched, so this never affects gameplay).
   updateBiome(state.biome, state.distance + state.startBiome * BIOME_CYCLE.span);
-  updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt, slalom);
-  updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt);
+  updateTraffic(state.traffic, state.rng, state.seed, state.distance, simDt, slalom, state.mpRace);
+  updatePickups(state.powerups, state.seed, state.distance, state.vehicle.lateral, simDt, state.mpRace);
 
   // Writes into the pre-allocated lastEvents object (no per-frame allocation).
   resolveTraffic(

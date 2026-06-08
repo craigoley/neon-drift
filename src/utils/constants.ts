@@ -350,6 +350,33 @@ export const GATE = {
 } as const;
 
 /**
+ * MP SHARED-COURSE spawning (2P race only). In a live race both cars must meet the
+ * IDENTICAL obstacle/powerup field, so MP replaces the path-dependent spawner
+ * (timer + spawn-ahead-of-this-car) with a POSITION-DETERMINISTIC one: the field is a
+ * pure function of (seed, distance band) via hashNoise, so any car at distance D sees
+ * the same thing regardless of speed/path. Single-player (classic/slalom) is UNTOUCHED
+ * — this is a separate code path gated on state.mpRace. Obstacles are STATIONARY in MP
+ * (movers-with-drift would need a shared frame clock — a follow-up); the kind mix still
+ * uses the per-distance weights so the course still ramps. Density here is MP's own
+ * (it intentionally does NOT reproduce classic's tuned time-based curve).
+ */
+export const MP_SPAWN = {
+  /** Distance band width (world units). One obstacle slot per band, spawned-or-not. */
+  bandWidth: 90,
+  /** Powerups are rarer → a wider band. */
+  powerupBandWidth: 220,
+  /** Per-band spawn probability for traffic: ramps with distance for difficulty. */
+  spawnProbBase: 0.62,
+  spawnProbRamp: 0.00006,
+  spawnProbMax: 0.9,
+  /** Per-band spawn probability for powerups (flat — they're an occasional reward). */
+  powerupSpawnProb: 0.5,
+  /** Clear opening (world units) at the very start so the race doesn't begin on top
+   *  of an obstacle (mirrors classic's spawn-ahead grace). */
+  startGrace: 420,
+} as const;
+
+/**
  * DAILY SLALOM mode tuning (Daily Slalom PR 1 — mode skeleton). The slalom is an
  * endless gates-only course at a CONSTANT speed (no distance ramp), so its feel
  * is set by two numbers: the fixed speed and the gate spacing. Reuses the GATE

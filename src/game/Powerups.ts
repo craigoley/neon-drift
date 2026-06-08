@@ -15,6 +15,7 @@
 import { aabbOverlap, clamp, lerp } from '../utils/math';
 import {
   BASE_SLOWMO,
+  MP_SPAWN,
   POWERUPS,
   POWERUP_DEFS,
   POWERUP_ORDER,
@@ -25,7 +26,7 @@ import {
   type PowerupDef,
 } from '../utils/constants';
 import { roadCenterAt } from './Road';
-import { Rng } from '../utils/rng';
+import { hashNoise, Rng } from '../utils/rng';
 import type { TrafficEvents } from './Scoring';
 
 export interface Pickup {
@@ -85,6 +86,8 @@ export interface PowerupState {
   culled: number;
   /** Telemetry: total pickups ever collected. */
   collected: number;
+  /** MP shared-course only: next distance band to consider (monotonic). Unused in SP. */
+  nextBand: number;
 }
 
 /** Fresh effects. The slow-mo cap/strength default to BASE_SLOWMO (the uniform PR1
@@ -123,6 +126,7 @@ export function createPowerupState(seed: number, slowMo: CarSlowMo = BASE_SLOWMO
     spawned: 0,
     culled: 0,
     collected: 0,
+    nextBand: 0,
   };
 }
 
@@ -175,13 +179,68 @@ function resolveLateral(p: Pickup, seed: number): number {
  * `state`; allocates nothing. `dt` here is the SIM dt (scaled by slow-mo) so
  * pickups slow with everything else.
  */
+/** A field hash in [0, 1) for a powerup band + slot. */
+function pBandHash01(seed: number, band: number, field: number): number {
+  return (hashNoise((seed ^ POWERUPS.rngSalt) >>> 0, band * 8 + field) + 1) * 0.5;
+}
+
+/** Deterministic powerup-kind pick (same weight table, rolled by hash). */
+function pickKindDet(seed: number, band: number): PowerupKind {
+  let roll = pBandHash01(seed, band, 1) * TOTAL_SPAWN_WEIGHT;
+  for (const k of POWERUP_ORDER) {
+    roll -= POWERUP_DEFS[k].spawnWeight;
+    if (roll < 0) return k;
+  }
+  return POWERUP_ORDER[POWERUP_ORDER.length - 1];
+}
+
+/**
+ * MP SHARED-COURSE powerups (2P race only) — position-deterministic, like traffic.
+ * The magnet PULL is skipped in MP (it mutates a pickup toward THIS car → would
+ * diverge the shared field); the magnet effect still applies on pickup. SP untouched.
+ */
+function updatePickupsShared(state: PowerupState, seed: number, playerDistance: number): PowerupState {
+  const cullLine = playerDistance - POWERUPS.cullBehind;
+  for (const p of state.pool) {
+    if (!p.active) continue;
+    p.lateral = resolveLateral(p, seed);
+    if (p.distance < cullLine) {
+      p.active = false;
+      state.culled++;
+    }
+  }
+  const aheadLimit = playerDistance + POWERUPS.spawnAhead;
+  while (state.nextBand * MP_SPAWN.powerupBandWidth <= aheadLimit) {
+    const b = state.nextBand++;
+    const d = b * MP_SPAWN.powerupBandWidth;
+    if (d >= MP_SPAWN.startGrace && d >= cullLine && pBandHash01(seed, b, 0) < MP_SPAWN.powerupSpawnProb) {
+      const slot = firstInactive(state);
+      if (slot) {
+        const spread = ROAD.halfWidth * POWERUPS.lateralSpread;
+        slot.active = true;
+        slot.id = state.nextId++;
+        slot.kind = pickKindDet(seed, b);
+        slot.distance = d + pBandHash01(seed, b, 2) * MP_SPAWN.powerupBandWidth;
+        slot.laneOffset = (pBandHash01(seed, b, 4) * 2 - 1) * spread;
+        slot.lateral = resolveLateral(slot, seed);
+        state.spawned++;
+      }
+    }
+  }
+  return state;
+}
+
 export function updatePickups(
   state: PowerupState,
   seed: number,
   playerDistance: number,
   playerLateral: number,
   dt: number,
+  mpRace = false,
 ): PowerupState {
+  // MP RACE: position-deterministic shared course (separate path). SP falls through.
+  if (mpRace) return updatePickupsShared(state, seed, playerDistance);
+
   const magnetOn = state.effects.magnetTimer > 0;
   const cullLine = playerDistance - POWERUPS.cullBehind;
 

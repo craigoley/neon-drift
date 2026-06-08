@@ -273,6 +273,7 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     window.removeEventListener('keydown', onKey);
     strip.remove();
     hud.remove();
+    bar.remove();
     toast.remove();
     card.remove();
     root.remove();

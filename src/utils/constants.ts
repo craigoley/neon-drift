@@ -1485,6 +1485,15 @@ export const NET = {
   probeFrames: 1200,
   /** Tolerance for float-derived probe fields (rngState is compared EXACTLY). */
   probeEpsilon: 1e-6,
+  /** INPUT-DELAY LOCKSTEP (MP-1 PR2). `lockstepDelay` (N): local input decided now
+   *  EXECUTES N fixed frames later, giving the packet N×(1000/60)≈67ms to reach the
+   *  peer (covers typical RTT; raise for worse links). `lockstepRedundancy` (K):
+   *  each message re-sends the last K inputs so a dropped packet self-heals from the
+   *  next (no retransmit). `desyncCheckFrames`: how often peers swap a state checksum
+   *  to catch any drift the determinism probe didn't (the safety net). */
+  lockstepDelay: 4,
+  lockstepRedundancy: 8,
+  desyncCheckFrames: 30,
 } as const;
 
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */

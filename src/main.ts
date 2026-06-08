@@ -52,6 +52,8 @@ import { MissionStore } from './state/MissionStore';
 import { missionProgress, startBiomeUnlockRank } from './state/Missions';
 import { biomesSeenForDistance } from './game/Biome';
 import { roadCenterAt } from './game/Road';
+import { MpRace } from './net/MpRace';
+import { mountMpRaceUI } from './net/MpRaceUI';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
 import {
@@ -162,6 +164,11 @@ const vehicle = new VehicleRenderer(scene.scene, carById(settings.get('selectedC
 // restyled to the recorded car's silhouette + ghost look at each race start.
 const ghostRenderer = new VehicleRenderer(scene.scene);
 ghostRenderer.setVisible(false);
+// LIVE 2P (MP-1 PR2): the remote player's car — a SOLID rival (its own car cosmetic,
+// not a translucent ghost), drawn from the remote GameState stepped in lockstep.
+const rivalRenderer = new VehicleRenderer(scene.scene);
+rivalRenderer.setVisible(false);
+let mpRace: MpRace | null = null; // non-null + isRacing ⇒ a live 2P race is running
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 // Biome view drives the environment palette + star brightness + a faint traffic
@@ -293,6 +300,22 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     audio.setMuted(false);
     ghostGame = null; // drop any rival ghost; the next run sets up its own
     ghostRenderer.setVisible(false);
+  },
+  // 2-PLAYER live race (MP-1 PR2): open the minimal Host/Join overlay; on connect +
+  // handshake it starts the lockstep race and hands the running MpRace back here.
+  onMultiplayer: () => {
+    audio.setMuted(false);
+    const carId = resolvePlayCarId();
+    mountMpRaceUI(app, {
+      game,
+      localCarId: carId,
+      onRacing: (race) => {
+        mpRace = race;
+        rivalRenderer.applyCar(carById(race.remoteCarId)); // remote's solid car
+        rivalRenderer.setVisible(true);
+      },
+      onExit: () => shell.showStart(),
+    });
   },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
   // 3D car-picker preview (own light renderer; created on enter, disposed on
@@ -442,7 +465,13 @@ function frame(now: number): void {
   let milestoneLabel: string | null = null;
   let biomeCelebrate = false;
   let objectiveLabel: string | null = null;
-  if (playing) {
+  const mpActive = mpRace?.isRacing ?? false;
+  if (mpActive) {
+    // LIVE 2P lockstep: schedule + send local input, then step BOTH sims for every
+    // frame whose inputs are known (stalls cleanly if the remote input is late).
+    // controls.endFrame() below clears the deploy edge, same as the SP path.
+    mpRace!.tick(controls.intent);
+  } else if (playing) {
     // Optional micro slow-mo after a near-miss: feed the sim scaled time.
     const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
     if (slowmo > 0) slowmo -= realDt;
@@ -559,7 +588,10 @@ function frame(now: number): void {
   if (rampBoosts > 0) screenFx.pulsePickup(cssHex(OBSTACLE_DEFS[ObstacleKind.Ramp].color));
   let unlockedNames = NO_UNLOCKS;
   let missionLines = NO_UNLOCKS;
-  if (crashed) {
+  // SP run-end recording (leaderboard / daily / missions / ghost) — SKIPPED during a
+  // live 2P race: MP race-end + win/lose is PR3 (a local crash here just freezes the
+  // local car while the remote keeps racing; no SP wipeout / leaderboard write).
+  if (crashed && !mpActive) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);
     screenFx.flashCrash();
@@ -680,6 +712,14 @@ function frame(now: number): void {
   if (ghostGame) {
     ghostRenderer.setVisible(playing);
     ghostRenderer.sync(ghostGame.vehicle, -(ghostGame.distance - game.distance));
+  }
+  // LIVE 2P rival: draw the remote player's car from the remote sim, offset by the
+  // distance gap (the race), same z-mapping. Phantom — no collision with the local car.
+  if (mpActive && mpRace?.remoteGame) {
+    rivalRenderer.setVisible(true);
+    rivalRenderer.sync(mpRace.remoteGame.vehicle, -(mpRace.remoteGame.distance - game.distance));
+  } else if (!mpActive) {
+    rivalRenderer.setVisible(false);
   }
   // Car light-trail: lengthens with speed. Fed 0 speed when not playing so it
   // fades out on the menu / pause / WIPEOUT screens.

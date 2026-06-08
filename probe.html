@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Neon Drift — cross-engine determinism probe</title>
+  </head>
+  <body>
+    <!--
+      Test-only page (served by the Vite dev server). Loads ONLY the pure sim + the
+      world checksum and exposes window.__determinismProbe — no canvas/WebGL, so it
+      runs headlessly in any JS engine (V8 / JavaScriptCore). See
+      src/dev/determinismProbe.ts + e2e-cross-engine/.
+    -->
+    <p id="probe-status">determinism probe loaded — call window.__determinismProbe(config)</p>
+    <script type="module" src="/src/dev/determinismProbe.ts"></script>
+  </body>
+</html>

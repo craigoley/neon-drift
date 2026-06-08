@@ -12,7 +12,8 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "test": "vitest run",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "e2e:cross-engine": "playwright test --config playwright.cross-engine.config.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

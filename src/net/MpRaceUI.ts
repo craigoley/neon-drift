@@ -16,6 +16,8 @@ export interface MpRaceUIOptions {
   localCarId: string;
   /** Called once the race is live, so the composition root starts stepping it. */
   onRacing: (race: MpRace) => void;
+  /** The local car took an MP crash-slowdown — for a crash cue (flash/thump). */
+  onLocalCrash?: () => void;
   /** Called when the user backs out before racing. */
   onExit: () => void;
 }
@@ -82,6 +84,7 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     onRtt: (ms: number) => {
       if (racingHandedOff) strip.textContent = `RACING · 2P · ${ms} ms`;
     },
+    onLocalCrash: () => opts.onLocalCrash?.(),
   };
 
   const begin = (isHost: boolean, code?: string) => {

@@ -35,6 +35,8 @@ export interface MpRaceEvents {
   onPhase?: (phase: MpPhase, info?: string) => void;
   onCode?: (code: string) => void;
   onRtt?: (ms: number) => void;
+  /** The LOCAL car took an MP crash-slowdown this tick — for a crash cue (flash/thump). */
+  onLocalCrash?: () => void;
 }
 
 export class MpRace {
@@ -133,8 +135,11 @@ export class MpRace {
   /** Start both sims on the shared seed once the handshake completes. */
   private begin(): void {
     if (this.racing || !this.localGame || !this.remoteCarId) return;
-    startRun(this.localGame, handlingFor(this.localCarId), 0, this.seed, scoringFor(this.localCarId), GameMode.Classic, slowMoFor(this.localCarId));
-    this.remoteGame = startRun(createGameState(this.seed), handlingFor(this.remoteCarId), 0, this.seed, scoringFor(this.remoteCarId), GameMode.Classic, slowMoFor(this.remoteCarId));
+    // mpRace=true (the 8th arg) on BOTH sims → a crash slows the car instead of ending
+    // the run, so neither stops producing intents (the lockstep never starves). Both
+    // peers simulate both cars with mpRace=true, so the slowdown is identical.
+    startRun(this.localGame, handlingFor(this.localCarId), 0, this.seed, scoringFor(this.localCarId), GameMode.Classic, slowMoFor(this.localCarId), true);
+    this.remoteGame = startRun(createGameState(this.seed), handlingFor(this.remoteCarId), 0, this.seed, scoringFor(this.remoteCarId), GameMode.Classic, slowMoFor(this.remoteCarId), true);
     this.racing = true;
     this.events.onPhase?.('racing');
   }
@@ -155,6 +160,7 @@ export class MpRace {
     for (const step of this.ls.drain()) {
       update(this.localGame, step.local, TIMESTEP);
       update(this.remoteGame, step.remote, TIMESTEP);
+      if (this.localGame.lastEvents.mpCrashed) this.events.onLocalCrash?.(); // crash-slowdown cue
       if (step.f % NET.desyncCheckFrames === 0) this.emitChecksum(step.f);
     }
 

@@ -314,6 +314,12 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         rivalRenderer.applyCar(carById(race.remoteCarId)); // remote's solid car
         rivalRenderer.setVisible(true);
       },
+      // Crash-slowdown cue: the local car hit something and slowed (the run continues).
+      onLocalCrash: () => {
+        screenFx.flashCrash();
+        scene.addShake(JUICE.nearMissShake[JUICE.nearMissShake.length - 1]);
+        if (audio.started) audio.playCrash();
+      },
       onExit: () => shell.showStart(),
     });
   },

@@ -195,6 +195,9 @@ export interface TrafficEvents {
    *  (lives remained) — drives the non-fatal miss sting. Set by GameState (slalom
    *  only); the FATAL miss instead sets `crashed` (the full crash). */
   gateMissed?: boolean;
+  /** True on the step an MP-race crash applied the slow penalty (the run continues —
+   *  see GameState/MP_CRASH). Drives the crash cue (flash/thump); MP-race only. */
+  mpCrashed?: boolean;
   /** Label of a distance MILESTONE hit this step (last one), else null — for the
    *  celebratory toast + fanfare. See Milestones.ts. */
   milestone?: string | null;

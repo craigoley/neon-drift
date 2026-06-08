@@ -407,12 +407,13 @@ if (import.meta.env.DEV) {
   const urlScreen = new URLSearchParams(window.location.search).get('screen');
   if (urlScreen) {
     const best = { distance: 3000, score: 12000 };
-    // A Map (not an object literal) so the user-controlled `urlScreen` is looked up
-    // via Map.get — which only returns explicitly-set entries. An object's
-    // `fixtures[urlScreen]` could dispatch to an inherited member
-    // (?screen=constructor / toString / __proto__); Map.get cannot, so there is no
-    // prototype-dispatch hole (clears CodeQL js/unvalidated-dynamic-method-call).
-    const fixtures = new Map<string, () => void>([
+    // The fixtures are a fixed list of [name, fn] pairs. We MATCH the user-controlled
+    // `urlScreen` against each known name (an equality guard) and call the matched —
+    // KNOWN — function. The invoked function is therefore NEVER selected by a user-
+    // controlled property/key lookup (no `obj[user]()` / `map.get(user)()`), so there
+    // is no prototype-dispatch hole and nothing dynamic to mis-dispatch (clears CodeQL
+    // js/unvalidated-dynamic-method-call).
+    const fixtures: ReadonlyArray<readonly [string, () => void]> = [
       // classic board placement + a chase target
       ['wipeout-rank', () =>
         shell.showCrash(8200, 1640, best, 4.5, [], [], { rank: 3, isCarBest: false, carId: 'pulse', target: { rank: 2, score: 9400, gap: 1200 } }, null)],
@@ -428,9 +429,15 @@ if (import.meta.env.DEV) {
       // daily-result card (new daily best)
       ['wipeout-daily', () =>
         shell.showCrash(6400, 1200, { distance: 1200, score: 6400 }, 1.0, [], [], null, { isBest: true, runs: 1, bestScore: 6400, bestDistance: 1200 })],
-    ]);
-    // Unknown / inherited-name values safely no-op (get returns undefined → ?.()).
-    fixtures.get(urlScreen)?.();
+    ];
+    // Match the requested screen against the known names; an unknown value matches
+    // nothing and safely no-ops. The called `run` is a KNOWN function, not a lookup.
+    for (const [name, run] of fixtures) {
+      if (name === urlScreen) {
+        run();
+        break;
+      }
+    }
   }
 }
 

@@ -93,6 +93,8 @@ export interface ShellOptions {
   missions?: MissionsPanel;
   /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
   onLowFxChange?: (lowFx: boolean) => void;
+  /** Open the 2-player live race entry (MP-1). Absent → no 2P RACE button. */
+  onMultiplayer?: () => void;
   /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
    *  the composition root react immediately if it wants (optional). */
   onGhostRaceChange?: (on: boolean) => void;
@@ -412,6 +414,10 @@ export class Shell {
       (this.opts.missions
         ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
         : '') +
+      // 2-PLAYER live race (MP-1) — only when the composition root wired it up.
+      (this.opts.onMultiplayer
+        ? `<button class="shell-btn shell-btn--ghost shell-mp-open" type="button">2P RACE</button>`
+        : '') +
       `<button class="shell-btn shell-btn--ghost shell-leaderboard-open" type="button">SCORES</button>` +
       `<button class="shell-btn shell-btn--ghost shell-settings-open" type="button">SETTINGS</button>` +
       `</div>` +
@@ -421,6 +427,10 @@ export class Shell {
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
     s.querySelector('.shell-daily-open')?.addEventListener('click', () => this.go('daily'));
     s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
+    s.querySelector('.shell-mp-open')?.addEventListener('click', () => {
+      this.hide(); // leave the menu; the MP overlay + race take over
+      this.opts.onMultiplayer?.();
+    });
     s.querySelector('.shell-leaderboard-open')!.addEventListener('click', () => this.go('leaderboard'));
     s.querySelector('.shell-settings-open')!.addEventListener('click', () => this.go('settings'));
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());

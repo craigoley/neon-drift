@@ -11,6 +11,7 @@
  */
 
 import { PeerConnection, type ConnState } from './PeerConnection';
+import { reportConnectError } from './connectionStatus';
 import { hasTurn } from './iceServers';
 import { compareProbe, probeChecksum, type ProbeChecksum } from './probe';
 
@@ -106,7 +107,10 @@ export function mountMultiplayerTest(parent: HTMLElement): void {
   const begin = (start: (p: PeerConnection) => Promise<void>) => {
     hostBtn.disabled = joinBtn.disabled = true;
     peer = new PeerConnection(events);
-    start(peer).catch((err) => setStatus('failed', String(err?.message ?? err)));
+    start(peer).catch((err) => {
+      setStatus('failed', reportConnectError(err)); // logs the detail, shows the human message
+      hostBtn.disabled = joinBtn.disabled = false; // allow a retry / fresh code
+    });
   };
 
   hostBtn.addEventListener('click', () => begin((p) => p.host()));

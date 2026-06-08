@@ -19,7 +19,11 @@
 
 import { Redis } from '@upstash/redis';
 
-const TTL_SECONDS = 600; // 10 min — a code is for an immediate connect, then dead
+// 30 min — long enough to "text a friend the code, they join when they reach their
+// device". Was 600s (10 min), which silently expired before a delayed join could
+// land. Stale codes linger a little longer in Redis, but at family volume that's
+// negligible (a handshake is a few SET/GETs against a 500K-cmd/mo free tier).
+const TTL_SECONDS = 1800;
 type Role = 'offer' | 'answer';
 
 function redis(): Redis | null {

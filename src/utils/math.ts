@@ -2,6 +2,8 @@
  * Pure math helpers. No dependencies, fully Node-testable.
  */
 
+import { detPow } from './detmath';
+
 /** Clamp `value` into the inclusive range [min, max]. */
 export function clamp(value: number, min: number, max: number): number {
   if (value < min) return min;
@@ -26,7 +28,7 @@ export function inverseLerp(a: number, b: number, value: number): number {
  * it would remain after one full second. Used for weighty steering friction.
  */
 export function decay(retainedPerSecond: number, dt: number): number {
-  return Math.pow(retainedPerSecond, dt);
+  return detPow(retainedPerSecond, dt); // deterministic (cross-engine) — NOT Math.pow
 }
 
 /** Smooth follow factor for lerping toward a target at `rate` per second. */

@@ -10,7 +10,7 @@
  * game/Replay.ts (the pure replay core); this is just storage.
  */
 
-import { GHOST, GHOST_STORAGE_KEY } from '../utils/constants';
+import { GHOST, GHOST_STORAGE_KEY, SIM_MATH_VERSION } from '../utils/constants';
 import { GameMode } from '../game/GameState';
 import type { GhostRecording } from '../game/Replay';
 
@@ -75,6 +75,10 @@ export class GhostStore {
     const r = rec as Partial<GhostRecording>;
     return (
       r.v === 1 &&
+      // Refuse a ghost from a DIFFERENT sim-math version: it's replayed in lockstep
+      // with the live sim, so old math would diverge from its own recorded path. An
+      // invalid ghost is simply not raced (graceful — the run just has no rival).
+      r.mathVersion === SIM_MATH_VERSION &&
       isFiniteNum(r.seed) &&
       (r.mode === GameMode.Classic || r.mode === GameMode.DailySlalom) &&
       typeof r.carId === 'string' &&

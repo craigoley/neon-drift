@@ -16,6 +16,7 @@
  */
 
 import { clamp } from '../utils/math';
+import { detSin } from '../utils/detmath';
 import {
   GATE,
   OBSTACLE_DEFS,
@@ -143,7 +144,7 @@ export function spawnInterval(distance: number): number {
  */
 export function pacingFactor(seed: number, distance: number): number {
   const phase = hashNoise(seed, PACING_PHASE_KEY) * Math.PI * 2;
-  return 1 + TRAFFIC.pacingAmplitude * Math.sin((distance / TRAFFIC.pacingWavelength) * Math.PI * 2 + phase);
+  return 1 + TRAFFIC.pacingAmplitude * detSin((distance / TRAFFIC.pacingWavelength) * Math.PI * 2 + phase);
 }
 
 /** Effective spawn interval: the density ramp modulated by the pacing wave, then
@@ -207,7 +208,7 @@ function firstInactive(state: TrafficState): Obstacle | null {
  */
 function resolveLateral(o: Obstacle, seed: number): number {
   const center = roadCenterAt(seed, o.distance);
-  const sway = o.sway > 0 ? Math.sin(o.swayPhase) * o.sway : 0;
+  const sway = o.sway > 0 ? detSin(o.swayPhase) * o.sway : 0;
   return clamp(center + o.laneOffset + sway, center - ROAD.halfWidth, center + ROAD.halfWidth);
 }
 

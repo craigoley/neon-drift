@@ -19,6 +19,7 @@ import { clamp } from '../utils/math';
 import { detSin } from '../utils/detmath';
 import {
   GATE,
+  MP_SPAWN,
   OBSTACLE_DEFS,
   OBSTACLE_ORDER,
   ObstacleKind,
@@ -76,6 +77,9 @@ export interface TrafficState {
   spawned: number;
   /** Telemetry: total obstacles ever culled. */
   culled: number;
+  /** MP shared-course only: next distance band to consider materializing (monotonic).
+   *  Unused by the single-player path. */
+  nextBand: number;
 }
 
 export function createTrafficState(): TrafficState {
@@ -96,7 +100,7 @@ export function createTrafficState(): TrafficState {
       passed: false,
     });
   }
-  return { pool, sinceSpawn: 0, nextId: 0, spawned: 0, culled: 0 };
+  return { pool, sinceSpawn: 0, nextId: 0, spawned: 0, culled: 0, nextBand: 0 };
 }
 
 /**
@@ -257,6 +261,98 @@ function configureForKind(slot: Obstacle, kind: ObstacleKind, rng: Rng): void {
  * behind the player, and spawns new ones on the difficulty cadence. Mutates and
  * returns `state`; allocates nothing.
  */
+// ---- MP shared-course (position-deterministic) spawning ---------------------------
+// Pure function of (seed, band): both cars in a race compute the IDENTICAL field, so
+// any car at distance D meets the same obstacle. Reuses kindWeightAt for the mix.
+
+/** A field hash in [0, 1) for a band + field slot (8 independent slots per band). */
+function bandHash01(seed: number, band: number, field: number): number {
+  return (hashNoise(seed, band * 8 + field) + 1) * 0.5;
+}
+
+/** Linear map of t∈[0,1) onto [min, max] — basic ops, cross-engine safe. */
+function lerpRange(t: number, min: number, max: number): number {
+  return min + (max - min) * t;
+}
+
+/** Per-band traffic spawn probability — ramps with distance for difficulty. */
+function bandSpawnProb(distance: number): number {
+  const ramped = Math.max(0, distance - TRAFFIC.rampStartDistance);
+  return clamp(MP_SPAWN.spawnProbBase + ramped * MP_SPAWN.spawnProbRamp, MP_SPAWN.spawnProbBase, MP_SPAWN.spawnProbMax);
+}
+
+/** Deterministic kind pick: same per-distance weight mix as classic, rolled by hash. */
+function pickKindDet(seed: number, band: number, distance: number): ObstacleKind {
+  let total = 0;
+  for (const k of OBSTACLE_ORDER) total += kindWeightAt(k, distance);
+  if (total <= 0) return ObstacleKind.Static;
+  let roll = bandHash01(seed, band, 1) * total;
+  for (const k of OBSTACLE_ORDER) {
+    roll -= kindWeightAt(k, distance);
+    if (roll < 0) return k;
+  }
+  return ObstacleKind.Static;
+}
+
+/** Materialize band `b`'s obstacle into a pool slot — STATIONARY (speed 0); kind/lane/
+ *  gate-opening all derived from (seed, b) so both peers produce the identical entry. */
+function materializeBand(slot: Obstacle, seed: number, b: number): void {
+  const distance = bandStart(b) + bandHash01(seed, b, 2) * MP_SPAWN.bandWidth;
+  const kind = pickKindDet(seed, b, distance);
+  slot.active = true;
+  slot.kind = kind;
+  slot.distance = distance;
+  slot.speed = 0; // stationary in MP (shared field — no per-car drift)
+  slot.sway = 0;
+  slot.swayPhase = 0;
+  slot.openingHalfWidth = 0;
+  slot.consumed = false;
+  slot.passed = false;
+  if (kind === ObstacleKind.Gate) {
+    const ohw = lerpRange(bandHash01(seed, b, 3), GATE.openingHalfWidthMin, GATE.openingHalfWidthMax);
+    slot.openingHalfWidth = ohw;
+    const room = Math.max(0, ROAD.halfWidth - ohw);
+    slot.laneOffset = lerpRange(bandHash01(seed, b, 4), -room, room);
+  } else {
+    const spread = ROAD.halfWidth * TRAFFIC.lateralSpread;
+    slot.laneOffset = lerpRange(bandHash01(seed, b, 4), -spread, spread);
+  }
+  slot.lateral = resolveLateral(slot, seed);
+}
+
+function bandStart(b: number): number {
+  return b * MP_SPAWN.bandWidth;
+}
+
+function updateTrafficShared(state: TrafficState, seed: number, playerDistance: number): TrafficState {
+  const cullLine = playerDistance - TRAFFIC.cullBehind;
+  // Obstacles are stationary; re-track the (shared, pure) road curve + cull behind.
+  for (const o of state.pool) {
+    if (!o.active) continue;
+    o.lateral = resolveLateral(o, seed);
+    if (o.distance < cullLine) {
+      o.active = false;
+      state.culled++;
+    }
+  }
+  // Materialize every band entering the spawn-ahead window. The spawn DECISION is pure
+  // (seed, band), so both cars materialize the identical set; the pool is just a cache.
+  const aheadLimit = playerDistance + TRAFFIC.spawnAhead;
+  while (bandStart(state.nextBand) <= aheadLimit) {
+    const b = state.nextBand++;
+    const d = bandStart(b);
+    if (d >= MP_SPAWN.startGrace && d >= cullLine && bandHash01(seed, b, 0) < bandSpawnProb(d)) {
+      const slot = firstInactive(state);
+      if (slot) {
+        slot.id = state.nextId++;
+        materializeBand(slot, seed, b);
+        state.spawned++;
+      }
+    }
+  }
+  return state;
+}
+
 export function updateTraffic(
   state: TrafficState,
   rng: Rng,
@@ -264,7 +360,12 @@ export function updateTraffic(
   playerDistance: number,
   dt: number,
   slalom = false,
+  mpRace = false,
 ): TrafficState {
+  // MP RACE: position-deterministic shared course (a SEPARATE path). Single-player
+  // (classic/slalom) falls through to the untouched path-dependent spawner below.
+  if (mpRace) return updateTrafficShared(state, seed, playerDistance);
+
   // Move + resolve lateral against the curve + cull.
   const cullLine = playerDistance - TRAFFIC.cullBehind;
   for (const o of state.pool) {

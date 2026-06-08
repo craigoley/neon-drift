@@ -98,6 +98,8 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     if (code) begin(false, code);
   });
   backBtn.addEventListener('click', () => {
+    race?.close();
+    strip.remove();
     root.remove();
     opts.onExit();
   });

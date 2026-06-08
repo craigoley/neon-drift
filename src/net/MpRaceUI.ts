@@ -9,6 +9,7 @@
 import { MpRace, type MpPhase, type MpRaceView } from './MpRace';
 import { reportConnectError } from './connectionStatus';
 import type { GameState } from '../game/GameState';
+import { CSS_PALETTE, MP_RACE } from '../utils/constants';
 
 export interface MpRaceUIOptions {
   /** The app's local GameState — bound + raced by MpRace (renderers read it). */
@@ -25,8 +26,8 @@ export interface MpRaceUIOptions {
   onExit: () => void;
 }
 
-const AHEAD = '#39ff14'; // green = you lead
-const BEHIND = '#ff3b5c'; // red = rival leads
+const AHEAD = CSS_PALETTE.ahead;
+const BEHIND = CSS_PALETTE.behind;
 const m = (d: number) => `${Math.round(d)}m`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, style: string, text?: string): HTMLElementTagNameMap[K] {
@@ -84,7 +85,7 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     toast.style.color = color;
     toast.style.opacity = '1';
     if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => (toast.style.opacity = '0'), 900);
+    toastTimer = setTimeout(() => (toast.style.opacity = '0'), MP_RACE.toastDurationMs);
   };
 
   // Winner / disconnect card — the race-over modal (Esc or MENU dismiss → leave race).
@@ -220,7 +221,12 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
   });
   backBtn.addEventListener('click', () => {
     race?.close();
+    if (toastTimer) clearTimeout(toastTimer);
+    window.removeEventListener('keydown', onKey);
     strip.remove();
+    hud.remove();
+    toast.remove();
+    card.remove();
     root.remove();
     opts.onExit();
   });

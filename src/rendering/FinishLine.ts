@@ -7,7 +7,7 @@
  */
 
 import * as THREE from 'three';
-import { PALETTE, ROAD } from '../utils/constants';
+import { FINISH_LINE_VIS, PALETTE, ROAD } from '../utils/constants';
 
 export class FinishLine {
   private readonly group = new THREE.Group();
@@ -15,22 +15,21 @@ export class FinishLine {
   private readonly mats: THREE.Material[] = [];
 
   constructor(scene: THREE.Scene) {
-    const width = ROAD.halfWidth * 2 + 2;
-    // A glowing magenta/cyan bar across the full road width, raised slightly.
-    const barGeo = new THREE.BoxGeometry(width, 0.4, 3);
-    const barMat = new THREE.MeshBasicMaterial({ color: PALETTE.magenta, transparent: true, opacity: 0.85, fog: true });
+    const F = FINISH_LINE_VIS;
+    const width = ROAD.halfWidth * 2 + F.roadExtension;
+    const barGeo = new THREE.BoxGeometry(width, F.barHeight, F.barDepth);
+    const barMat = new THREE.MeshBasicMaterial({ color: PALETTE.magenta, transparent: true, opacity: F.barOpacity, fog: true });
     const bar = new THREE.Mesh(barGeo, barMat);
-    bar.position.y = 0.2;
+    bar.position.y = F.barY;
     bar.frustumCulled = false;
     this.group.add(bar);
     this.geos.push(barGeo);
     this.mats.push(barMat);
 
-    // Two tall side pylons so the line reads as a gate from a distance.
     for (const side of [-1, 1]) {
-      const pyGeo = new THREE.BoxGeometry(0.8, 9, 0.8);
-      pyGeo.translate(0, 4.5, 0);
-      const pyMat = new THREE.MeshBasicMaterial({ color: PALETTE.cyan, transparent: true, opacity: 0.8, fog: true });
+      const pyGeo = new THREE.BoxGeometry(F.pylonWidth, F.pylonHeight, F.pylonWidth);
+      pyGeo.translate(0, F.pylonHeight / 2, 0);
+      const pyMat = new THREE.MeshBasicMaterial({ color: PALETTE.cyan, transparent: true, opacity: F.pylonOpacity, fog: true });
       const py = new THREE.Mesh(pyGeo, pyMat);
       py.position.x = side * (ROAD.halfWidth + 1);
       py.frustumCulled = false;

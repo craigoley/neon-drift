@@ -21,6 +21,8 @@ export const CSS_PALETTE = {
   cyan: '#00ffff',
   deepPurple: '#1a0033',
   accent: '#ff6600',
+  ahead: '#39ff14',
+  behind: '#ff3b5c',
 } as const;
 
 /** Fixed simulation timestep, in seconds (the game updates at 60 Hz). */
@@ -389,6 +391,20 @@ export const MP_RACE = {
    *  flip the leader, so a near-dead-heat gap jittering around 0 doesn't spam the
    *  overtake alert. */
   leadChangeDeadband: 3,
+  /** Duration (ms) the overtake/passed toast stays visible before fading. */
+  toastDurationMs: 900,
+} as const;
+
+/** Finish-line visual tuning (render-only — the actual finish is decided in MpRace). */
+export const FINISH_LINE_VIS = {
+  barHeight: 0.4,
+  barDepth: 3,
+  barY: 0.2,
+  barOpacity: 0.85,
+  pylonWidth: 0.8,
+  pylonHeight: 9,
+  pylonOpacity: 0.8,
+  roadExtension: 2,
 } as const;
 
 /**

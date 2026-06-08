@@ -9,7 +9,9 @@
  *   - OutputPass is LAST; it reads renderer.toneMapping / outputColorSpace /
  *     toneMappingExposure (set in SceneManager) and applies tone mapping + the
  *     sRGB transfer, so the cinematic pass must NOT do gamma itself.
- *   - Render via composer.render(), NEVER renderer.render().
+ *   - HIGH quality: render via composer.render() (bloom + cinematic + tone map).
+ *   - LOW quality: bypass the composer entirely and render via renderer.render()
+ *     (tone mapping + sRGB still apply from SceneManager; bloom/cinematic skipped).
  *
  * Performance: the four cinematic effects are combined into ONE fullscreen pass
  * (many separate passes tank mobile FPS). On touch, the bloom runs at reduced
@@ -178,13 +180,6 @@ export class PostProcessing {
   private setResolutionUniform(width: number, height: number): void {
     const pr = this.renderer.getPixelRatio();
     (this.cinematic.uniforms.uResolution.value as THREE.Vector2).set(width * pr, height * pr);
-  }
-
-  /** Enable/disable the cinematic pass (chromatic aberration / scanlines / grain /
-   *  vignette). When off, OutputPass becomes the last enabled pass and still renders
-   *  to screen, so the picture is unchanged minus the grade. */
-  setCinematicEnabled(enabled: boolean): void {
-    this.cinematic.enabled = enabled;
   }
 
   /**

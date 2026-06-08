@@ -350,7 +350,6 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   // Picker lock state: a persisted-unlocked car is null (selectable); otherwise
   // show its requirement + live progress. Monotonic — once earned, never locked.
   carLock: (carId) => (progress.isUnlocked(carId) ? null : unlockProgress(carId, progress.getStats())),
-  // "Retro FX" toggle from the settings panel → enable/disable the cinematic pass.
   onLowFxChange: (lowFx) => post.setQuality(!lowFx),
   // MISSIONS panel data (read fresh each time the panel opens). All cosmetic —
   // nothing here gates the core run.

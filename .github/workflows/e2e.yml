@@ -38,7 +38,7 @@ jobs:
       - run: npm run e2e
       # Surface the report/traces on failure for debugging.
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/

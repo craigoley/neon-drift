@@ -73,7 +73,13 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     } else if (p === 'stalled') {
       strip.textContent = 'waiting for opponent…';
     } else if (p === 'desynced') {
-      strip.textContent = `DESYNC${info ? ` · ${info}` : ''}`;
+      // Diagnostic: make the readout big + red + sticky so Craig can read the field +
+      // magnitude + frame mid-race without catching the console live.
+      strip.textContent = `⚠ DESYNC ${info ?? ''}`.trim();
+      strip.style.background = 'rgba(120,0,0,0.92)';
+      strip.style.color = '#ffd0d0';
+      strip.style.font = '700 15px ui-monospace,monospace';
+      strip.style.padding = '8px 14px';
     } else if (p === 'failed') {
       // Stage-aware connection failure (e.g. ICE/no-route). Show it + allow a retry.
       status.textContent = info ?? 'connection failed';

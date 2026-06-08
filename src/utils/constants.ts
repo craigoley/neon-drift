@@ -1496,6 +1496,23 @@ export const NET = {
   desyncCheckFrames: 30,
 } as const;
 
+/**
+ * MP-RACE crash rule (MP-1 PR3). In a live 2P race a crash SLOWS you down instead of
+ * ending the run — so a crashed player keeps driving + producing intents (the
+ * lockstep never starves) and both cars stay live. DETERMINISTIC + sim-level (gated
+ * to mpRace), so both peers compute the identical slowed trajectory from the same
+ * inputs. MP-only — single-player crash behaviour (classic single-death, slalom
+ * 3-lives) is unchanged. Playtest-tunable.
+ */
+export const MP_CRASH = {
+  /** Forward speed (world units/s) the car drops to on a crash; normal acceleration
+   *  then recovers it. Low = a real penalty, but the car keeps moving. */
+  crashSpeed: 18,
+  /** Invulnerability window (s) granted on a crash so the car clears the obstacle it
+   *  hit without instantly re-crashing (mirrors the shield/slalom i-frames). */
+  invuln: 0.9,
+} as const;
+
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
 

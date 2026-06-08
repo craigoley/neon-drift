@@ -43,7 +43,7 @@ import {
 } from './Powerups';
 import { createBiomeState, updateBiome, type BiomeState } from './Biome';
 import { createMilestoneState, updateMilestones, type MilestoneState } from './Milestones';
-import { BIOME_CYCLE, POWERUPS, PowerupKind, RAMP, SLALOM, VEHICLE } from '../utils/constants';
+import { BIOME_CYCLE, MP_CRASH, POWERUPS, PowerupKind, RAMP, SLALOM, VEHICLE } from '../utils/constants';
 
 /** Top-level run phase (erasable const-object, not a TS enum). */
 export const Phase = {
@@ -119,6 +119,11 @@ export interface GameState {
    *  root routes the run-end result to the daily store for 'dailySlalom' (it's
    *  today's fixed-seed daily), and the sim branches on it via isSlalom(). */
   mode: GameMode;
+  /** LIVE 2P RACE flag (MP-1 PR3). Distinct from mode (the race uses classic
+   *  physics): when true, a crash SLOWS the car (MP_CRASH) instead of ending the run,
+   *  so the lockstep never starves and both cars stay live. Sim-level + deterministic,
+   *  so both peers compute identically. False for all single-player runs. */
+  mpRace: boolean;
   /** Cosmetic starting-biome index (a mission/rank reward): shifts ONLY the
    *  biome visuals, never the distance/difficulty. 0 = default (Sunset). */
   startBiome: number;
@@ -146,6 +151,7 @@ export function createGameState(seed: number = DEFAULT_SEED): GameState {
     score: createScoreState(),
     slalomScore: createSlalomScoreState(),
     lives: SLALOM.lives,
+    mpRace: false,
     handling: BASE_HANDLING,
     scoring: BASE_SCORING,
     slowMo: BASE_SLOWMO,
@@ -169,6 +175,7 @@ export function startRun(
   scoring: CarScoring = state.scoring,
   mode: GameMode = GameMode.Classic,
   slowMo: CarSlowMo = state.slowMo,
+  mpRace = false,
 ): GameState {
   state.phase = Phase.Playing;
   state.seed = seed;
@@ -191,6 +198,7 @@ export function startRun(
   state.scoring = scoring;
   state.slowMo = slowMo;
   state.mode = mode;
+  state.mpRace = mpRace;
   state.startBiome = startBiome;
   state.runStats.shields = 0;
   state.runStats.slowMosDeployed = 0;
@@ -306,6 +314,7 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
   );
   state.lastEvents.collected = null;
   state.lastEvents.shieldBlocked = false;
+  state.lastEvents.mpCrashed = false; // one-step signal; set by the MP crash intercept below
   collectPickups(state.powerups, state.vehicle.lateral, state.distance, state.lastEvents);
   // Track shields collected this run (for the "collect N shields" mission).
   if (state.lastEvents.collected === PowerupKind.Shield) state.runStats.shields += 1;
@@ -376,6 +385,20 @@ export function update(state: GameState, intent: InputIntent, dt: number): GameS
       effects.invulnTimer = POWERUPS.shieldInvuln;
     }
     // else lives now 0 → leave `crashed` set so the run ends below (the 3rd miss).
+  }
+
+  // MP RACE crash rule (PR3): a crash SLOWS the car, it does NOT end the run — so the
+  // run keeps producing intents (the lockstep never starves) and both cars stay live.
+  // Deterministic + sim-level: drop to a low speed (normal accel recovers it), grant
+  // i-frames to clear the obstacle, reset the combo. Computed identically on both
+  // peers from the same inputs (both simulate both cars with mpRace=true). MP-only —
+  // classic single-death / slalom 3-lives are untouched (guarded by state.mpRace).
+  if (state.mpRace && state.lastEvents.crashed) {
+    state.lastEvents.crashed = false;
+    state.vehicle.speed = MP_CRASH.crashSpeed;
+    effects.invulnTimer = MP_CRASH.invuln;
+    resetCombo(state.score);
+    state.lastEvents.mpCrashed = true; // a one-step signal for the crash cue (render/audio)
   }
 
   if (state.lastEvents.crashed) {

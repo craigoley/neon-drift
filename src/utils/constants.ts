@@ -377,6 +377,21 @@ export const MP_SPAWN = {
 } as const;
 
 /**
+ * MP RACE rules (2P race completion — MP-1 PR3-pt2). Win = FIRST to the finish
+ * distance. The winner is decided in SHARED SIM TIME (the lowest frame at which a
+ * car's distance >= finishDistance) — both peers simulate both cars in lockstep, so
+ * they compute the identical result by construction (no UI check / no network race).
+ */
+export const MP_RACE = {
+  /** Finish line distance (world units). First car to reach it wins. Tunable. */
+  finishDistance: 10000,
+  /** Lead-change deadband (world units): the rival must be ahead by more than this to
+   *  flip the leader, so a near-dead-heat gap jittering around 0 doesn't spam the
+   *  overtake alert. */
+  leadChangeDeadband: 3,
+} as const;
+
+/**
  * DAILY SLALOM mode tuning (Daily Slalom PR 1 — mode skeleton). The slalom is an
  * endless gates-only course at a CONSTANT speed (no distance ramp), so its feel
  * is set by two numbers: the fixed speed and the gate spacing. Reuses the GATE

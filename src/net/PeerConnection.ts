@@ -14,6 +14,7 @@
 
 import { iceServers } from './iceServers';
 import { postSDP, pollSDP } from './signaling';
+import { ConnectError, consoleDetail, userMessage } from './connectionStatus';
 import { NET } from '../utils/constants';
 
 export type ConnState = 'idle' | 'signaling' | 'connecting' | 'connected' | 'failed' | 'closed';
@@ -44,6 +45,7 @@ export class PeerConnection {
   private heartbeat: ReturnType<typeof setInterval> | null = null;
   private readonly abort = new AbortController();
   private closed = false;
+  private connectedOnce = false; // distinguishes a never-connected ICE failure (no route) from a drop
   private readonly events: PeerEvents;
 
   constructor(events: PeerEvents = {}) {
@@ -51,8 +53,17 @@ export class PeerConnection {
     this.pc = new RTCPeerConnection({ iceServers: iceServers() });
     this.pc.onconnectionstatechange = () => {
       const s = this.pc.connectionState;
-      if (s === 'failed') this.setState('failed', 'peer connection failed');
-      else if (s === 'disconnected') this.setState('failed', 'peer disconnected');
+      if (s === 'failed' || s === 'disconnected') {
+        // Before we ever connected, a 'failed' ICE state means no candidate pair was
+        // found — the SDP swapped fine but no direct route exists (symmetric NAT →
+        // needs TURN). After connecting, it's just a dropped link.
+        if (this.connectedOnce) {
+          this.setState('failed', 'Connection lost.');
+        } else {
+          console.error(consoleDetail('no-route'));
+          this.setState('failed', userMessage('no-route'));
+        }
+      }
     };
   }
 
@@ -66,17 +77,17 @@ export class PeerConnection {
     await this.pc.setLocalDescription(offer);
     await this.iceComplete();
     await postSDP(code, 'offer', JSON.stringify(this.pc.localDescription));
-    const answer = await pollSDP(code, 'answer', this.abort.signal);
+    const answer = await pollSDP(code, 'answer', this.abort.signal, NET.hostWaitMs);
     this.setState('connecting', 'peer found — connecting');
-    await this.pc.setRemoteDescription(JSON.parse(answer) as RTCSessionDescriptionInit);
+    await this.applyRemote(answer);
   }
 
   /** JOIN: fetch the host's offer for the code, answer it, post the answer. */
   async join(code: string): Promise<void> {
     this.pc.ondatachannel = (e) => this.wireChannel(e.channel);
     this.setState('signaling', `joining ${code}`);
-    const offer = await pollSDP(code, 'offer', this.abort.signal);
-    await this.pc.setRemoteDescription(JSON.parse(offer) as RTCSessionDescriptionInit);
+    const offer = await pollSDP(code, 'offer', this.abort.signal, NET.joinFindMs);
+    await this.applyRemote(offer);
     const answer = await this.pc.createAnswer();
     await this.pc.setLocalDescription(answer);
     await this.iceComplete();
@@ -101,9 +112,26 @@ export class PeerConnection {
 
   // --- internals ---------------------------------------------------------------
 
+  /** Parse + apply the peer's SDP; a malformed payload is a distinct 'bad-sdp' stage
+   *  (not a generic exception that surfaces as "connecting failed"). */
+  private async applyRemote(sdp: string): Promise<void> {
+    let desc: RTCSessionDescriptionInit;
+    try {
+      desc = JSON.parse(sdp) as RTCSessionDescriptionInit;
+    } catch (e) {
+      throw new ConnectError('bad-sdp', `JSON.parse: ${String(e)}`);
+    }
+    try {
+      await this.pc.setRemoteDescription(desc);
+    } catch (e) {
+      throw new ConnectError('bad-sdp', `setRemoteDescription: ${String(e)}`);
+    }
+  }
+
   private wireChannel(dc: RTCDataChannel): void {
     this.dc = dc;
     dc.onopen = () => {
+      this.connectedOnce = true;
       this.setState('connected');
       this.startHeartbeat();
     };

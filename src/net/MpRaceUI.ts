@@ -7,6 +7,7 @@
  */
 
 import { MpRace, type MpPhase } from './MpRace';
+import { reportConnectError } from './connectionStatus';
 import type { GameState } from '../game/GameState';
 
 export interface MpRaceUIOptions {
@@ -73,6 +74,10 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
       strip.textContent = 'waiting for opponent…';
     } else if (p === 'desynced') {
       strip.textContent = `DESYNC${info ? ` · ${info}` : ''}`;
+    } else if (p === 'failed') {
+      // Stage-aware connection failure (e.g. ICE/no-route). Show it + allow a retry.
+      status.textContent = info ?? 'connection failed';
+      hostBtn.disabled = joinBtn.disabled = false;
     } else {
       status.textContent = info ? `${p} · ${info}` : p;
     }
@@ -92,7 +97,10 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     race = new MpRace(isHost, opts.localCarId, events);
     race.bindLocalGame(opts.game);
     const p = isHost ? race.host() : race.join(code ?? '');
-    p.catch((err) => (status.textContent = `failed: ${String(err?.message ?? err)}`));
+    p.catch((err) => {
+      status.textContent = reportConnectError(err); // logs the detail, returns the human message
+      hostBtn.disabled = joinBtn.disabled = false; // let them retry / host a fresh code
+    });
   };
 
   hostBtn.addEventListener('click', () => begin(true));

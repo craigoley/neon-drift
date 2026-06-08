@@ -29,7 +29,7 @@ type MpMsg =
   | { t: 'mp-input'; w: FrameInput[] }
   | { t: 'mp-sum'; sum: WorldSum };
 
-export type MpPhase = 'connecting' | 'handshaking' | 'racing' | 'stalled' | 'desynced';
+export type MpPhase = 'connecting' | 'handshaking' | 'racing' | 'stalled' | 'desynced' | 'failed';
 
 export interface MpRaceEvents {
   onPhase?: (phase: MpPhase, info?: string) => void;
@@ -63,7 +63,7 @@ export class MpRace {
     this.peer = new PeerConnection({
       onCode: (c) => this.events.onCode?.(c),
       onRtt: (ms) => this.events.onRtt?.(ms),
-      onState: (s) => this.onConnState(s),
+      onState: (s, info) => this.onConnState(s, info),
       onMessage: (m) => this.onMessage(m as MpMsg),
     });
   }
@@ -98,16 +98,17 @@ export class MpRace {
 
   // --- handshake ---------------------------------------------------------------
 
-  private onConnState(s: ConnState): void {
+  private onConnState(s: ConnState, info?: string): void {
     if (s === 'connected') {
       this.events.onPhase?.('handshaking');
       if (this.isHost) {
         this.seed = (Math.random() * 0x1_0000_0000) >>> 0; // host picks the shared seed
         this.send({ t: 'mp-hello', seed: this.seed, carId: this.localCarId });
       }
-    } else if (s === 'failed' || s === 'closed') {
+    } else if (s === 'failed') {
+      // The ICE/no-route message is already stage-aware (PeerConnection); forward it.
       this.racing = false;
-      this.events.onPhase?.('connecting', s);
+      this.events.onPhase?.('failed', info);
     }
   }
 

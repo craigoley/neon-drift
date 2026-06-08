@@ -1467,9 +1467,16 @@ export const NET = {
    *  unambiguous alphabet (no 0/O/1/I) to avoid mistyping. */
   codeLength: 5,
   codeAlphabet: 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789',
-  /** Signaling poll interval + timeout (ms) while waiting for the peer's SDP. */
+  /** Signaling poll interval (ms) while waiting for the peer's SDP. */
   signalPollMs: 800,
-  signalTimeoutMs: 60000,
+  /** How long the HOST keeps polling for the joiner's answer (ms) — a patient lobby
+   *  so a friend can join minutes after getting the code. Times out → "no one joined
+   *  yet" (host again), not a silent hang. */
+  hostWaitMs: 600000, // 10 min
+  /** How long the JOINER polls for the host's offer (ms) before giving up. The offer
+   *  is posted within seconds of hosting, so a short window — its absence means the
+   *  code is expired/wrong → a fast, clear "code expired or not found". */
+  joinFindMs: 20000, // 20 s
   /** Heartbeat ping interval over the data channel (ms) → drives the RTT readout. */
   heartbeatMs: 1000,
   /** Safety timeout (ms) for ICE gathering — resolves if the browser stalls on

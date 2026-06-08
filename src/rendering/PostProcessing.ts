@@ -9,7 +9,9 @@
  *   - OutputPass is LAST; it reads renderer.toneMapping / outputColorSpace /
  *     toneMappingExposure (set in SceneManager) and applies tone mapping + the
  *     sRGB transfer, so the cinematic pass must NOT do gamma itself.
- *   - Render via composer.render(), NEVER renderer.render().
+ *   - HIGH quality: render via composer.render() (bloom + cinematic + tone map).
+ *   - LOW quality: bypass the composer entirely and render via renderer.render()
+ *     (tone mapping + sRGB still apply from SceneManager; bloom/cinematic skipped).
  *
  * Performance: the four cinematic effects are combined into ONE fullscreen pass
  * (many separate passes tank mobile FPS). On touch, the bloom runs at reduced
@@ -89,10 +91,16 @@ const CINEMATIC_SHADER = {
 
 export class PostProcessing {
   private readonly renderer: THREE.WebGLRenderer;
+  private readonly scene: THREE.Scene;
+  private readonly camera: THREE.Camera;
   private readonly composer: EffectComposer;
   private readonly bloom: UnrealBloomPass;
   private readonly cinematic: ShaderPass;
   private readonly resScale: number;
+  /** HIGH = full pipeline (bloom + cinematic via the composer). LOW = render direct
+   *  (skip the composer entirely → no bloom, no cinematic, no render-target round-trip)
+   *  — the real perf escape hatch for weak GPUs. */
+  private highQuality = true;
   private elapsed = 0;
   /** Baseline chromatic-aberration (after any touch scaling) + a transient pulse
    *  added on top by a tier-3 near-miss, decaying back to the baseline. */
@@ -106,6 +114,8 @@ export class PostProcessing {
     isTouch: boolean,
   ) {
     this.renderer = renderer;
+    this.scene = scene;
+    this.camera = camera;
     this.resScale = isTouch ? BLOOM.mobileResolutionScale : 1;
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -172,11 +182,20 @@ export class PostProcessing {
     (this.cinematic.uniforms.uResolution.value as THREE.Vector2).set(width * pr, height * pr);
   }
 
-  /** Enable/disable the cinematic pass (the "Retro FX" setting / mobile fallback).
-   *  When off, OutputPass becomes the last enabled pass and still renders to
-   *  screen, so the picture is unchanged minus the grade. */
-  setCinematicEnabled(enabled: boolean): void {
-    this.cinematic.enabled = enabled;
+  /**
+   * Graphics quality — the "Retro FX" HIGH/LOW lever.
+   *   HIGH: the full composer pipeline (bloom glow + cinematic grade).
+   *   LOW:  render DIRECT — bypass the composer entirely, so the expensive bloom
+   *         (5 down/up blur passes) AND the cinematic pass AND the render-target
+   *         round-trip are all skipped. The renderer still applies ACES tone mapping
+   *         + sRGB (set in SceneManager), so colour matches HIGH minus the glow.
+   * This is the genuine perf escape hatch: LOW is a much cheaper frame, not a dimmed
+   * one. (Disabling the passes too keeps state consistent if anything re-enters HIGH.)
+   */
+  setQuality(high: boolean): void {
+    this.highQuality = high;
+    this.bloom.enabled = high;
+    this.cinematic.enabled = high;
   }
 
   /** `dt` (seconds) advances the grain/scanline animation. The clock WRAPS at
@@ -184,6 +203,11 @@ export class PostProcessing {
    *  the shader (which would make the grain/scanlines shimmer or freeze in a
    *  long session); the wrap is seamless for the periodic sin/fract terms. */
   render(dt = 0): void {
+    if (!this.highQuality) {
+      // LOW: direct render — no composer, no bloom, no cinematic, no render target.
+      this.renderer.render(this.scene, this.camera);
+      return;
+    }
     if (this.cinematic.enabled) {
       this.elapsed = (this.elapsed + dt) % POSTFX.timeWrap;
       this.cinematic.uniforms.uTime.value = this.elapsed;

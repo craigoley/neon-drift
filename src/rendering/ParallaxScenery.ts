@@ -55,15 +55,18 @@ export class ParallaxScenery {
   }
 
   /** Reposition every prop into its streaming slot for the given travelled
-   *  distance. `cameraX` keeps the field centred laterally on the player. */
-  update(distance: number, cameraX: number): void {
+   *  distance. `roadCenter` is the road's lateral centre at the player's distance
+   *  (roadCenterAt) — the props are anchored to the ROAD, not the camera/player, so
+   *  they never slide onto the road when the player drives to an edge (a camera/
+   *  player-lateral anchor put the opposite-side props on the road at the edges). */
+  update(distance: number, roadCenter: number): void {
     for (let li = 0; li < SCENERY.layers.length; li++) {
       const layer = SCENERY.layers[li];
       const mesh = this.meshes[li];
       let n = 0;
       for (let side = -1; side <= 1; side += 2) {
         for (let i = 0; i < layer.count; i++) {
-          this.placeProp(mesh, n++, layer, i, side, distance, cameraX);
+          this.placeProp(mesh, n++, layer, i, side, distance, roadCenter);
         }
       }
       mesh.instanceMatrix.needsUpdate = true;
@@ -77,13 +80,15 @@ export class ParallaxScenery {
     index: number,
     side: number,
     distance: number,
-    cameraX: number,
+    roadCenter: number,
   ): void {
     // parallaxRenderZ returns camera-relative z already (negative = ahead, the
     // three.js −z convention shared by every other renderer), so assign it
     // directly to position.z — no extra negation.
     const z = parallaxRenderZ(distance, layer.parallax, layer.gap, index, SCENERY.behind);
-    this.dummy.position.set(cameraX + side * layer.offsetX, SCENERY.baseY, z);
+    // Lateral anchor = the ROAD centre (offsetX is well outside ROAD.halfWidth), so
+    // props sit beside the road regardless of where the player is across it.
+    this.dummy.position.set(roadCenter + side * layer.offsetX, SCENERY.baseY, z);
     this.dummy.rotation.set(0, 0, 0);
     this.dummy.scale.set(1, 1, 1);
     this.dummy.updateMatrix();

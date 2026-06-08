@@ -51,6 +51,7 @@ import { unlockProgress } from './state/Unlocks';
 import { MissionStore } from './state/MissionStore';
 import { missionProgress, startBiomeUnlockRank } from './state/Missions';
 import { biomesSeenForDistance } from './game/Biome';
+import { roadCenterAt } from './game/Road';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
 import {
@@ -667,7 +668,9 @@ function frame(now: number): void {
   scene.updateCamera(game, realDt);
   environment.update(game.distance, scene.camera.position.x, scene.camera.position.z, realDt);
   stars.update(scene.camera.position.x, scene.camera.position.z);
-  scenery.update(game.distance, scene.camera.position.x); // bounded roadside parallax props
+  // Anchor roadside scenery to the ROAD centre (not the camera/player lateral) so
+  // props never slide onto the road when the player is at an edge. (Bug fix.)
+  scenery.update(game.distance, roadCenterAt(game.seed, game.distance)); // bounded roadside parallax props
   biomeView.apply(game.biome); // environment palette + stars + traffic tint follow the active biome (self-throttled)
   road.sync(game.road, game.distance);
   vehicle.sync(game.vehicle);

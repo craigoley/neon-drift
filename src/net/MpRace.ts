@@ -53,6 +53,8 @@ export class MpRace {
   private seed = 0;
   private racing = false;
   private desynced = false;
+  /** Short, persistent desync readout (frame + earliest field + magnitude) for the UI. */
+  private desyncSummary = '';
   /** Our own world checksums by frame, awaiting the peer's to compare. */
   private readonly localSums = new Map<number, WorldSum>();
 
@@ -165,7 +167,10 @@ export class MpRace {
       if (step.f % NET.desyncCheckFrames === 0) this.emitChecksum(step.f);
     }
 
-    this.events.onPhase?.(this.desynced ? 'desynced' : this.ls.stalled ? 'stalled' : 'racing');
+    // Once desynced, keep surfacing the (persistent) summary so it's readable
+    // mid-race without catching the console live.
+    if (this.desynced) this.events.onPhase?.('desynced', this.desyncSummary);
+    else this.events.onPhase?.(this.ls.stalled ? 'stalled' : 'racing');
     return true;
   }
 
@@ -188,8 +193,14 @@ export class MpRace {
     const v = compareWorld(local, remoteSum);
     if (!v.ok && !this.desynced) {
       this.desynced = true;
-      console.error(`[MP] DESYNC at frame ${remoteSum.f}: ${v.detail}`); // PR3: graceful void
-      this.events.onPhase?.('desynced', v.detail);
+      this.desyncSummary = v.summary;
+      // Full per-field breakdown (root→downstream, with magnitudes) for diagnosis,
+      // plus the earliest diverging field called out explicitly.
+      console.error(`[MP] DESYNC ${v.detail}`); // PR3: graceful void
+      if (v.first) {
+        console.error(`[MP] DESYNC earliest field: ${v.first.role}.${v.first.field} (${v.first.exact ? 'exact offset' : 'float Δ'}) — ${v.summary}`);
+      }
+      this.events.onPhase?.('desynced', v.summary);
     }
   }
 

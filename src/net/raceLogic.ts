@@ -53,3 +53,13 @@ export function leadWithDeadband(prevLocalLeads: boolean, gap: number, deadband:
   if (gap < -deadband) return false; // rival clearly ahead
   return prevLocalLeads; // inside the deadband → hold the current leader
 }
+
+/**
+ * A car's fraction of the way to the finish, clamped to [0, 1] — the position of its
+ * marker on the finish-progress bar. Pure: both peers place both markers identically.
+ */
+export function finishProgress(distance: number, finishDistance: number): number {
+  if (finishDistance <= 0) return 0;
+  const t = distance / finishDistance;
+  return t < 0 ? 0 : t > 1 ? 1 : t;
+}

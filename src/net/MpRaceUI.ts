@@ -8,6 +8,7 @@
 
 import { MpRace, type MpPhase, type MpRaceView } from './MpRace';
 import { reportConnectError } from './connectionStatus';
+import { finishProgress } from './raceLogic';
 import type { GameState } from '../game/GameState';
 import { CSS_PALETTE, MP_RACE } from '../utils/constants';
 
@@ -28,7 +29,17 @@ export interface MpRaceUIOptions {
 
 const AHEAD = CSS_PALETTE.ahead;
 const BEHIND = CSS_PALETTE.behind;
+// Finish-bar marker colors — FIXED per player (not lead-coded): the leader is shown by
+// marker POSITION on the bar (further right = closer to the finish), which is the whole
+// point. The two synthwave primaries read instantly apart.
+const YOU = CSS_PALETTE.cyan;
+const RIVAL = CSS_PALETTE.magenta;
 const m = (d: number) => `${Math.round(d)}m`;
+
+/** A finish-bar marker dot (absolutely positioned; `left` set per frame). */
+const markerStyle = (color: string) =>
+  `position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;` +
+  `background:${color};box-shadow:0 0 10px ${color};transition:left 0.08s linear,transform 0.15s;`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, style: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -75,6 +86,27 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
   hud.append(posEl, gapEl, finishEl);
   parent.append(hud);
 
+  // --- FINISH-PROGRESS BAR (bottom; NOT a minimap) ----------------------------------
+  // A horizontal bar for the whole race (0 → finishDistance). Two markers (YOU + RIVAL)
+  // advance along it toward the finish at the right end — a glance shows each car's
+  // progress, how far's left, and a close finish (markers converging) reads dramatically.
+  const bar = el('div', 'position:fixed;bottom:22px;left:50%;transform:translateX(-50%);z-index:9998;width:min(640px,88vw);display:none;pointer-events:none;font-family:system-ui,sans-serif;');
+  bar.className = 'mp-race-progress';
+  const track = el('div', 'position:relative;height:8px;border-radius:5px;background:rgba(233,213,255,0.16);box-shadow:inset 0 0 8px rgba(0,255,255,0.18);');
+  // Finish line at the 100% end (a bright post).
+  const finishMark = el('div', 'position:absolute;right:-2px;top:-7px;width:4px;height:22px;border-radius:2px;background:#fff;box-shadow:0 0 10px #fff;');
+  const rivalMark = el('div', markerStyle(RIVAL));
+  const youMark = el('div', markerStyle(YOU)); // appended last → drawn on top
+  track.append(finishMark, rivalMark, youMark);
+  const legend = el('div', `display:flex;justify-content:space-between;margin-top:5px;font:600 10px system-ui,sans-serif;opacity:0.75;`);
+  legend.append(
+    el('span', `color:${YOU};text-shadow:0 0 6px ${YOU};`, '● YOU'),
+    el('span', 'color:#e9d5ff;opacity:0.6;', `${m(MP_RACE.finishDistance)} FINISH`),
+    el('span', `color:${RIVAL};text-shadow:0 0 6px ${RIVAL};`, 'RIVAL ●'),
+  );
+  bar.append(track, legend);
+  parent.append(bar);
+
   // Transient overtake/passed alert — fades, never a persistent nag.
   const toast = el('div', 'position:fixed;top:38%;left:50%;transform:translateX(-50%);z-index:9999;font:900 clamp(26px,7vw,52px) system-ui,sans-serif;letter-spacing:0.08em;opacity:0;transition:opacity 0.25s;pointer-events:none;text-shadow:0 0 16px currentColor;');
   toast.className = 'mp-race-toast';
@@ -104,13 +136,27 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     race?.close();
     strip.remove();
     hud.remove();
+    bar.remove();
     toast.remove();
     card.remove();
     opts.onLeaveRace?.();
   };
   menuBtn.addEventListener('click', leaveRace);
 
-  /** Update the position + gap readout (color-coded for who leads). */
+  /** Position both finish-bar markers + the "approaching finish" emphasis. */
+  const renderBar = (v: MpRaceView) => {
+    bar.style.display = 'block';
+    const youPct = finishProgress(v.localDistance, v.finishDistance) * 100;
+    const rivalPct = finishProgress(v.rivalDistance, v.finishDistance) * 100;
+    youMark.style.left = `${youPct}%`;
+    rivalMark.style.left = `${rivalPct}%`;
+    // Climax: emphasize the LEADING marker once it nears the finish.
+    const near = MP_RACE.progressNearFinishFraction * 100;
+    youMark.style.transform = youPct >= rivalPct && youPct >= near ? 'scale(1.45)' : 'scale(1)';
+    rivalMark.style.transform = rivalPct > youPct && rivalPct >= near ? 'scale(1.45)' : 'scale(1)';
+  };
+
+  /** Update the position + gap readout (color-coded for who leads) + the progress bar. */
   const renderHud = (v: MpRaceView) => {
     hud.style.display = 'flex';
     const lead = v.localLeads;
@@ -121,12 +167,14 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     gapEl.style.color = ahead ? AHEAD : BEHIND;
     const toGo = Math.max(0, v.finishDistance - v.localDistance);
     finishEl.textContent = `finish in ${m(toGo)}`;
+    renderBar(v);
   };
 
   const showResult = (v: MpRaceView) => {
     if (raceOver) return;
     raceOver = true;
     hud.style.display = 'none';
+    bar.style.display = 'none';
     strip.style.display = 'none';
     card.style.display = 'flex';
     if (v.disconnected) {

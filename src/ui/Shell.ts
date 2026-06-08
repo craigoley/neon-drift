@@ -912,6 +912,13 @@ export class Shell {
   // --- keyboard -----------------------------------------------------------
 
   private onKeyDown(e: KeyboardEvent): void {
+    // Never hijack keys meant for a focused TEXT FIELD (the MP join-code input, and
+    // any future field) — this global handler would otherwise preventDefault e.g. the
+    // pause key 'P', swallowing it before the input receives it. Bail so the field
+    // gets the keystroke; pause still works when nothing is focused / during a run.
+    const t = e.target as HTMLElement | null;
+    if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return;
+
     // In play (no overlay): Esc / P pauses.
     if (this.current === null) {
       if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {

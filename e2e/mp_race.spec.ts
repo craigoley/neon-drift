@@ -28,3 +28,16 @@ test('2P RACE menu button opens the Host/Join race overlay, no console errors', 
 
   expect(errors, 'no console errors opening/closing the 2P overlay').toEqual([]);
 });
+
+test('the join-code field accepts "P" (global pause-on-P must not swallow it)', async ({ page }) => {
+  // Regression: the window-global Shell key handler preventDefault'd 'P' (pause),
+  // eating it before the focused input — and the match-code alphabet CONTAINS P, so
+  // P-containing codes were un-joinable. Type a P-containing code via real keystrokes
+  // (pressSequentially fires keydown, exercising the handler) and assert it lands.
+  await boot(page);
+  await page.locator('.shell-mp-open').click();
+  const input = page.locator('.mp-race-ui input');
+  await input.focus();
+  await input.pressSequentially('PQRSP'); // two Ps + the other control-bound R
+  await expect(input).toHaveValue('PQRSP');
+});

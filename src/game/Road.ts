@@ -12,6 +12,7 @@
  */
 
 import { hashNoise } from '../utils/rng';
+import { detSin } from '../utils/detmath';
 import { ROAD } from '../utils/constants';
 
 export interface RoadSegment {
@@ -45,7 +46,7 @@ export function poolSize(): number {
  */
 function curveFor(seed: number, index: number): number {
   const phase = hashNoise(seed, 0) * Math.PI;
-  return Math.sin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
+  return detSin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
 }
 
 /**
@@ -58,7 +59,7 @@ function curveFor(seed: number, index: number): number {
 export function roadCenterAt(seed: number, distance: number): number {
   const phase = hashNoise(seed, 0) * Math.PI;
   const index = distance / ROAD.segmentLength;
-  return Math.sin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
+  return detSin(index * ROAD.curveFrequency + phase) * ROAD.curveAmplitude;
 }
 
 export function createRoadState(seed: number): RoadState {

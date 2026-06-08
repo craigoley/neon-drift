@@ -32,6 +32,17 @@ export const TIMESTEP = 1 / 60;
  */
 export const MAX_FRAME_DT = 0.25;
 
+/**
+ * SIM-MATH version (MP fix PR-B). Bumped whenever a change alters what a given seed +
+ * input stream produces — so a SEED is only reproducible within the same version.
+ * v1 = the de-floated transcendentals (detSin/detExp/detPow): the first build whose
+ * sim is bit-identical across JS engines (V8/JSC). Stamped onto ghost recordings
+ * (refused for replay if mismatched — an old-math ghost would desync from the live
+ * sim), daily records, and leaderboard entries, so old-math artifacts are detectable
+ * and never replayed/compared as if same-course.
+ */
+export const SIM_MATH_VERSION = 1;
+
 /** Road geometry + recycled-segment-pool tuning. */
 export const ROAD = {
   /** Drivable half-width; lateral position is clamped to +/- this. */

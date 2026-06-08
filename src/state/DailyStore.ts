@@ -16,7 +16,7 @@
  * store stays pure-ish and trivially testable.
  */
 
-import { DAILY_HISTORY_SIZE, DAILY_STORAGE_KEY } from '../utils/constants';
+import { DAILY_HISTORY_SIZE, DAILY_STORAGE_KEY, SIM_MATH_VERSION } from '../utils/constants';
 
 /** One day's daily-challenge record (best run on that date's seed + replay count). */
 export interface DailyEntry {
@@ -28,6 +28,10 @@ export interface DailyEntry {
   bestCarId: string;
   /** How many times the player has run this day's challenge. */
   runs: number;
+  /** SIM-MATH version the BEST run was produced with (SIM_MATH_VERSION); absent on
+   *  pre-versioning entries. The same daily seed produces a DIFFERENT course across
+   *  math versions, so an old-version best isn't a like-for-like comparison. */
+  mathVersion?: number;
 }
 
 /** Returned by submitDaily — drives the game-over daily callout. */
@@ -100,6 +104,7 @@ export class DailyStore {
       entry.bestScore = s;
       entry.bestDistance = d;
       entry.bestCarId = carId;
+      entry.mathVersion = SIM_MATH_VERSION; // stamp the math the best was set under
     }
     // Rolling window: keep the most-recent days by dateKey (prunes older entries).
     this.data.history.sort((a, b) => b.dateKey - a.dateKey);

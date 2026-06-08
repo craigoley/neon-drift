@@ -16,7 +16,7 @@
  * an existing record (e.g. a 56142) survives the upgrade.
  */
 
-import { LEADERBOARD_SIZE, LEADERBOARD_STORAGE_KEY, STORAGE_KEY } from '../utils/constants';
+import { LEADERBOARD_SIZE, LEADERBOARD_STORAGE_KEY, SIM_MATH_VERSION, STORAGE_KEY } from '../utils/constants';
 
 /** A single recorded run on the top-runs board. */
 export interface LeaderboardEntry {
@@ -26,6 +26,10 @@ export interface LeaderboardEntry {
   carId: string;
   /** Epoch ms the run was recorded; 0 for a migrated legacy best (date unknown). */
   date: number;
+  /** SIM-MATH version the run was produced with (SIM_MATH_VERSION); absent on
+   *  pre-versioning entries. Scores aren't replayed, so this is provenance — a given
+   *  seed scores differently across math versions. */
+  mathVersion?: number;
 }
 
 /** A car's personal best (the score side of the per-car tracking). */
@@ -136,6 +140,7 @@ export class LeaderboardStore {
       distance: num(run.distance),
       carId: run.carId,
       date: this.now(),
+      mathVersion: SIM_MATH_VERSION,
     };
 
     // Insert + sort the full list (desc by score) BEFORE capping, so the entry's

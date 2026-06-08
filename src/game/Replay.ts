@@ -18,7 +18,7 @@
  * `restart` is never recorded — it's a menu/crash control, always false in-run.
  */
 
-import { GHOST } from '../utils/constants';
+import { GHOST, SIM_MATH_VERSION } from '../utils/constants';
 import { createGameState, type GameState, GameMode, startRun, update } from './GameState';
 import type { CarHandling, CarScoring, CarSlowMo } from '../utils/constants';
 import { createIntent, type InputIntent } from './Input';
@@ -28,6 +28,10 @@ import { TIMESTEP } from '../utils/constants';
 export interface GhostRecording {
   /** Schema version (bump if the encoding changes, so old blobs are rejected). */
   v: number;
+  /** SIM-MATH version the run was produced with (SIM_MATH_VERSION). A ghost is
+   *  replayed in lockstep with the live sim, so a mismatched-math ghost would diverge
+   *  from its own recorded path — it's refused for replay (see GhostStore.valid). */
+  mathVersion: number;
   seed: number;
   mode: GameMode;
   /** The car the run used — its handling/scoring/slowMo must be re-resolved for an
@@ -130,6 +134,7 @@ export function buildRecording(
 ): GhostRecording {
   return {
     v: 1,
+    mathVersion: SIM_MATH_VERSION,
     seed: meta.seed,
     mode: meta.mode,
     carId: meta.carId,

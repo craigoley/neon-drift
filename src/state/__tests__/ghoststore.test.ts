@@ -7,7 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { GhostStore } from '../GhostStore';
 import { GameMode } from '../../game/GameState';
 import type { GhostRecording } from '../../game/Replay';
-import { GHOST_STORAGE_KEY } from '../../utils/constants';
+import { GHOST_STORAGE_KEY, SIM_MATH_VERSION } from '../../utils/constants';
 
 /** Minimal in-memory StorageLike (mirrors the leaderboard tests). */
 function memStorage() {
@@ -21,7 +21,7 @@ function memStorage() {
 
 function rec(over: Partial<GhostRecording> = {}): GhostRecording {
   return {
-    v: 1, seed: 123, mode: GameMode.Classic, carId: 'pulse',
+    v: 1, mathVersion: SIM_MATH_VERSION, seed: 123, mode: GameMode.Classic, carId: 'pulse',
     steers: [0, 0.1, -0.2], deployFrames: [1], score: 1000, distance: 500, date: 0,
     ...over,
   };
@@ -82,6 +82,19 @@ describe('GhostStore — resilient load', () => {
     const gs = new GhostStore(memStorage());
     expect(gs.submit(rec({ steers: [0, NaN, 1] }))).toBe(false);
     expect(gs.get(GameMode.Classic)).toBeNull();
+  });
+
+  it('rejects a ghost from a DIFFERENT sim-math version (would desync on replay)', () => {
+    const store = memStorage();
+    // A stored ghost from the old math (mathVersion absent) or a future version must
+    // not be raced — it would diverge from its own recorded path against the live sim.
+    store._map.set(GHOST_STORAGE_KEY, JSON.stringify({ classic: { ...rec(), mathVersion: SIM_MATH_VERSION - 1 } }));
+    expect(new GhostStore(store).get(GameMode.Classic)).toBeNull();
+    store._map.set(GHOST_STORAGE_KEY, JSON.stringify({ classic: { ...rec(), mathVersion: undefined } }));
+    expect(new GhostStore(store).get(GameMode.Classic)).toBeNull();
+    // The CURRENT version loads fine.
+    store._map.set(GHOST_STORAGE_KEY, JSON.stringify({ classic: rec() }));
+    expect(new GhostStore(store).get(GameMode.Classic)).not.toBeNull();
   });
 
   it('works in-memory when storage is unavailable (null)', () => {

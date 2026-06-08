@@ -6,6 +6,7 @@
  */
 
 import { clamp, decay } from '../utils/math';
+import { detExp } from '../utils/detmath';
 import { ROAD, SLALOM, VEHICLE, type CarHandling } from '../utils/constants';
 import type { InputIntent } from './Input';
 
@@ -31,7 +32,7 @@ export function createVehicleState(): VehicleState {
  * toward maxSpeedCap on an exponential-approach curve (never quite reaching it).
  */
 export function speedCap(distance: number): number {
-  const t = 1 - Math.exp(-distance / VEHICLE.speedCapRampDistance);
+  const t = 1 - detExp(-distance / VEHICLE.speedCapRampDistance);
   return VEHICLE.baseSpeedCap + (VEHICLE.maxSpeedCap - VEHICLE.baseSpeedCap) * t;
 }
 

@@ -19,8 +19,10 @@ import { DEFAULT_CAR_ID, SETTINGS_STORAGE_KEY } from '../utils/constants';
 export interface Settings {
   soundEnabled: boolean;
   selectedCarId: string;
-  /** "Retro FX" off → disables the cinematic post-FX pass (aberration / scanlines
-   *  / grain / vignette) for a guaranteed-cheap fallback on weaker GPUs. */
+  /** "Retro FX" = the graphics-quality HIGH/LOW lever. OFF (LOW) skips the WHOLE post
+   *  pipeline — bloom glow AND the cinematic pass (aberration / scanlines / grain /
+   *  vignette) — and renders direct: a genuinely cheap frame for weaker GPUs (bloom is
+   *  the main GPU cost). ON (HIGH) = the full neon glow. Default ON (lowFx false). */
   lowFx: boolean;
   /** "Rival Ghost" on → race a translucent replay of your best run for the mode.
    *  Off by default so the seed/course behaviour is unchanged until opted in. */

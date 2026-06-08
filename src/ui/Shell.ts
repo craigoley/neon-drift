@@ -453,8 +453,9 @@ export class Shell {
       `<button class="shell-btn shell-toggle shell-toggle-sound" type="button" role="switch">` +
       `<span class="shell-toggle-value">ON</span></button>` +
       `</div>` +
-      // Retro FX: cinematic post-processing (aberration / scanlines / grain /
-      // vignette). OFF disables the whole pass for weaker GPUs.
+      // Retro FX: the graphics-quality HIGH/LOW lever. ON = full neon glow (bloom +
+      // cinematic grade). OFF = LOW — skips the WHOLE post pipeline incl. the expensive
+      // bloom + renders direct, a real perf fallback for weaker GPUs.
       `<div class="shell-setting">` +
       `<span class="shell-setting-label">Retro FX</span>` +
       `<button class="shell-btn shell-toggle shell-toggle-fx" type="button" role="switch">` +

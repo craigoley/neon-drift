@@ -17,7 +17,7 @@
 import * as THREE from 'three';
 import type { VehicleState } from '../game/Vehicle';
 import { clamp } from '../utils/math';
-import { CAR_VIS, type CarDef } from '../utils/constants';
+import { CAR_VIS, type CarDef, type CarDetail } from '../utils/constants';
 import { CarMesh } from './CarMesh';
 
 export class VehicleRenderer {
@@ -25,8 +25,10 @@ export class VehicleRenderer {
 
   private readonly car: CarMesh;
 
-  constructor(scene: THREE.Scene, car?: CarDef) {
-    this.car = new CarMesh(car);
+  /** `detail` selects the silhouette: 'hero' (the full glowing supercar — the player)
+   *  or 'simple' (a stripped, cheaper wedge — the rival, or the player on LOW quality). */
+  constructor(scene: THREE.Scene, car?: CarDef, detail: CarDetail = 'hero') {
+    this.car = new CarMesh(car, detail);
     this.group = this.car.group;
     scene.add(this.group);
   }
@@ -34,6 +36,11 @@ export class VehicleRenderer {
   /** Apply a car's cosmetic colours. Cheap — only colours change. */
   applyCar(car: CarDef): void {
     this.car.applyCar(car);
+  }
+
+  /** Switch hero ⇄ simple detail (player LOW-quality fallback / rival). */
+  setDetail(detail: CarDetail): void {
+    this.car.setDetail(detail);
   }
 
   /** Re-style as the translucent rival ghost (PR: rival-ghost). Keeps the car's

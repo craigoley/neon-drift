@@ -5,7 +5,7 @@
  * mapping (exactly one winner), and the lead-change deadband.
  */
 import { describe, expect, it } from 'vitest';
-import { decideWinner, leadWithDeadband, resultFor } from '../raceLogic';
+import { decideWinner, finishProgress, leadWithDeadband, resultFor } from '../raceLogic';
 
 describe('decideWinner — first to the finish (lowest sim frame) wins', () => {
   it('the car that crossed on the earlier frame wins', () => {
@@ -56,5 +56,27 @@ describe('leadWithDeadband — hysteresis so a near-tie does not spam the alert'
     expect(leadWithDeadband(true, -1, 3)).toBe(true);
     expect(leadWithDeadband(false, 2, 3)).toBe(false);
     expect(leadWithDeadband(false, -2, 3)).toBe(false);
+  });
+});
+
+describe('finishProgress — finish-bar marker position (0..1, clamped)', () => {
+  it('maps distance/finish to a 0..1 fraction', () => {
+    expect(finishProgress(0, 10000)).toBe(0);
+    expect(finishProgress(2500, 10000)).toBe(0.25);
+    expect(finishProgress(5000, 10000)).toBe(0.5);
+    expect(finishProgress(10000, 10000)).toBe(1);
+  });
+  it('clamps below 0 and above the finish (markers never leave the bar)', () => {
+    expect(finishProgress(-200, 10000)).toBe(0);
+    expect(finishProgress(12000, 10000)).toBe(1); // past the line → pinned at the finish
+  });
+  it('is independent per car — both markers placed from the shared distances', () => {
+    // A close finish: both near the end, leader marginally further along.
+    expect(finishProgress(9990, 10000)).toBeCloseTo(0.999, 5);
+    expect(finishProgress(9950, 10000)).toBeCloseTo(0.995, 5);
+    expect(finishProgress(9990, 10000)).toBeGreaterThan(finishProgress(9950, 10000));
+  });
+  it('guards a non-positive finish distance', () => {
+    expect(finishProgress(100, 0)).toBe(0);
   });
 });

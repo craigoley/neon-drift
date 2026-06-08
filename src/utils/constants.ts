@@ -393,6 +393,9 @@ export const MP_RACE = {
   leadChangeDeadband: 3,
   /** Duration (ms) the overtake/passed toast stays visible before fading. */
   toastDurationMs: 900,
+  /** Past this fraction of the race, the leading finish-bar marker gets a subtle
+   *  emphasis (the "approaching finish" climax). */
+  progressNearFinishFraction: 0.9,
 } as const;
 
 /** Finish-line visual tuning (render-only — the actual finish is decided in MpRace). */

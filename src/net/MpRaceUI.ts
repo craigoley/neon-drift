@@ -6,9 +6,10 @@
  * (inline styles) so it doesn't touch the game Shell screens.
  */
 
-import { MpRace, type MpPhase } from './MpRace';
+import { MpRace, type MpPhase, type MpRaceView } from './MpRace';
 import { reportConnectError } from './connectionStatus';
 import type { GameState } from '../game/GameState';
+import { CSS_PALETTE, MP_RACE } from '../utils/constants';
 
 export interface MpRaceUIOptions {
   /** The app's local GameState — bound + raced by MpRace (renderers read it). */
@@ -19,9 +20,15 @@ export interface MpRaceUIOptions {
   onRacing: (race: MpRace) => void;
   /** The local car took an MP crash-slowdown — for a crash cue (flash/thump). */
   onLocalCrash?: () => void;
+  /** Leave a finished/disconnected race → tear down (close, reset game, show menu). */
+  onLeaveRace?: () => void;
   /** Called when the user backs out before racing. */
   onExit: () => void;
 }
+
+const AHEAD = CSS_PALETTE.ahead;
+const BEHIND = CSS_PALETTE.behind;
+const m = (d: number) => `${Math.round(d)}m`;
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, style: string, text?: string): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
@@ -58,6 +65,89 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
   strip.style.display = 'none';
   parent.append(strip);
 
+  // --- RACE HUD (position + gap), overtake toast, winner card -----------------------
+  // Semi-transparent, neon, glanceable — no minimap (overwhelming for one track).
+  const hud = el('div', 'position:fixed;top:40px;left:50%;transform:translateX(-50%);z-index:9998;display:none;flex-direction:column;align-items:center;gap:2px;font-family:system-ui,sans-serif;text-shadow:0 0 8px currentColor;pointer-events:none;');
+  hud.className = 'mp-race-hud';
+  const posEl = el('div', 'font:800 22px system-ui,sans-serif;letter-spacing:0.05em;');
+  const gapEl = el('div', 'font:700 16px ui-monospace,monospace;');
+  const finishEl = el('div', 'font:600 11px system-ui,sans-serif;opacity:0.6;color:#e9d5ff;');
+  hud.append(posEl, gapEl, finishEl);
+  parent.append(hud);
+
+  // Transient overtake/passed alert — fades, never a persistent nag.
+  const toast = el('div', 'position:fixed;top:38%;left:50%;transform:translateX(-50%);z-index:9999;font:900 clamp(26px,7vw,52px) system-ui,sans-serif;letter-spacing:0.08em;opacity:0;transition:opacity 0.25s;pointer-events:none;text-shadow:0 0 16px currentColor;');
+  toast.className = 'mp-race-toast';
+  parent.append(toast);
+  let toastTimer: ReturnType<typeof setTimeout> | null = null;
+  const flashToast = (text: string, color: string) => {
+    toast.textContent = text;
+    toast.style.color = color;
+    toast.style.opacity = '1';
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast.style.opacity = '0'), MP_RACE.toastDurationMs);
+  };
+
+  // Winner / disconnect card — the race-over modal (Esc or MENU dismiss → leave race).
+  const card = el('div', `${PANEL};display:none;background:rgba(26,0,51,0.92);`);
+  card.className = 'mp-race-result';
+  const cardTitle = el('h1', 'margin:0;font:900 clamp(34px,11vw,76px) system-ui,sans-serif;letter-spacing:0.06em;text-shadow:0 0 24px currentColor;', '');
+  const cardSub = el('p', 'margin:0;opacity:0.85;font-size:17px;', '');
+  const menuBtn = el('button', BTN, 'MENU');
+  card.append(cardTitle, cardSub, menuBtn);
+  parent.append(card);
+
+  let raceOver = false;
+  const leaveRace = () => {
+    if (toastTimer) clearTimeout(toastTimer);
+    window.removeEventListener('keydown', onKey);
+    race?.close();
+    strip.remove();
+    hud.remove();
+    toast.remove();
+    card.remove();
+    opts.onLeaveRace?.();
+  };
+  menuBtn.addEventListener('click', leaveRace);
+
+  /** Update the position + gap readout (color-coded for who leads). */
+  const renderHud = (v: MpRaceView) => {
+    hud.style.display = 'flex';
+    const lead = v.localLeads;
+    posEl.textContent = lead ? '1st' : '2nd';
+    posEl.style.color = lead ? AHEAD : BEHIND;
+    const ahead = v.gap >= 0;
+    gapEl.textContent = `${ahead ? '+' : '−'}${m(Math.abs(v.gap))} ${ahead ? 'ahead' : 'behind'}`;
+    gapEl.style.color = ahead ? AHEAD : BEHIND;
+    const toGo = Math.max(0, v.finishDistance - v.localDistance);
+    finishEl.textContent = `finish in ${m(toGo)}`;
+  };
+
+  const showResult = (v: MpRaceView) => {
+    if (raceOver) return;
+    raceOver = true;
+    hud.style.display = 'none';
+    strip.style.display = 'none';
+    card.style.display = 'flex';
+    if (v.disconnected) {
+      cardTitle.textContent = 'YOU WIN';
+      cardTitle.style.color = AHEAD;
+      cardSub.textContent = 'opponent disconnected — win by default';
+    } else if (v.result === 'win') {
+      cardTitle.textContent = 'YOU WIN';
+      cardTitle.style.color = AHEAD;
+      cardSub.textContent = `first to ${m(v.finishDistance)}`;
+    } else if (v.result === 'lose') {
+      cardTitle.textContent = 'YOU LOSE';
+      cardTitle.style.color = BEHIND;
+      cardSub.textContent = 'rival reached the finish first';
+    } else {
+      cardTitle.textContent = 'DRAW';
+      cardTitle.style.color = '#00ffff';
+      cardSub.textContent = 'a dead heat';
+    }
+  };
+
   let race: MpRace | null = null;
   let racingHandedOff = false;
 
@@ -93,10 +183,25 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
     onPhase: phase,
     onCode: (c: string) => (codeLine.textContent = c),
     onRtt: (ms: number) => {
-      if (racingHandedOff) strip.textContent = `RACING · 2P · ${ms} ms`;
+      if (racingHandedOff && !raceOver) strip.textContent = `2P · ${ms} ms`;
     },
     onLocalCrash: () => opts.onLocalCrash?.(),
+    onRaceState: (v: MpRaceView) => {
+      if (v.finished) showResult(v);
+      else renderHud(v);
+    },
+    onLeadChange: (localLeads: boolean) =>
+      localLeads ? flashToast('OVERTAKE!', AHEAD) : flashToast('PASSED', BEHIND),
+    onDisconnect: () => {
+      /* handled via onRaceState (finished + disconnected) on the next tick */
+    },
   };
+
+  // Esc dismisses the race-over card (same as MENU).
+  const onKey = (e: KeyboardEvent) => {
+    if (raceOver && (e.key === 'Escape' || e.key === 'Enter')) leaveRace();
+  };
+  window.addEventListener('keydown', onKey);
 
   const begin = (isHost: boolean, code?: string) => {
     hostBtn.disabled = joinBtn.disabled = true;
@@ -116,7 +221,12 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
   });
   backBtn.addEventListener('click', () => {
     race?.close();
+    if (toastTimer) clearTimeout(toastTimer);
+    window.removeEventListener('keydown', onKey);
     strip.remove();
+    hud.remove();
+    toast.remove();
+    card.remove();
     root.remove();
     opts.onExit();
   });

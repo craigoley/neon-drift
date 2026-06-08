@@ -20,6 +20,7 @@ import { Starfield } from './rendering/Starfield';
 import { ParallaxScenery } from './rendering/ParallaxScenery';
 import { RoadRenderer } from './rendering/RoadRenderer';
 import { VehicleRenderer } from './rendering/VehicleRenderer';
+import { FinishLine } from './rendering/FinishLine';
 import { CarPreview } from './rendering/CarPreview';
 import { TrafficRenderer } from './rendering/TrafficRenderer';
 import { PowerupRenderer } from './rendering/PowerupRenderer';
@@ -63,6 +64,7 @@ import {
   GHOST,
   handlingFor,
   JUICE,
+  MP_RACE,
   POSTFX,
   MAX_FRAME_DT,
   OBSTACLE_DEFS,
@@ -168,6 +170,8 @@ ghostRenderer.setVisible(false);
 // not a translucent ghost), drawn from the remote GameState stepped in lockstep.
 const rivalRenderer = new VehicleRenderer(scene.scene);
 rivalRenderer.setVisible(false);
+// LIVE 2P (PR3-pt2): the finish line, drawn at the shared finish distance.
+const finishLine = new FinishLine(scene.scene);
 let mpRace: MpRace | null = null; // non-null + isRacing ⇒ a live 2P race is running
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
@@ -319,6 +323,14 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         screenFx.flashCrash();
         scene.addShake(JUICE.nearMissShake[JUICE.nearMissShake.length - 1]);
         if (audio.started) audio.playCrash();
+      },
+      // Race over (finish or disconnect) → tear down cleanly + back to the menu.
+      onLeaveRace: () => {
+        mpRace = null;
+        rivalRenderer.setVisible(false);
+        finishLine.setVisible(false);
+        returnToMenu(game); // fully reset the sim — no stale race carries into the menu
+        shell.showStart();
       },
       onExit: () => shell.showStart(),
     });
@@ -731,8 +743,12 @@ function frame(now: number): void {
   if (mpActive && mpRace?.remoteGame) {
     rivalRenderer.setVisible(true);
     rivalRenderer.sync(mpRace.remoteGame.vehicle, -(mpRace.remoteGame.distance - game.distance));
+    // Finish line at the shared finish distance (render-only; the win is decided in sim).
+    finishLine.setVisible(true);
+    finishLine.sync(MP_RACE.finishDistance, game.distance);
   } else if (!mpActive) {
     rivalRenderer.setVisible(false);
+    finishLine.setVisible(false);
   }
   // Car light-trail: lengthens with speed. Fed 0 speed when not playing so it
   // fades out on the menu / pause / WIPEOUT screens.

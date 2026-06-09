@@ -1160,6 +1160,12 @@ export class Shell {
           this.showStart();
         }
         break;
+      case 'store':
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          this.showStart();
+        }
+        break;
       case 'settings':
         if (e.key === 'Escape') {
           e.preventDefault();

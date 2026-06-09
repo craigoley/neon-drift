@@ -116,7 +116,11 @@ export class PostProcessing {
     this.renderer = renderer;
     this.scene = scene;
     this.camera = camera;
-    this.resScale = isTouch ? BLOOM.mobileResolutionScale : 1;
+    // Half-resolution BLOOM target on ALL devices (was touch-only). Bloom is the #1
+    // GPU cost and it's a blur, so a half-res blur buffer is visually ~identical at
+    // ~¼ the cost — making HIGH itself cheaper. The scene + HUD stay full-resolution
+    // (composer.setSize/setPixelRatio below); only the bloom pass's buffer is scaled.
+    this.resScale = BLOOM.resolutionScale;
     const w = window.innerWidth;
     const h = window.innerHeight;
 
@@ -130,7 +134,7 @@ export class PostProcessing {
     // CSS px. The composer renders at device resolution, so a CSS-px-sized bloom
     // buffer is undersized on any DPR>1 screen — its coarse blur then smears
     // bright neon along the screen edges/corners (the cyan edge glow + orange
-    // corner wedge). mobileResolutionScale still trims it for GPU headroom, but
+    // corner wedge). resolutionScale still trims it for GPU headroom, but
     // proportionally to the actual framebuffer so the kernel stays aligned.
     this.bloom = new UnrealBloomPass(
       this.bloomResolution(w, h),

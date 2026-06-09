@@ -55,10 +55,13 @@ import { biomesSeenForDistance } from './game/Biome';
 import { roadCenterAt } from './game/Road';
 import { MpRace } from './net/MpRace';
 import { mountMpRaceUI } from './net/MpRaceUI';
+import { BotRace } from './net/BotRace';
+import { mountBotRaceUI } from './net/BotRaceUI';
 import { Telemetry } from './utils/Telemetry';
 import { lerp } from './utils/math';
 import {
   BIOMES,
+  CARS,
   carById,
   cssHex,
   GHOST,
@@ -178,6 +181,7 @@ rivalRenderer.setVisible(false);
 // LIVE 2P (PR3-pt2): the finish line, drawn at the shared finish distance.
 const finishLine = new FinishLine(scene.scene);
 let mpRace: MpRace | null = null; // non-null + isRacing ⇒ a live 2P race is running
+let botRace: BotRace | null = null; // non-null + isRacing ⇒ a vs-Computer race is running
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 traffic.setDetail(!settings.get('lowFx')); // HIGH = detailed obstacle silhouettes; LOW = plain boxes
@@ -333,6 +337,40 @@ const shell = new Shell(app, settings, leaderboard, audio, {
       // Race over (finish or disconnect) → tear down cleanly + back to the menu.
       onLeaveRace: () => {
         mpRace = null;
+        rivalRenderer.setVisible(false);
+        finishLine.setVisible(false);
+        returnToMenu(game); // fully reset the sim — no stale race carries into the menu
+        shell.showStart();
+      },
+      onExit: () => shell.showStart(),
+    });
+  },
+  // vs-COMPUTER race: open the difficulty picker; on pick it starts a LOCAL BotRace
+  // (a 2nd GameState driven by bot intents on the same shared course) and hands the
+  // running race back here to step + render the rival.
+  onVsComputer: () => {
+    audio.setMuted(false);
+    const carId = resolvePlayCarId();
+    const botCarId = CARS.find((c) => c.id !== carId)?.id ?? carId; // a visually distinct rival
+    mountBotRaceUI(app, {
+      game,
+      localCarId: carId,
+      botCarId,
+      makeSeed: playSeed,
+      onRacing: (race) => {
+        botRace = race;
+        rivalRenderer.applyCar(carById(race.rivalCarId));
+        rivalRenderer.setVisible(true);
+      },
+      // Crash-slowdown cue: the player hit something and slowed (the run continues).
+      onLocalCrash: () => {
+        screenFx.flashCrash();
+        scene.addShake(JUICE.nearMissShake[JUICE.nearMissShake.length - 1]);
+        if (audio.started) audio.playCrash();
+      },
+      // Race over → tear down cleanly + back to the menu.
+      onLeaveRace: () => {
+        botRace = null;
         rivalRenderer.setVisible(false);
         finishLine.setVisible(false);
         returnToMenu(game); // fully reset the sim — no stale race carries into the menu
@@ -503,11 +541,17 @@ function frame(now: number): void {
   let biomeCelebrate = false;
   let objectiveLabel: string | null = null;
   const mpActive = mpRace?.isRacing ?? false;
+  const botActive = botRace?.isRacing ?? false;
   if (mpActive) {
     // LIVE 2P lockstep: schedule + send local input, then step BOTH sims for every
     // frame whose inputs are known (stalls cleanly if the remote input is late).
     // controls.endFrame() below clears the deploy edge, same as the SP path.
     mpRace!.tick(controls.intent);
+  } else if (botActive) {
+    // vs-COMPUTER: step BOTH sims at the fixed timestep, generating the bot's intent
+    // each sub-step from ITS OWN state (anti-rubber-band). Same deploy-latch handling
+    // as SP (update consumes it; controls.endFrame() below clears it).
+    botRace!.tick(controls.intent, realDt);
   } else if (playing) {
     // Optional micro slow-mo after a near-miss: feed the sim scaled time.
     const simScale = slowmo > 0 ? JUICE.slowmoScale : 1;
@@ -750,15 +794,17 @@ function frame(now: number): void {
     ghostRenderer.setVisible(playing);
     ghostRenderer.sync(ghostGame.vehicle, -(ghostGame.distance - game.distance));
   }
-  // LIVE 2P rival: draw the remote player's car from the remote sim, offset by the
-  // distance gap (the race), same z-mapping. Phantom — no collision with the local car.
-  if (mpActive && mpRace?.remoteGame) {
+  // RACE rival: draw the rival car (remote player OR the bot) from its own sim,
+  // offset by the distance gap, same z-mapping. Phantom — no collision with the
+  // local car. The 2P and vs-Computer paths share the rival renderer + finish line.
+  const rivalGame = mpActive ? mpRace?.remoteGame : botActive ? botRace?.rivalGame : null;
+  if (rivalGame) {
     rivalRenderer.setVisible(true);
-    rivalRenderer.sync(mpRace.remoteGame.vehicle, -(mpRace.remoteGame.distance - game.distance));
+    rivalRenderer.sync(rivalGame.vehicle, -(rivalGame.distance - game.distance));
     // Finish line at the shared finish distance (render-only; the win is decided in sim).
     finishLine.setVisible(true);
     finishLine.sync(MP_RACE.finishDistance, game.distance);
-  } else if (!mpActive) {
+  } else if (!mpActive && !botActive) {
     rivalRenderer.setVisible(false);
     finishLine.setVisible(false);
   }

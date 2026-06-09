@@ -869,14 +869,41 @@ export const TRAFFIC_VIS = {
   gateHeight: 2.4,
   gateY: 1.2,
   gateMinBarWidth: 0.1,
-  /** RAMP boost-strip: a low, wide flat slab on the road surface. */
-  rampHeight: 0.35,
-  rampY: 0.18,
-  /** Neon edge-outline colour (HIGH only) — a bright on-palette cyan that catches the
-   *  bloom so every obstacle reads as a glowing neon object, while the BODY keeps its
-   *  threat colour. Cyan contrasts the warm bodies + matches the car/road neon language;
-   *  distinct from the magenta road markings. */
-  edgeColor: 0x00ffff, // = PALETTE.cyan
+  /** RAMP boost ramp: a low rising wedge on the road surface. */
+  rampHeight: 0.5,
+  rampY: 0.25,
+  /**
+   * DETAILED obstacle silhouettes (HIGH quality). Each kind gets its own SHARED
+   * instanced geometry, authored in a normalized [-0.5,0.5]^3 cube and instance-
+   * scaled to the collision footprint — so a richer SHAPE reads as a believable
+   * object WITHOUT ever exceeding the hitbox. Detail is geometry (vertex cost,
+   * cheap at scale) + per-face vertex shading; NO glow/bloom fill (#99's neon edge
+   * outline was pulled back — detail comes from FORM, not luminance). Per-face
+   * shades multiply the per-instance threat tint: top brightest → underside
+   * darkest, so each object reads as lit and solid. Sides reuse `bodyShade`.
+   */
+  shadeTop: 1.0,
+  shadeFront: 0.92,
+  shadeBack: 0.5,
+  shadeBottom: 0.32,
+  /** STATIC = flared road barrier (jersey-ish): full-width base tapering to a
+   *  narrower top (inset half-extents in the normalized cube). */
+  barrierTopHalfX: 0.34,
+  barrierTopHalfZ: 0.42,
+  /** MOVER = low vehicle: a body slab up to bodyTopY with a set-back cabin
+   *  (greenhouse) above it — reads as moving traffic, not a block. */
+  vehicleBodyTopY: 0.0,
+  vehicleCabinHalfX: 0.34,
+  vehicleCabinZ0: -0.34,
+  vehicleCabinZ1: 0.16,
+  vehicleCabinTopY: 0.42,
+  /** GATE bar = capped barrier post: a vertical body up to shoulderY, then a
+   *  chamfered cap tapering to capHalf — reads as a built gate structure. */
+  postShoulderY: 0.36,
+  postCapHalf: 0.36,
+  /** RAMP = rising wedge: a low lip at the near (+z) edge climbing to full height
+   *  at the far (-z) edge, so it reads as a launch ramp instead of a flat slab. */
+  rampLipY: -0.3,
 } as const;
 
 /** Horizon backdrop placement + wireframe mountains (procedural, fog-excluded). */

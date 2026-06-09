@@ -124,7 +124,7 @@ function blockGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeom
   pushBox(pos, col, 0, layer.height / 2, 0, hw, layer.height / 2, hw, body);
   const win = new THREE.Color(B.windowColor);
   const s = B.windowSize / 2;
-  const zf = hw + 0.05; // just proud of the +z face
+  const zf = hw + B.windowZOffset;
   for (const [xf, yf] of B.windows) {
     const x = xf * hw;
     const y = yf * layer.height;

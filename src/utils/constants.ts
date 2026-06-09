@@ -1040,6 +1040,7 @@ export const SCENERY = {
     block: {
       windowColor: 0x2f8fb0, // muted lit-window blue-cyan (NOT full bright)
       windowSize: 0.9,
+      windowZOffset: 0.05, // just proud of the +z face to avoid z-fighting
       /** Window centres as [xFrac, yFrac] of the block's half-width / height, on +z. */
       windows: [
         [-0.45, 0.7], [0.4, 0.55], [-0.2, 0.35], [0.5, 0.85],

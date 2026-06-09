@@ -17,6 +17,7 @@
  */
 
 import { DAILY_HISTORY_SIZE, DAILY_STORAGE_KEY, SIM_MATH_VERSION } from '../utils/constants';
+import { isConsecutiveDay } from '../utils/daily';
 
 /** One day's daily-challenge record (best run on that date's seed + replay count). */
 export interface DailyEntry {
@@ -43,10 +44,20 @@ export interface DailyResult {
   /** Today's best after this run. */
   bestScore: number;
   bestDistance: number;
+  /** True if this is the FIRST run of today (the daily-completion moment — the
+   *  credit award fires once per day, not on replays). */
+  firstOfDay: boolean;
+  /** Consecutive-days streak AFTER this run (≥1 on the first run of a day; on
+   *  replays it's the streak already standing for today). PROG-1 credit bonus. */
+  streak: number;
 }
 
 interface DailyData {
   history: DailyEntry[];
+  /** Consecutive-days streak (PROG-1). Advanced on the first run of each new day. */
+  streak: number;
+  /** The dateKey the streak was last advanced for (to detect the next day). */
+  streakDateKey: number;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -94,9 +105,13 @@ export class DailyStore {
     const s = num(score);
     const d = num(distance);
     let entry = this.data.history.find((e) => e.dateKey === dateKey);
+    const firstOfDay = !entry;
     if (!entry) {
       entry = { dateKey, bestScore: 0, bestDistance: 0, bestCarId: '', runs: 0 };
       this.data.history.push(entry);
+      // First run of a NEW day → advance the streak (consecutive) or reset to 1.
+      this.data.streak = isConsecutiveDay(this.data.streakDateKey, dateKey) ? this.data.streak + 1 : 1;
+      this.data.streakDateKey = dateKey;
     }
     entry.runs += 1;
     const isBest = s > entry.bestScore;
@@ -110,11 +125,11 @@ export class DailyStore {
     this.data.history.sort((a, b) => b.dateKey - a.dateKey);
     this.data.history = this.data.history.slice(0, DAILY_HISTORY_SIZE);
     this.persist();
-    return { isBest, runs: entry.runs, bestScore: entry.bestScore, bestDistance: entry.bestDistance };
+    return { isBest, runs: entry.runs, bestScore: entry.bestScore, bestDistance: entry.bestDistance, firstOfDay, streak: this.data.streak };
   }
 
   private load(): DailyData {
-    const fresh = (): DailyData => ({ history: [] });
+    const fresh = (): DailyData => ({ history: [], streak: 0, streakDateKey: 0 });
     if (!this.storage) return fresh();
     try {
       const raw = this.storage.getItem(DAILY_STORAGE_KEY);
@@ -126,7 +141,8 @@ export class DailyStore {
         .filter((e): e is DailyEntry => e !== null)
         .sort((a, b) => b.dateKey - a.dateKey)
         .slice(0, DAILY_HISTORY_SIZE);
-      return { history };
+      // Streak fields absent on pre-PROG-1 blobs → 0 (next daily starts a fresh streak).
+      return { history, streak: num(parsed.streak), streakDateKey: num(parsed.streakDateKey) };
     } catch {
       // Corrupt / blocked — fall back to a clean, empty history.
       return fresh();

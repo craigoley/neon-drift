@@ -6,7 +6,7 @@
  */
 
 import { BotRace } from './BotRace';
-import { RaceHud } from './RaceHud';
+import { RaceHud, type RaceView } from './RaceHud';
 import type { GameState } from '../game/GameState';
 import { BOT_DIFFICULTY, type BotDifficulty } from '../utils/constants';
 
@@ -23,6 +23,9 @@ export interface BotRaceUIOptions {
   onRacing: (race: BotRace) => void;
   /** The PLAYER took a crash-slowdown — for a crash cue (flash/thump). */
   onLocalCrash?: () => void;
+  /** Fired ONCE when the race finishes (with the final view) — for the PROG-1 win
+   *  credit award. */
+  onResult?: (view: RaceView) => void;
   /** Leave a finished race → tear down (close, reset game, show menu). */
   onLeaveRace?: () => void;
   /** Backed out before racing. */
@@ -74,10 +77,17 @@ export function mountBotRaceUI(parent: HTMLElement, opts: BotRaceUIOptions): voi
   });
 
   let started: string | null = null;
+  let resultFired = false; // one-shot guard so the win credit awards exactly once
   const pick = (tier: { id: BotDifficulty; label: string }) => {
     started = tier.label;
     race = new BotRace(BOT_DIFFICULTY[tier.id], {
-      onRaceState: (v) => raceHud.render(v),
+      onRaceState: (v) => {
+        raceHud.render(v);
+        if (v.finished && !resultFired) {
+          resultFired = true;
+          opts.onResult?.(v);
+        }
+      },
       onLeadChange: (localLeads) => raceHud.flashLead(localLeads),
       onLocalCrash: () => opts.onLocalCrash?.(),
     });

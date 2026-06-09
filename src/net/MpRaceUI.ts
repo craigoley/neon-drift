@@ -25,6 +25,9 @@ export interface MpRaceUIOptions {
   onRacing: (race: MpRace) => void;
   /** The local car took an MP crash-slowdown — for a crash cue (flash/thump). */
   onLocalCrash?: () => void;
+  /** Fired ONCE when the race finishes (with the final view) — for the PROG-1 win
+   *  credit award. */
+  onResult?: (view: MpRaceView) => void;
   /** Leave a finished/disconnected race → tear down (close, reset game, show menu). */
   onLeaveRace?: () => void;
   /** Called when the user backs out before racing. */
@@ -68,6 +71,7 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
 
   let race: MpRace | null = null;
   let racingHandedOff = false;
+  let resultFired = false; // one-shot guard so the win credit awards exactly once
 
   const leaveRace = () => {
     raceHud.remove();
@@ -114,7 +118,13 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
       if (racingHandedOff) strip.textContent = `2P · ${ms} ms`;
     },
     onLocalCrash: () => opts.onLocalCrash?.(),
-    onRaceState: (v: MpRaceView) => raceHud.render(v),
+    onRaceState: (v: MpRaceView) => {
+      raceHud.render(v);
+      if (v.finished && !resultFired) {
+        resultFired = true;
+        opts.onResult?.(v);
+      }
+    },
     onLeadChange: (localLeads: boolean) => raceHud.flashLead(localLeads),
     onDisconnect: () => {
       /* handled via onRaceState (finished + disconnected) on the next tick */

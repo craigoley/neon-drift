@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DailyStore } from '../DailyStore';
+import { isConsecutiveDay } from '../../utils/daily';
 import { DAILY_HISTORY_SIZE, DAILY_STORAGE_KEY } from '../../utils/constants';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -85,5 +86,43 @@ describe('DailyStore — persistence + resilience', () => {
   it('falls back to an empty history on a corrupt blob', () => {
     const s = new DailyStore(memStorage('{not json'));
     expect(s.history()).toHaveLength(0);
+  });
+});
+
+describe('isConsecutiveDay — date arithmetic (pure)', () => {
+  it('is true only for the immediately-following calendar day (handles boundaries)', () => {
+    expect(isConsecutiveDay(20260531, 20260601)).toBe(true); // month boundary
+    expect(isConsecutiveDay(20261231, 20270101)).toBe(true); // year boundary
+    expect(isConsecutiveDay(20260531, 20260602)).toBe(false); // a gap
+    expect(isConsecutiveDay(20260531, 20260531)).toBe(false); // same day
+    expect(isConsecutiveDay(0, 20260601)).toBe(false); // no prior day
+  });
+});
+
+describe('DailyStore — PROG-1 streak + firstOfDay', () => {
+  it('firstOfDay is true only on the first run of a day; streak holds on replays', () => {
+    const s = new DailyStore(memStorage());
+    const first = s.submitDaily(TODAY, 1000, 100, 'pulse');
+    expect(first.firstOfDay).toBe(true);
+    expect(first.streak).toBe(1);
+    const replay = s.submitDaily(TODAY, 2000, 200, 'pulse');
+    expect(replay.firstOfDay).toBe(false); // a replay, not a new day
+    expect(replay.streak).toBe(1); // streak unchanged by replays
+  });
+
+  it('the streak grows on consecutive days and resets after a gap', () => {
+    const s = new DailyStore(memStorage());
+    expect(s.submitDaily(20260531, 100, 10, 'pulse').streak).toBe(1);
+    expect(s.submitDaily(20260601, 100, 10, 'pulse').streak).toBe(2); // next day
+    expect(s.submitDaily(20260602, 100, 10, 'pulse').streak).toBe(3); // next day
+    expect(s.submitDaily(20260610, 100, 10, 'pulse').streak).toBe(1); // gap → reset
+  });
+
+  it('streak persists across sessions', () => {
+    const storage = memStorage();
+    const a = new DailyStore(storage);
+    a.submitDaily(20260531, 100, 10, 'pulse');
+    const b = new DailyStore(storage); // next session
+    expect(b.submitDaily(20260601, 100, 10, 'pulse').streak).toBe(2); // continues the streak
   });
 });

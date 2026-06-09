@@ -62,6 +62,7 @@ import { lerp } from './utils/math';
 import {
   BIOMES,
   CARS,
+  CREDITS,
   carById,
   cssHex,
   GHOST,
@@ -334,6 +335,8 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         scene.addShake(JUICE.nearMissShake[JUICE.nearMissShake.length - 1]);
         if (audio.started) audio.playCrash();
       },
+      // PROG-1: award credits once on the race result (win bonus, else consolation).
+      onResult: (view) => progress.addCredits(view.result === 'win' ? CREDITS.raceWin : CREDITS.raceConsolation),
       // Race over (finish or disconnect) → tear down cleanly + back to the menu.
       onLeaveRace: () => {
         mpRace = null;
@@ -368,6 +371,8 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         scene.addShake(JUICE.nearMissShake[JUICE.nearMissShake.length - 1]);
         if (audio.started) audio.playCrash();
       },
+      // PROG-1: award credits once on the race result (win bonus, else consolation).
+      onResult: (view) => progress.addCredits(view.result === 'win' ? CREDITS.raceWin : CREDITS.raceConsolation),
       // Race over → tear down cleanly + back to the menu.
       onLeaveRace: () => {
         botRace = null;
@@ -379,6 +384,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
       onExit: () => shell.showStart(),
     });
   },
+  credits: () => progress.getCredits(), // PROG-1 balance readout (start + WIPEOUT)
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
   // 3D car-picker preview (own light renderer; created on enter, disposed on
   // exit — never runs behind the game).
@@ -490,7 +496,7 @@ if (import.meta.env.DEV) {
         shell.showCrash(9100, 1800, best, 3.5, ['Nova'], ['MISSION COMPLETE: Thread 25 near-misses', 'RANK UP: Runner!', 'UNLOCKED: Nova'], { rank: 5, isCarBest: false, carId: 'pulse', target: { rank: 4, score: 9300, gap: 200 } }, null)],
       // daily-result card (new daily best)
       ['wipeout-daily', () =>
-        shell.showCrash(6400, 1200, { distance: 1200, score: 6400 }, 1.0, [], [], null, { isBest: true, runs: 1, bestScore: 6400, bestDistance: 1200 })],
+        shell.showCrash(6400, 1200, { distance: 1200, score: 6400 }, 1.0, [], [], null, { isBest: true, runs: 1, bestScore: 6400, bestDistance: 1200, firstOfDay: true, streak: 3 }, 80)],
     ];
     // Match the requested screen against the known names; an unknown value matches
     // nothing and safely no-ops. The called `run` is a KNOWN function, not a lookup.
@@ -683,10 +689,18 @@ function frame(now: number): void {
     let placement: RunPlacement | null = null;
     let dailyResult: DailyResult | null = null;
     let bestForCrash = leaderboard.bestRun();
+    // The run's score: slalom uses its event-driven score, classic the integral.
+    const runScore = isSlalom(game) ? game.slalomScore.score : game.score.score;
+    let creditsEarned = 0;
     if (isSlalom(game)) {
       // Daily Slalom submits its OWN event-driven score (not the classic integral).
       dailyResult = daily.submitDaily(dailyDateKey(new Date()), game.slalomScore.score, game.distance, carIdNow);
       bestForCrash = { distance: dailyResult.bestDistance, score: dailyResult.bestScore };
+      // DAILY completion credits: once per day (the first run), plus a streak bonus.
+      if (dailyResult.firstOfDay) {
+        creditsEarned += CREDITS.dailyComplete + Math.min(dailyResult.streak * CREDITS.dailyStreakPerDay, CREDITS.dailyStreakCap);
+        progress.addCredits(creditsEarned);
+      }
     } else {
       placement = leaderboard.submit({
         score: game.score.score,
@@ -694,13 +708,16 @@ function frame(now: number): void {
         carId: carIdNow,
       });
     }
-    // Fold this run into the lifetime totals and surface anything newly unlocked.
+    // Fold this run into the lifetime totals, surface anything newly unlocked, and
+    // award the per-run credit drip (PROG-1).
     const result = progress.recordRun({
+      score: runScore,
       distance: game.distance,
       bestCombo: game.score.peakCombo,
       powerupsCollected: game.powerups.collected,
       biomesSeen: biomesSeenForDistance(game.distance),
     });
+    creditsEarned += result.creditsAwarded;
     unlockedNames = result.newlyUnlocked.map((id) => carById(id).displayName);
     // Commit the run to the across-run mission/rank progression (crash included).
     const mission = missions.commitRun({
@@ -742,6 +759,7 @@ function frame(now: number): void {
       missionLines,
       placement,
       dailyResult,
+      creditsEarned,
     );
   }
   if (audio.started) {

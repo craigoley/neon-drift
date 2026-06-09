@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { ProgressStore } from '../Progress';
-import { CARS, CAR_UNLOCKS, PROGRESS_STORAGE_KEY, STARTER_CAR_ID } from '../../utils/constants';
+import { ProgressStore, type RunResult } from '../Progress';
+import { CARS, CAR_UNLOCKS, CREDITS, PROGRESS_STORAGE_KEY, STARTER_CAR_ID, STARTING_CAR_IDS } from '../../utils/constants';
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -15,132 +15,136 @@ function memStorage(seed?: string): StorageLike & { raw: Map<string, string> } {
   };
 }
 
-describe('ProgressStore — fresh player', () => {
-  it('starts with only the starter unlocked and zeroed stats', () => {
+/** A RunResult with a 0 score by default (so unlock tests ignore credits). */
+function run(partial: Partial<RunResult>): RunResult {
+  return { score: 0, distance: 0, bestCombo: 0, powerupsCollected: 0, biomesSeen: 0, ...partial };
+}
+
+describe('ProgressStore — fresh player (widened starting set)', () => {
+  it('starts with the whole STARTING SET unlocked, tier-2 cars locked, zeroed stats + 0 credits', () => {
     const p = new ProgressStore(memStorage());
+    for (const id of STARTING_CAR_IDS) expect(p.isUnlocked(id)).toBe(true);
     expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true);
-    expect(p.isUnlocked('vapor')).toBe(false);
+    // The deeper-achievement cars stay locked (they gain a purchase path in PR2).
+    expect(p.isUnlocked('onyx')).toBe(false);
+    expect(p.isUnlocked('nova')).toBe(false);
+    expect(p.isUnlocked('slipstream')).toBe(false);
     expect(p.getStats()).toEqual({ totalDistance: 0, bestCombo: 0, powerupsCollected: 0, biomesSeen: 0 });
+    expect(p.getCredits()).toBe(0);
   });
 });
 
-describe('ProgressStore — recordRun accumulates + unlocks once', () => {
-  it('sums distance/powerups, maxes combo/biomes, and flips an unlock exactly once', () => {
+describe('ProgressStore — recordRun accumulates + unlocks a stat-gated car once', () => {
+  it('sums distance/powerups, maxes combo/biomes, and flips Onyx exactly once at 75 powerups', () => {
     const p = new ProgressStore(memStorage());
+    expect(p.recordRun(run({ powerupsCollected: 70, distance: 1500, bestCombo: 4, biomesSeen: 1 })).newlyUnlocked).toEqual([]);
+    expect(p.isUnlocked('onyx')).toBe(false);
 
-    // Two short runs accumulate toward the 2,500m vapor gate.
-    expect(p.recordRun({ distance: 1500, bestCombo: 4, powerupsCollected: 10, biomesSeen: 1 }).newlyUnlocked).toEqual(
-      [],
-    );
-    expect(p.isUnlocked('vapor')).toBe(false);
-
-    const second = p.recordRun({ distance: 1500, bestCombo: 3, powerupsCollected: 5, biomesSeen: 2 });
-    expect(second.newlyUnlocked).toContain('vapor'); // crossed 3000 ≥ 2500
-    expect(p.isUnlocked('vapor')).toBe(true);
-
-    // Stats: distance summed, combo is the MAX (4, not 3), powerups summed, biomes max.
-    expect(p.getStats()).toEqual({ totalDistance: 3000, bestCombo: 4, powerupsCollected: 15, biomesSeen: 2 });
+    const second = p.recordRun(run({ powerupsCollected: 5, distance: 1500, bestCombo: 3, biomesSeen: 2 }));
+    expect(second.newlyUnlocked).toContain('onyx'); // crossed 75
+    expect(p.isUnlocked('onyx')).toBe(true);
+    expect(p.getStats()).toEqual({ totalDistance: 3000, bestCombo: 4, powerupsCollected: 75, biomesSeen: 2 });
 
     // A further run does NOT re-announce the already-earned car.
-    expect(p.recordRun({ distance: 100, bestCombo: 1, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).toEqual(
-      [],
-    );
+    expect(p.recordRun(run({ distance: 100, bestCombo: 1, biomesSeen: 1 })).newlyUnlocked).toEqual([]);
   });
 
-  it('best combo unlocks ghost the moment it is reached', () => {
-    const p = new ProgressStore(memStorage());
-    expect(p.recordRun({ distance: 100, bestCombo: 6, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).toContain(
-      'ghost',
-    );
-    expect(p.isUnlocked('ghost')).toBe(true);
-  });
-});
-
-describe('ProgressStore — new roster cars gate + unlock at their thresholds', () => {
   it('every car has exactly one unlock entry (table stays in sync with CARS)', () => {
     expect([...CAR_UNLOCKS].map((u) => u.carId).sort()).toEqual(CARS.map((c) => c.id).sort());
   });
 
-  it('the new cars are locked for a fresh player', () => {
+  it('Nova unlocks at an ×10 combo; Slipstream at all 4 biomes', () => {
     const p = new ProgressStore(memStorage());
-    expect(p.isUnlocked('onyx')).toBe(false);
-    expect(p.isUnlocked('nova')).toBe(false);
-    expect(p.isUnlocked('slipstream')).toBe(false);
-  });
-
-  it('Onyx unlocks at 75 lifetime powerups', () => {
-    const p = new ProgressStore(memStorage());
-    // 70 first — still locked — then cross 75.
-    p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 70, biomesSeen: 1 });
-    expect(p.isUnlocked('onyx')).toBe(false);
-    expect(
-      p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 5, biomesSeen: 1 }).newlyUnlocked,
-    ).toContain('onyx');
-    expect(p.isUnlocked('onyx')).toBe(true);
-  });
-
-  it('Nova unlocks at an ×10 combo', () => {
-    const p = new ProgressStore(memStorage());
-    expect(p.recordRun({ distance: 1, bestCombo: 9, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).not.toContain(
-      'nova',
-    );
-    expect(p.isUnlocked('nova')).toBe(false);
-    expect(p.recordRun({ distance: 1, bestCombo: 10, powerupsCollected: 0, biomesSeen: 1 }).newlyUnlocked).toContain(
-      'nova',
-    );
-  });
-
-  it('Slipstream unlocks at seeing all 4 biomes in a run', () => {
-    const p = new ProgressStore(memStorage());
-    expect(p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 0, biomesSeen: 3 }).newlyUnlocked).not.toContain(
-      'slipstream',
-    );
-    expect(p.recordRun({ distance: 1, bestCombo: 1, powerupsCollected: 0, biomesSeen: 4 }).newlyUnlocked).toContain(
-      'slipstream',
-    );
+    expect(p.recordRun(run({ bestCombo: 9 })).newlyUnlocked).not.toContain('nova');
+    expect(p.recordRun(run({ bestCombo: 10 })).newlyUnlocked).toContain('nova');
+    expect(p.recordRun(run({ biomesSeen: 3 })).newlyUnlocked).not.toContain('slipstream');
+    expect(p.recordRun(run({ biomesSeen: 4 })).newlyUnlocked).toContain('slipstream');
   });
 });
 
-describe('ProgressStore — persistence round-trips across sessions', () => {
+describe('ProgressStore — credits (PROG-1 earn)', () => {
+  it('awards per-run credits = floor(score/divisor) + floor(distance/divisor)', () => {
+    const p = new ProgressStore(memStorage());
+    const r = p.recordRun(run({ score: 5000, distance: 2500 }));
+    const expected = Math.floor(5000 / CREDITS.runScoreDivisor) + Math.floor(2500 / CREDITS.runDistanceDivisor);
+    expect(r.creditsAwarded).toBe(expected);
+    expect(p.getCredits()).toBe(expected);
+  });
+
+  it('caps the per-run award (anti-farm)', () => {
+    const p = new ProgressStore(memStorage());
+    const r = p.recordRun(run({ score: 9_999_999, distance: 9_999_999 }));
+    expect(r.creditsAwarded).toBe(CREDITS.runCap);
+  });
+
+  it('addCredits accumulates and never drives the balance below 0', () => {
+    const p = new ProgressStore(memStorage());
+    expect(p.addCredits(CREDITS.raceWin)).toBe(CREDITS.raceWin);
+    expect(p.addCredits(40)).toBe(CREDITS.raceWin + 40);
+    expect(p.addCredits(-1_000_000)).toBe(0); // clamped, never negative
+  });
+
+  it('credits persist across sessions on the same storage', () => {
+    const storage = memStorage();
+    const a = new ProgressStore(storage);
+    a.recordRun(run({ score: 3000, distance: 1000 })); // 30 + 4 = 34
+    a.addCredits(50);
+    const balance = a.getCredits();
+    const b = new ProgressStore(storage); // "next session"
+    expect(b.getCredits()).toBe(balance);
+  });
+});
+
+describe('ProgressStore — persistence + migration', () => {
   it('an unlock earned in one store is present in a fresh store on the same storage', () => {
     const storage = memStorage();
     const a = new ProgressStore(storage);
-    a.recordRun({ distance: 2600, bestCombo: 2, powerupsCollected: 0, biomesSeen: 1 });
-    expect(a.isUnlocked('vapor')).toBe(true);
+    a.recordRun(run({ powerupsCollected: 75 }));
+    expect(a.isUnlocked('onyx')).toBe(true);
+    const b = new ProgressStore(storage);
+    expect(b.isUnlocked('onyx')).toBe(true);
+  });
 
-    const b = new ProgressStore(storage); // "next session"
-    expect(b.isUnlocked('vapor')).toBe(true);
-    expect(b.getStats().totalDistance).toBe(2600);
+  it('a PRE-credits blob migrates: credits 0, starting set present, earned cars + stats kept', () => {
+    // Old-format blob: no `version`, no `credits`, ghost earned, some distance.
+    const storage = memStorage(JSON.stringify({ stats: { totalDistance: 2600 }, unlocked: ['pulse', 'onyx'] }));
+    const p = new ProgressStore(storage);
+    expect(p.getCredits()).toBe(0); // not gifted a balance never earned
+    expect(p.isUnlocked('onyx')).toBe(true); // earned car kept (monotonic)
+    for (const id of STARTING_CAR_IDS) expect(p.isUnlocked(id)).toBe(true); // widened set folded in
+    expect(p.getStats().totalDistance).toBe(2600);
   });
 
   it('unlocks are MONOTONIC — a persisted earned car survives even if stats no longer meet it', () => {
-    // Hand-craft a blob: ghost in the unlocked set, but zero stats (e.g. thresholds raised later).
-    const storage = memStorage(JSON.stringify({ stats: {}, unlocked: ['pulse', 'ghost'] }));
+    const storage = memStorage(JSON.stringify({ stats: {}, unlocked: ['pulse', 'nova'] }));
     const p = new ProgressStore(storage);
-    expect(p.isUnlocked('ghost')).toBe(true);
+    expect(p.isUnlocked('nova')).toBe(true);
     expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true);
   });
 });
 
 describe('ProgressStore — corruption + storage failure never crash', () => {
-  it('a corrupt blob falls back to starter-only', () => {
+  it('a corrupt blob falls back to the starting set + 0 credits', () => {
     const p = new ProgressStore(memStorage('}{ not json'));
     expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true);
-    expect(p.isUnlocked('vapor')).toBe(false);
+    expect(p.isUnlocked('onyx')).toBe(false); // tier-2 still locked
     expect(p.getStats().totalDistance).toBe(0);
+    expect(p.getCredits()).toBe(0);
   });
 
-  it('a partial / wrong-typed blob is coerced safely', () => {
-    const storage = memStorage(JSON.stringify({ stats: { totalDistance: 'lots', bestCombo: null }, unlocked: 'nope' }));
+  it('a partial / wrong-typed blob is coerced safely (bad credits → 0)', () => {
+    const storage = memStorage(JSON.stringify({ stats: { totalDistance: 'lots' }, unlocked: 'nope', credits: 'rich' }));
     const p = new ProgressStore(storage);
-    expect(p.getStats().totalDistance).toBe(0); // bad type → 0
-    expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true); // unlocked coerced to [starter]
+    expect(p.getStats().totalDistance).toBe(0);
+    expect(p.getCredits()).toBe(0);
+    expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true);
   });
 
   it('a null storage (private mode) works in memory and never throws', () => {
     const p = new ProgressStore(null);
-    expect(() => p.recordRun({ distance: 3000, bestCombo: 7, powerupsCollected: 40, biomesSeen: 3 })).not.toThrow();
-    expect(p.isUnlocked('vapor')).toBe(true);
+    expect(() => p.recordRun(run({ score: 3000, distance: 3000, powerupsCollected: 75 }))).not.toThrow();
+    expect(p.isUnlocked('onyx')).toBe(true);
+    expect(p.getCredits()).toBeGreaterThan(0);
   });
 
   it('a throwing storage (blocked) is swallowed on both read and write', () => {
@@ -155,7 +159,7 @@ describe('ProgressStore — corruption + storage failure never crash', () => {
     let p!: ProgressStore;
     expect(() => (p = new ProgressStore(throwing))).not.toThrow();
     expect(p.isUnlocked(STARTER_CAR_ID)).toBe(true);
-    expect(() => p.recordRun({ distance: 5000, bestCombo: 9, powerupsCollected: 99, biomesSeen: 4 })).not.toThrow();
-    expect(p.isUnlocked('vapor')).toBe(true); // still reflected in memory
+    expect(() => p.recordRun(run({ score: 5000, powerupsCollected: 99 }))).not.toThrow();
+    expect(p.getCredits()).toBeGreaterThan(0); // reflected in memory
   });
 });

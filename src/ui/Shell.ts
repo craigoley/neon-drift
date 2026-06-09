@@ -100,6 +100,8 @@ export interface ShellOptions {
   onMultiplayer?: () => void;
   /** Open the vs-Computer (AI race) entry. Absent → no "vs COMPUTER" button. */
   onVsComputer?: () => void;
+  /** Current credit balance provider (PROG-1). Absent → no credits readout (tests). */
+  credits?: () => number;
   /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
    *  the composition root react immediately if it wants (optional). */
   onGhostRaceChange?: (on: boolean) => void;
@@ -140,6 +142,9 @@ export class Shell {
   private readonly crashBestEl: HTMLElement;
   private readonly crashUnlockEl: HTMLElement;
   private readonly crashMissionsEl: HTMLElement;
+  /** PROG-1 credit readouts (start balance + per-run earned). */
+  private readonly startCreditsEl: HTMLElement;
+  private readonly crashCreditsEl: HTMLElement;
   private readonly leaderboardListEl: HTMLElement;
   private readonly leaderboardCarsEl: HTMLElement;
   private readonly dailyTodayEl: HTMLElement;
@@ -196,6 +201,8 @@ export class Shell {
 
     // Cache nodes that update at runtime.
     this.startBest = this.startScreen.querySelector('.shell-best')!;
+    this.startCreditsEl = this.startScreen.querySelector('.shell-credits')!;
+    this.crashCreditsEl = this.crashScreen.querySelector('.shell-crash-credits')!;
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashPlacementEl = this.crashScreen.querySelector('.shell-crash-placement')!;
@@ -261,7 +268,19 @@ export class Shell {
 
   showStart(): void {
     this.startBest.textContent = this.bestLine(this.leaderboard.bestRun());
+    this.renderCredits(this.startCreditsEl, 0);
     this.go('start');
+  }
+
+  /** Render a credit readout: the balance, plus an optional "+N earned" prefix. */
+  private renderCredits(eln: HTMLElement, earned: number): void {
+    if (!this.opts.credits) {
+      eln.style.display = 'none';
+      return;
+    }
+    const balance = Math.round(this.opts.credits());
+    eln.textContent = earned > 0 ? `+${Math.round(earned)} credits · ${balance} total` : `★ ${balance} credits`;
+    eln.style.display = '';
   }
 
   showCrash(
@@ -273,8 +292,11 @@ export class Shell {
     missionLines: string[] = [],
     placement: RunPlacement | null = null,
     daily: DailyResult | null = null,
+    creditsEarned = 0,
   ): void {
     this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
+    // PROG-1: the credits earned this run + the running balance (no spend yet).
+    this.renderCredits(this.crashCreditsEl, creditsEarned);
     // The live combo resets on crash, so the WIPEOUT screen is where the player
     // sees how daring the run was. Dimmed when the run never built a combo.
     this.crashComboEl.textContent = `MAX COMBO x${peakCombo.toFixed(1)}`;
@@ -412,6 +434,7 @@ export class Shell {
     s.innerHTML =
       `<h1 class="shell-title">NEON DRIFT</h1>` +
       `<p class="shell-best"></p>` +
+      `<p class="shell-credits"></p>` +
       `<button class="shell-btn shell-play" type="button">PLAY</button>` +
       `<p class="shell-hint">${hint}</p>` +
       `<div class="shell-row">` +
@@ -911,6 +934,7 @@ export class Shell {
       `<p class="shell-crash-unlock"></p>` +
       `<div class="shell-crash-missions"></div>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
+      `<p class="shell-crash-credits"></p>` +
       `<p class="shell-crash-target"></p>` +
       `<button class="shell-btn shell-play-again" type="button">PLAY AGAIN</button>` +
       `<div class="shell-row">` +

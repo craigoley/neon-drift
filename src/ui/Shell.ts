@@ -91,7 +91,7 @@ export interface ShellOptions {
   carLock?: (carId: string) => { label: string; have: number; need: number } | null;
   /** Across-run mission/rank panel data. Absent → no MISSIONS button (tests). */
   missions?: MissionsPanel;
-  /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
+  /** "Retro FX" toggle → enable/disable the bloom pipeline (HIGH/LOW quality). */
   onLowFxChange?: (lowFx: boolean) => void;
   /** "Cinematic FX" toggle → enable/disable the fullscreen grade pass (independent of
    *  bloom). OFF keeps the glow but drops the fullscreen shader (a mobile fill-rate win). */

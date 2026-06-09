@@ -19,8 +19,11 @@ import { clamp } from '../utils/math';
 import { Rng } from '../utils/rng';
 import { BOT, type BotSkill, ObstacleKind, ROAD } from '../utils/constants';
 import { roadCenterAt } from './Road';
-import { createIntent, type InputIntent } from './Input';
+import type { InputIntent } from './Input';
 import type { GameState } from './GameState';
+
+// Scratch intent reused every sub-step (callers consume it before the next call).
+const _intent: InputIntent = { steer: 0, deploySlowMo: false, restart: false };
 
 /** The bot's small persistent state: its private mistake-rng + a held "fumble" so a
  *  mistake reads as a beat of hesitation rather than a 1-frame flicker. */
@@ -66,59 +69,65 @@ function pickClearLane(center: number, botLateral: number, obsLateral: number): 
  * bot's own state) — never the player's.
  */
 export function botIntent(bot: BotState, game: GameState, skill: BotSkill, dt: number): InputIntent {
-  const intent = createIntent();
+  _intent.steer = 0;
+  _intent.deploySlowMo = false;
+  _intent.restart = false;
 
   // Hold an in-progress fumble: keep the bad steer, make no other decision.
   if (bot.mistakeTimer > 0) {
     bot.mistakeTimer = Math.max(0, bot.mistakeTimer - dt);
-    intent.steer = bot.mistakeSteer;
-    return intent;
+    _intent.steer = bot.mistakeSteer;
+    return _intent;
   }
   // Roll a fresh mistake (rate is per-second → scale by dt). A fumble is a wrong/weak
   // steer held briefly — the visible "imperfect dodge" that makes EASY beatable.
   if (bot.rng.next() < skill.mistakeRate * dt) {
     bot.mistakeTimer = BOT.mistakeHoldSeconds;
     bot.mistakeSteer = clamp(bot.rng.range(-1, 1) * 0.5, -1, 1);
-    intent.steer = bot.mistakeSteer;
-    return intent;
+    _intent.steer = bot.mistakeSteer;
+    return _intent;
   }
 
   // SENSE: nearest hazard ahead within sight (ramps are beneficial → not a hazard).
   const center = roadCenterAt(game.seed, game.distance);
   const botLateral = game.vehicle.lateral;
-  let nearest: { lateral: number; kind: ObstacleKind } | null = null;
+  let nearestLateral = 0;
+  let nearestKind: ObstacleKind = ObstacleKind.Static;
   let nearestGap = Infinity;
+  let hasNearest = false;
   for (const o of game.traffic.pool) {
     if (!o.active || o.kind === ObstacleKind.Ramp) continue;
     const ahead = o.distance - game.distance;
     if (ahead <= 0 || ahead > skill.reactionDistance) continue;
     if (ahead < nearestGap) {
       nearestGap = ahead;
-      nearest = { lateral: o.lateral, kind: o.kind };
+      nearestLateral = o.lateral;
+      nearestKind = o.kind;
+      hasNearest = true;
     }
   }
 
   // CHOOSE a target lateral: gate → opening centre; obstacle → a clearing lane;
   // open road → drift back to centre.
   let targetLateral = center;
-  if (nearest) {
+  if (hasNearest) {
     targetLateral =
-      nearest.kind === ObstacleKind.Gate ? nearest.lateral : pickClearLane(center, botLateral, nearest.lateral);
+      nearestKind === ObstacleKind.Gate ? nearestLateral : pickClearLane(center, botLateral, nearestLateral);
   }
   // Sloppiness: jitter the aim (seeded), then clamp to the drivable corridor.
   targetLateral += bot.rng.range(-skill.dodgeJitter, skill.dodgeJitter);
   targetLateral = clamp(targetLateral, center - ROAD.halfWidth, center + ROAD.halfWidth);
 
   // STEER toward the target lane.
-  intent.steer = clamp((targetLateral - botLateral) * skill.steerGain, -1, 1);
+  _intent.steer = clamp((targetLateral - botLateral) * skill.steerGain, -1, 1);
 
   // SLOW-MO: in a tight spot with a charge banked, deploy (skill-gated). The deploy
   // guard in update() ignores it when a slow-mo is already running or the bank is
   // empty, so this can never waste a charge.
   const fx = game.powerups.effects;
-  if (skill.slowMoTriggerDistance > 0 && nearest && nearestGap <= skill.slowMoTriggerDistance && fx.slowMoCharges > 0 && fx.slowMoTimer <= 0) {
-    intent.deploySlowMo = true;
+  if (skill.slowMoTriggerDistance > 0 && hasNearest && nearestGap <= skill.slowMoTriggerDistance && fx.slowMoCharges > 0 && fx.slowMoTimer <= 0) {
+    _intent.deploySlowMo = true;
   }
 
-  return intent;
+  return _intent;
 }

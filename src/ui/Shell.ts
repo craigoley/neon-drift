@@ -93,6 +93,9 @@ export interface ShellOptions {
   missions?: MissionsPanel;
   /** "Retro FX" toggle → enable/disable the cinematic post-FX pass. */
   onLowFxChange?: (lowFx: boolean) => void;
+  /** "Cinematic FX" toggle → enable/disable the fullscreen grade pass (independent of
+   *  bloom). OFF keeps the glow but drops the fullscreen shader (a mobile fill-rate win). */
+  onCinematicFxChange?: (on: boolean) => void;
   /** Open the 2-player live race entry (MP-1). Absent → no 2P RACE button. */
   onMultiplayer?: () => void;
   /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
@@ -153,6 +156,7 @@ export class Shell {
   private readonly sbReqEl: HTMLElement;
   private readonly soundValueEl: HTMLElement;
   private readonly fxValueEl: HTMLElement;
+  private readonly cineValueEl: HTMLElement;
   private readonly ghostValueEl: HTMLElement;
 
   private readonly settings: SettingsStore;
@@ -215,6 +219,7 @@ export class Shell {
     this.sbReqEl = this.missionsScreen.querySelector('.shell-sb-req')!;
     this.soundValueEl = this.settingsScreen.querySelector('.shell-toggle-value')!;
     this.fxValueEl = this.settingsScreen.querySelector('.shell-fx-value')!;
+    this.cineValueEl = this.settingsScreen.querySelector('.shell-cine-value')!;
     this.ghostValueEl = this.settingsScreen.querySelector('.shell-ghost-value')!;
 
     // In-run PAUSE button (touch + mouse affordance; keyboard uses Esc/P). Shown
@@ -246,6 +251,7 @@ export class Shell {
     this.renderCar();
     this.renderSound();
     this.renderFx();
+    this.renderCine();
     this.renderGhost();
   }
 
@@ -461,6 +467,14 @@ export class Shell {
       `<button class="shell-btn shell-toggle shell-toggle-fx" type="button" role="switch">` +
       `<span class="shell-fx-value">ON</span></button>` +
       `</div>` +
+      // Cinematic FX: the fullscreen grade pass (aberration / scanlines / grain /
+      // vignette), independent of bloom. OFF keeps the glow but drops the fullscreen
+      // shader — a fill-rate win on mobile GPUs. No effect while Retro FX is off.
+      `<div class="shell-setting">` +
+      `<span class="shell-setting-label">Cinematic FX</span>` +
+      `<button class="shell-btn shell-toggle shell-toggle-cine" type="button" role="switch">` +
+      `<span class="shell-cine-value">ON</span></button>` +
+      `</div>` +
       // Rival Ghost: race a translucent replay of your best run for the mode.
       `<div class="shell-setting">` +
       `<span class="shell-setting-label">Rival Ghost</span>` +
@@ -471,6 +485,7 @@ export class Shell {
 
     s.querySelector('.shell-toggle-sound')!.addEventListener('click', () => this.toggleSound());
     s.querySelector('.shell-toggle-fx')!.addEventListener('click', () => this.toggleFx());
+    s.querySelector('.shell-toggle-cine')!.addEventListener('click', () => this.toggleCine());
     s.querySelector('.shell-toggle-ghost')!.addEventListener('click', () => this.toggleGhost());
     s.querySelector('.shell-close')!.addEventListener('click', () => this.go('start'));
     return s;
@@ -499,9 +514,24 @@ export class Shell {
   }
 
   private renderFx(): void {
-    const on = !this.settings.get('lowFx'); // FX ON = full cinematic pass
+    const on = !this.settings.get('lowFx'); // FX ON = bloom + composer
     this.fxValueEl.textContent = on ? 'ON' : 'OFF';
     const toggle = this.settingsScreen.querySelector('.shell-toggle-fx')!;
+    toggle.classList.toggle('shell-toggle--on', on);
+    toggle.setAttribute('aria-checked', String(on));
+  }
+
+  private toggleCine(): void {
+    const next = !this.settings.get('cinematicFx');
+    this.settings.set('cinematicFx', next);
+    this.opts.onCinematicFxChange?.(next);
+    this.renderCine();
+  }
+
+  private renderCine(): void {
+    const on = this.settings.get('cinematicFx');
+    this.cineValueEl.textContent = on ? 'ON' : 'OFF';
+    const toggle = this.settingsScreen.querySelector('.shell-toggle-cine')!;
     toggle.classList.toggle('shell-toggle--on', on);
     toggle.setAttribute('aria-checked', String(on));
   }

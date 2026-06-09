@@ -187,19 +187,32 @@ export class PostProcessing {
   }
 
   /**
-   * Graphics quality — the "Retro FX" HIGH/LOW lever.
-   *   HIGH: the full composer pipeline (bloom glow + cinematic grade).
-   *   LOW:  render DIRECT — bypass the composer entirely, so the expensive bloom
-   *         (5 down/up blur passes) AND the cinematic pass AND the render-target
-   *         round-trip are all skipped. The renderer still applies ACES tone mapping
-   *         + sRGB (set in SceneManager), so colour matches HIGH minus the glow.
-   * This is the genuine perf escape hatch: LOW is a much cheaper frame, not a dimmed
-   * one. (Disabling the passes too keeps state consistent if anything re-enters HIGH.)
+   * Graphics quality — the BLOOM / HIGH-LOW lever ("Retro FX" setting).
+   *   HIGH: the composer pipeline (bloom glow + the cinematic grade IF its own toggle
+   *         is on — see setCinematicEnabled, controlled independently).
+   *   LOW:  render DIRECT — bypass the composer entirely, so the expensive bloom (5
+   *         down/up blur passes) AND the cinematic pass AND the render-target round-trip
+   *         are all skipped. The renderer still applies ACES tone mapping + sRGB (set in
+   *         SceneManager), so colour matches HIGH minus the glow.
+   * NOTE: this no longer touches the cinematic pass — bloom and cinematic are now
+   * INDEPENDENT, so "bloom on + cinematic off" (a cheaper MEDIUM that keeps the glow but
+   * drops the fullscreen grade pass) is reachable.
    */
   setQuality(high: boolean): void {
     this.highQuality = high;
     this.bloom.enabled = high;
-    this.cinematic.enabled = high;
+  }
+
+  /**
+   * Cinematic grade pass (chromatic aberration / scanlines / grain / vignette) —
+   * toggled INDEPENDENTLY of bloom ("Cinematic FX" setting). When off, the composer
+   * genuinely SKIPS this fullscreen shader (EffectComposer skips disabled passes) — the
+   * point is to not execute it, since a fullscreen grade pass is a pure fill-rate cost
+   * (measured ~3.6ms on an M4, likely proportionally larger on a mobile GPU). No effect
+   * while quality is LOW (the composer isn't used at all then).
+   */
+  setCinematicEnabled(enabled: boolean): void {
+    this.cinematic.enabled = enabled;
   }
 
   /** `dt` (seconds) advances the grain/scanline animation. The clock WRAPS at

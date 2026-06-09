@@ -678,6 +678,12 @@ function frame(now: number): void {
   // SP run-end recording (leaderboard / daily / missions / ghost) — SKIPPED during a
   // live 2P race: MP race-end + win/lose is PR3 (a local crash here just freezes the
   // local car while the remote keeps racing; no SP wipeout / leaderboard write).
+  // Run-end (solo classic/daily only). NOTE: this also excludes vs-Computer races
+  // even though it only checks `!mpActive` — a bot race runs the player sim with
+  // mpRace=true, which converts a crash to a slowdown, so the player game never
+  // reaches Phase.Crashed mid-race (→ `crashed` is false here). So race credits come
+  // ONLY from the onResult win-award, never this per-run block (no double-award). If
+  // the crash path ever stops converting in races, add an explicit `&& !botActive`.
   if (crashed && !mpActive) {
     scene.addShake(JUICE.shakeMagnitude);
     shards.burst(game.vehicle.lateral, JUICE.shardBurstY, 0);

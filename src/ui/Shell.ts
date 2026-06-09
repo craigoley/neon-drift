@@ -98,6 +98,8 @@ export interface ShellOptions {
   onCinematicFxChange?: (on: boolean) => void;
   /** Open the 2-player live race entry (MP-1). Absent → no 2P RACE button. */
   onMultiplayer?: () => void;
+  /** Open the vs-Computer (AI race) entry. Absent → no "vs COMPUTER" button. */
+  onVsComputer?: () => void;
   /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
    *  the composition root react immediately if it wants (optional). */
   onGhostRaceChange?: (on: boolean) => void;
@@ -420,6 +422,10 @@ export class Shell {
       (this.opts.missions
         ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
         : '') +
+      // vs-COMPUTER race — only when the composition root wired it up.
+      (this.opts.onVsComputer
+        ? `<button class="shell-btn shell-btn--ghost shell-vscpu-open" type="button">vs COMPUTER</button>`
+        : '') +
       // 2-PLAYER live race (MP-1) — only when the composition root wired it up.
       (this.opts.onMultiplayer
         ? `<button class="shell-btn shell-btn--ghost shell-mp-open" type="button">2P RACE</button>`
@@ -433,6 +439,10 @@ export class Shell {
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
     s.querySelector('.shell-daily-open')?.addEventListener('click', () => this.go('daily'));
     s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
+    s.querySelector('.shell-vscpu-open')?.addEventListener('click', () => {
+      this.hide(); // leave the menu; the vs-Computer picker + race take over
+      this.opts.onVsComputer?.();
+    });
     s.querySelector('.shell-mp-open')?.addEventListener('click', () => {
       this.hide(); // leave the menu; the MP overlay + race take over
       this.opts.onMultiplayer?.();

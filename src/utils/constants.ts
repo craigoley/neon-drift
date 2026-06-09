@@ -1698,8 +1698,60 @@ export const MP_CRASH = {
   invuln: 0.9,
 } as const;
 
+/**
+ * vs-COMPUTER (BOT) tuning. The AI opponent is a 2nd GameState stepped with
+ * BOT-GENERATED intents on the same shared course as the player (mpRace=true), so
+ * it meets the identical obstacle field and races to MP_RACE.finishDistance.
+ *
+ * Difficulty is the BOT'S SKILL, never rubber-banding: the bot decides purely from
+ * (the deterministic course it can see + its own car + skill + a seeded rng). It
+ * NEVER reads the player's position/gap — beating HARD is earned, EASY is fair.
+ */
+export interface BotSkill {
+  /** How far ahead (world units) the bot senses obstacles. Short = reacts late. */
+  reactionDistance: number;
+  /** Lateral jitter (world units) added to the chosen target lane — higher =
+   *  sloppier placement (misjudges the gap). Seeded, so it's deterministic. */
+  dodgeJitter: number;
+  /** Per-decision chance [0,1] the bot makes a MISTAKE this tick (wrong/no input),
+   *  rolled on the bot's seeded rng. Higher = more beatable. */
+  mistakeRate: number;
+  /** Steering responsiveness toward the target lane (maps lateral error → steer). */
+  steerGain: number;
+  /** Use a banked slow-mo when the nearest hazard is within this distance (0 =
+   *  never uses slow-mo). Larger = deploys earlier / smarter in tight spots. */
+  slowMoTriggerDistance: number;
+}
+
+/** EASY / MEDIUM / HARD skill presets (first-pass; tune from playtest). EASY sees
+ *  late, places loosely, errs often, barely uses slow-mo → a beginner can win.
+ *  HARD sees far, places tight, almost never errs, uses slow-mo well → a challenge. */
+export const BOT_DIFFICULTY: Readonly<Record<'easy' | 'medium' | 'hard', BotSkill>> = {
+  easy: { reactionDistance: 95, dodgeJitter: 2.4, mistakeRate: 0.22, steerGain: 0.18, slowMoTriggerDistance: 0 },
+  medium: { reactionDistance: 160, dodgeJitter: 1.1, mistakeRate: 0.08, steerGain: 0.3, slowMoTriggerDistance: 32 },
+  hard: { reactionDistance: 240, dodgeJitter: 0.25, mistakeRate: 0.015, steerGain: 0.42, slowMoTriggerDistance: 48 },
+} as const;
+export type BotDifficulty = keyof typeof BOT_DIFFICULTY;
+
+/** Bot behaviour constants shared across difficulties. */
+export const BOT = {
+  /** Salt XORed into the run seed for the bot's OWN mistake-rng stream, so the bot's
+   *  randomness never touches (or is touched by) the sim's seeded draws. */
+  rngSalt: 0x70c0ffee,
+  /** Lateral clearance the bot aims for past an obstacle centre: the collision
+   *  half-widths (VEHICLE 1.1 + TRAFFIC 1.1) plus a small safety margin. */
+  clearance: VEHICLE.halfWidth + TRAFFIC.halfWidth + 0.6,
+  /** Candidate lateral offsets (from road centre, world units) the bot considers
+   *  when picking a clear lane. Within ±ROAD.halfWidth(9). */
+  laneCandidates: [-6, -3, 0, 3, 6],
+  /** A mistake holds a wrong/zero steer for this long (s) before re-deciding, so an
+   *  error reads as a beat of hesitation, not a 1-frame flicker. */
+  mistakeHoldSeconds: 0.35,
+} as const;
+
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
+
 
 /**
  * Per-car handling, expressed as MULTIPLIERS against the base VEHICLE tuning

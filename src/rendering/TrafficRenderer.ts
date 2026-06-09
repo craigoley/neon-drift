@@ -2,16 +2,22 @@
  * Renders typed traffic obstacles. Three.js layer: READS the pure pool and never
  * mutates it. No per-frame allocation (reused scratch Object3D + cursors).
  *
- * One InstancedMesh per visual family, all sharing a single GREYSCALE unit-box
- * geometry (body faces dimmed, top + leading edge bright) that is TINTED per
- * instance via instanceColor — so the hot-rim readability is preserved while
- * each kind gets its intent colour:
- *   - boxMesh   → STATIC (orange) + MOVER (hot red): the classic dodge boxes.
- *   - gateMesh  → GATE barriers: two bars per gate flanking a passable opening.
- *   - rampMesh  → RAMP: a low, wide green boost-strip you aim FOR.
+ * DETAIL VIA SHAPE, not glow (course-correction from #99): each obstacle KIND has
+ * its own SHARED, instanced geometry whose silhouette reads as a believable object
+ * — a flared road BARRIER (static), a low VEHICLE with a cabin (mover), a capped
+ * GATE post (gate bars), and a rising boost WEDGE (ramp). One InstancedMesh per
+ * family, so the draw-call count stays tiny; the richer geometry is baked once and
+ * costs only vertices (cheap at scale), with per-face vertex shading standing in
+ * for form. The #99 bloom-catching neon edge wireframe is GONE — no glow fill.
  *
- * Colours are intent-coded (warm = threat, green = beneficial), matching the
- * powerup language.
+ * Every geometry is authored in a normalized [-0.5,0.5]^3 cube and instance-scaled
+ * to the obstacle's collision footprint, so a more-detailed shape NEVER exceeds the
+ * hitbox (the visual stays within the same halfWidth×halfLength bounds the sim
+ * collides against). Bodies are tinted per instance (warm = threat, green =
+ * beneficial), matching the powerup colour language.
+ *
+ * Quality lever: HIGH uses the detailed geometries; LOW swaps every family to a
+ * plain shaded box (cheapest) — a geometry-reference swap, same draw calls.
  */
 
 import * as THREE from 'three';
@@ -26,102 +32,122 @@ import {
   TRAFFIC_VIS,
 } from '../utils/constants';
 
-/** The 12 edges of a unit box (corners at ±0.5), each as a pair of endpoints. Used
- *  to stamp a clean neon wireframe outline per obstacle (see EdgeBatch). */
-const EDGE_UNIT: ReadonlyArray<readonly [number, number, number, number, number, number]> = [
-  // back face (-z)
-  [-0.5, -0.5, -0.5, 0.5, -0.5, -0.5], [0.5, -0.5, -0.5, 0.5, 0.5, -0.5],
-  [0.5, 0.5, -0.5, -0.5, 0.5, -0.5], [-0.5, 0.5, -0.5, -0.5, -0.5, -0.5],
-  // front face (+z)
-  [-0.5, -0.5, 0.5, 0.5, -0.5, 0.5], [0.5, -0.5, 0.5, 0.5, 0.5, 0.5],
-  [0.5, 0.5, 0.5, -0.5, 0.5, 0.5], [-0.5, 0.5, 0.5, -0.5, -0.5, 0.5],
-  // connectors
-  [-0.5, -0.5, -0.5, -0.5, -0.5, 0.5], [0.5, -0.5, -0.5, 0.5, -0.5, 0.5],
-  [0.5, 0.5, -0.5, 0.5, 0.5, 0.5], [-0.5, 0.5, -0.5, -0.5, 0.5, 0.5],
-];
-const EDGE_VERTS = EDGE_UNIT.length * 2; // 24 vertices per box
+type Vec3 = readonly [number, number, number];
 
-/**
- * Draws clean neon EDGE outlines for a whole obstacle FAMILY in ONE draw call. The
- * position buffer is rebuilt each frame from the same placement data the InstancedMesh
- * uses (each box is axis-aligned: corner = centre ± half·scale), so it's a trivial CPU
- * rewrite of ≤ count·24 verts. The bright on-palette line colour catches the #95 bloom →
- * every obstacle reads as a glowing neon object, like the car/road edges. Lines can't be
- * InstancedMesh-instanced, but this is still ONE draw call per family + negligible
- * thin-line fill (NO additive overdraw halo — the phone fill-rate watch).
- */
-class EdgeBatch {
-  readonly lines: THREE.LineSegments;
-  private readonly pos: Float32Array;
-  private readonly attr: THREE.BufferAttribute;
-  private cursor = 0; // float write head
+/** Accumulates flat-shaded triangles (position + per-vertex grey) into a single
+ *  BufferGeometry. Built ONCE per shape at construction — never per frame. The
+ *  material is DoubleSide, so face winding doesn't matter (these are small opaque
+ *  instanced objects with no additive overdraw — winding-proof, fill-cheap). */
+class Shaper {
+  private readonly pos: number[] = [];
+  private readonly col: number[] = [];
 
-  constructor(maxBoxes: number, mat: THREE.LineBasicMaterial) {
-    this.pos = new Float32Array(maxBoxes * EDGE_VERTS * 3);
-    this.attr = new THREE.BufferAttribute(this.pos, 3);
-    this.attr.setUsage(THREE.DynamicDrawUsage);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', this.attr);
-    this.lines = new THREE.LineSegments(geo, mat);
-    this.lines.frustumCulled = false;
+  /** A quad p0→p1→p2→p3 at a uniform shade (two triangles). */
+  quad(p0: Vec3, p1: Vec3, p2: Vec3, p3: Vec3, shade: number): void {
+    this.tri(p0, p1, p2, shade);
+    this.tri(p0, p2, p3, shade);
   }
 
-  reset(): void {
-    this.cursor = 0;
+  private tri(a: Vec3, b: Vec3, c: Vec3, shade: number): void {
+    this.pos.push(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2]);
+    for (let i = 0; i < 9; i++) this.col.push(shade); // 3 verts × rgb, flat grey
   }
 
-  /** Stamp one box's 12 edges (centre x,y,z; full size sx,sy,sz) into the buffer. */
-  addBox(x: number, y: number, z: number, sx: number, sy: number, sz: number): void {
-    for (const e of EDGE_UNIT) {
-      this.pos[this.cursor++] = x + e[0] * sx;
-      this.pos[this.cursor++] = y + e[1] * sy;
-      this.pos[this.cursor++] = z + e[2] * sz;
-      this.pos[this.cursor++] = x + e[3] * sx;
-      this.pos[this.cursor++] = y + e[4] * sy;
-      this.pos[this.cursor++] = z + e[5] * sz;
-    }
-  }
-
-  /** Flush: draw only the active edges + upload the written range. */
-  finalize(): void {
-    this.lines.geometry.setDrawRange(0, this.cursor / 3);
-    this.attr.needsUpdate = true;
-  }
-
-  setVisible(v: boolean): void {
-    this.lines.visible = v;
+  geometry(): THREE.BufferGeometry {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
+    g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    return g;
   }
 }
 
-/** A unit BoxGeometry (1×1×1) with vertex colours: body = bodyShade grey, the
- *  top (+y) and leading (+z) faces = white. Tinted per instance. */
-function greyscaleEdgeBox(): THREE.BoxGeometry {
-  const geo = new THREE.BoxGeometry(1, 1, 1);
-  const shade = TRAFFIC_VIS.bodyShade;
-  // BoxGeometry face order: +x,-x,+y,-y,+z,-z (4 verts each); +y = 8..11, +z = 16..19.
-  const colors = new Float32Array(24 * 3);
-  for (let v = 0; v < 24; v++) {
-    const bright = (v >= 8 && v <= 11) || (v >= 16 && v <= 19);
-    const c = bright ? 1 : shade;
-    colors[v * 3] = c;
-    colors[v * 3 + 1] = c;
-    colors[v * 3 + 2] = c;
-  }
-  geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-  return geo;
+const S = TRAFFIC_VIS;
+/** Per-face shades reused across the shapes. Sides reuse `bodyShade`. */
+const SH = { top: S.shadeTop, front: S.shadeFront, back: S.shadeBack, bottom: S.shadeBottom, side: S.bodyShade };
+
+/** Append an axis-aligned box [x0,x1]×[y0,y1]×[z0,z1] with per-face shading. */
+function addBox(s: Shaper, x0: number, x1: number, y0: number, y1: number, z0: number, z1: number): void {
+  s.quad([x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z0], SH.top); // +y
+  s.quad([x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z1], SH.bottom); // -y
+  s.quad([x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1], SH.front); // +z
+  s.quad([x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y1, z0], SH.back); // -z
+  s.quad([x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y1, z1], SH.side); // +x
+  s.quad([x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y1, z0], SH.side); // -x
+}
+
+/** LOW / fallback: a plain shaded unit box (the pre-detail look). */
+function buildSimpleBox(): THREE.BufferGeometry {
+  const s = new Shaper();
+  addBox(s, -0.5, 0.5, -0.5, 0.5, -0.5, 0.5);
+  return s.geometry();
+}
+
+/** STATIC: a flared road barrier — full-width base tapering to an inset top. */
+function buildBarrier(): THREE.BufferGeometry {
+  const s = new Shaper();
+  const tx = S.barrierTopHalfX;
+  const tz = S.barrierTopHalfZ;
+  const b = 0.5;
+  // Top cap + flat base.
+  s.quad([-tx, b, tz], [tx, b, tz], [tx, b, -tz], [-tx, b, -tz], SH.top);
+  s.quad([-b, -b, -b], [b, -b, -b], [b, -b, b], [-b, -b, b], SH.bottom);
+  // Four sloped sides (base rect → inset top rect).
+  s.quad([-b, -b, b], [b, -b, b], [tx, b, tz], [-tx, b, tz], SH.front); // +z
+  s.quad([b, -b, -b], [-b, -b, -b], [-tx, b, -tz], [tx, b, -tz], SH.back); // -z
+  s.quad([b, -b, b], [b, -b, -b], [tx, b, -tz], [tx, b, tz], SH.side); // +x
+  s.quad([-b, -b, -b], [-b, -b, b], [-tx, b, tz], [-tx, b, -tz], SH.side); // -x
+  return s.geometry();
+}
+
+/** MOVER: a low vehicle — a body slab with a set-back cabin (greenhouse). */
+function buildVehicle(): THREE.BufferGeometry {
+  const s = new Shaper();
+  addBox(s, -0.5, 0.5, -0.5, S.vehicleBodyTopY, -0.5, 0.5); // body
+  addBox(s, -S.vehicleCabinHalfX, S.vehicleCabinHalfX, S.vehicleBodyTopY, S.vehicleCabinTopY, S.vehicleCabinZ0, S.vehicleCabinZ1); // cabin
+  return s.geometry();
+}
+
+/** GATE bar: a capped barrier post — vertical body + a chamfered top cap. */
+function buildPost(): THREE.BufferGeometry {
+  const s = new Shaper();
+  const b = 0.5;
+  const sh = S.postShoulderY;
+  const cap = S.postCapHalf;
+  addBox(s, -b, b, -b, sh, -b, b); // body up to the shoulder
+  // Chamfered cap: shoulder rect → inset top rect.
+  s.quad([-cap, b, cap], [cap, b, cap], [cap, b, -cap], [-cap, b, -cap], SH.top);
+  s.quad([-b, sh, b], [b, sh, b], [cap, b, cap], [-cap, b, cap], SH.front); // +z
+  s.quad([b, sh, -b], [-b, sh, -b], [-cap, b, -cap], [cap, b, -cap], SH.back); // -z
+  s.quad([b, sh, b], [b, sh, -b], [cap, b, -cap], [cap, b, cap], SH.side); // +x
+  s.quad([-b, sh, -b], [-b, sh, b], [-cap, b, cap], [-cap, b, -cap], SH.side); // -x
+  return s.geometry();
+}
+
+/** RAMP: a rising wedge — low lip at the near (+z) edge, full height at the far
+ *  (-z) edge, so it reads as a launch ramp you drive up. */
+function buildRamp(): THREE.BufferGeometry {
+  const s = new Shaper();
+  const b = 0.5;
+  const lip = S.rampLipY;
+  s.quad([-b, -b, -b], [b, -b, -b], [b, -b, b], [-b, -b, b], SH.bottom); // base
+  s.quad([-b, lip, b], [b, lip, b], [b, b, -b], [-b, b, -b], SH.top); // sloped face
+  s.quad([b, b, -b], [-b, b, -b], [-b, -b, -b], [b, -b, -b], SH.back); // far wall (-z)
+  s.quad([-b, -b, b], [b, -b, b], [b, lip, b], [-b, lip, b], SH.front); // near lip (+z)
+  s.quad([b, -b, b], [b, -b, -b], [b, b, -b], [b, lip, b], SH.side); // +x
+  s.quad([-b, -b, -b], [-b, -b, b], [-b, lip, b], [-b, b, -b], SH.side); // -x
+  return s.geometry();
 }
 
 export class TrafficRenderer {
-  private readonly boxMesh: THREE.InstancedMesh;
+  private readonly staticMesh: THREE.InstancedMesh;
+  private readonly moverMesh: THREE.InstancedMesh;
   private readonly gateMesh: THREE.InstancedMesh;
   private readonly rampMesh: THREE.InstancedMesh;
-  /** Neon edge outlines per family (HIGH quality only) + their shared bright material. */
-  private readonly boxEdges: EdgeBatch;
-  private readonly gateEdges: EdgeBatch;
-  private readonly rampEdges: EdgeBatch;
-  private readonly edgeMat: THREE.LineBasicMaterial;
-  /** HIGH = draw the neon edge outlines; LOW skips them (plain instanced boxes). */
-  private neon = true;
+  /** Detailed silhouette per family (HIGH) + a shared plain box (LOW). Kept so the
+   *  quality lever can swap a mesh's geometry by reference (no rebuild). */
+  private readonly detail: Map<THREE.InstancedMesh, THREE.BufferGeometry> = new Map();
+  private readonly simpleBox: THREE.BufferGeometry;
+
   private readonly dummy = new THREE.Object3D();
   private readonly hidden = new THREE.Matrix4().makeScale(0, 0, 0);
 
@@ -130,44 +156,34 @@ export class TrafficRenderer {
   private readonly cMover = new THREE.Color(OBSTACLE_DEFS.mover.color);
   private readonly cGate = new THREE.Color(OBSTACLE_DEFS.gate.color);
   private readonly cRamp = new THREE.Color(OBSTACLE_DEFS.ramp.color);
-  /** Shared material across all three meshes; its `color` is a global multiplier
-   *  used for a faint biome tint (default white = no tint). */
+  /** Shared material across all families; its `color` is a global multiplier used
+   *  for a faint biome tint (default white = no tint). DoubleSide so the hand-built
+   *  silhouettes are winding-proof (small opaque instances → negligible fill). */
   private readonly material: THREE.MeshBasicMaterial;
 
   constructor(scene: THREE.Scene) {
-    const geo = greyscaleEdgeBox();
-    const mat = new THREE.MeshBasicMaterial({ vertexColors: true });
-    this.material = mat;
+    this.material = new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide });
+    this.simpleBox = buildSimpleBox();
 
-    // Boxes: at most one per pool slot. Gates: up to two bars per slot.
-    this.boxMesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
-    this.gateMesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize * 2);
-    this.rampMesh = new THREE.InstancedMesh(geo, mat, TRAFFIC.poolSize);
-    for (const m of [this.boxMesh, this.gateMesh, this.rampMesh]) {
+    // STATIC and MOVER are now separate families (barrier vs vehicle silhouettes);
+    // gates emit up to two bars per slot. Each family is one InstancedMesh.
+    this.staticMesh = new THREE.InstancedMesh(buildBarrier(), this.material, TRAFFIC.poolSize);
+    this.moverMesh = new THREE.InstancedMesh(buildVehicle(), this.material, TRAFFIC.poolSize);
+    this.gateMesh = new THREE.InstancedMesh(buildPost(), this.material, TRAFFIC.poolSize * 2);
+    this.rampMesh = new THREE.InstancedMesh(buildRamp(), this.material, TRAFFIC.poolSize);
+    for (const m of [this.staticMesh, this.moverMesh, this.gateMesh, this.rampMesh]) {
+      this.detail.set(m, m.geometry);
       m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       m.frustumCulled = false;
       scene.add(m);
     }
-
-    // Neon edge outlines: a bright on-palette wireframe per family that catches the
-    // bloom, so each obstacle reads as a glowing neon object (the car's lesson). The
-    // bodies KEEP their threat colours (orange/red/green); the edges are the on-palette
-    // neon. One LineBasicMaterial shared by all three batches (cyan, contrasts the warm
-    // bodies + matches the car/road neon language).
-    this.edgeMat = new THREE.LineBasicMaterial({ color: TRAFFIC_VIS.edgeColor });
-    this.boxEdges = new EdgeBatch(TRAFFIC.poolSize, this.edgeMat);
-    this.gateEdges = new EdgeBatch(TRAFFIC.poolSize * 2, this.edgeMat);
-    this.rampEdges = new EdgeBatch(TRAFFIC.poolSize, this.edgeMat);
-    for (const b of [this.boxEdges, this.gateEdges, this.rampEdges]) scene.add(b.lines);
   }
 
-  /** Quality lever (#95/#98): HIGH draws the neon edge outlines; LOW skips them entirely
-   *  (no extra draw calls, no line fill, no per-frame edge rebuild) → today's plain boxes. */
-  setNeon(on: boolean): void {
-    this.neon = on;
-    this.boxEdges.setVisible(on);
-    this.gateEdges.setVisible(on);
-    this.rampEdges.setVisible(on);
+  /** Quality lever: HIGH (on) uses the detailed silhouettes; LOW (off) swaps every
+   *  family to the plain shaded box (cheapest) — a geometry-reference swap, so the
+   *  draw-call count is unchanged and there's no rebuild. */
+  setDetail(on: boolean): void {
+    for (const [mesh, geo] of this.detail) mesh.geometry = on ? geo : this.simpleBox;
   }
 
   /** Faint biome cast applied to ALL obstacles (multiplies their intent colours).
@@ -179,12 +195,10 @@ export class TrafficRenderer {
   /** Position active obstacles by kind; collapse unused instances. Car at z = 0,
    *  ahead is -z (same mapping as everything else). */
   sync(traffic: TrafficState, playerDistance: number): void {
-    let boxN = 0;
+    let staticN = 0;
+    let moverN = 0;
     let gateN = 0;
     let rampN = 0;
-    this.boxEdges.reset();
-    this.gateEdges.reset();
-    this.rampEdges.reset();
 
     for (const o of traffic.pool) {
       if (!o.active) continue;
@@ -192,30 +206,30 @@ export class TrafficRenderer {
 
       switch (o.kind) {
         case ObstacleKind.Static:
+          this.place(this.staticMesh, staticN, o.lateral, TRAFFIC_VIS.meshY, z, TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
+          this.staticMesh.setColorAt(staticN, this.cStatic);
+          staticN++;
+          break;
         case ObstacleKind.Mover:
-          this.place(this.boxMesh, this.boxEdges, boxN, o.lateral, TRAFFIC_VIS.meshY, z, TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
-          this.boxMesh.setColorAt(boxN, o.kind === ObstacleKind.Mover ? this.cMover : this.cStatic);
-          boxN++;
+          this.place(this.moverMesh, moverN, o.lateral, TRAFFIC_VIS.meshY, z, TRAFFIC.halfWidth * 2, TRAFFIC_VIS.meshHeight, TRAFFIC.halfLength * 2);
+          this.moverMesh.setColorAt(moverN, this.cMover);
+          moverN++;
           break;
         case ObstacleKind.Gate:
           gateN = this.placeGateBars(o, z, gateN);
           break;
         case ObstacleKind.Ramp:
-          this.place(this.rampMesh, this.rampEdges, rampN, o.lateral, TRAFFIC_VIS.rampY, z, RAMP.halfWidth * 2, TRAFFIC_VIS.rampHeight, RAMP.halfLength * 2);
+          this.place(this.rampMesh, rampN, o.lateral, TRAFFIC_VIS.rampY, z, RAMP.halfWidth * 2, TRAFFIC_VIS.rampHeight, RAMP.halfLength * 2);
           this.rampMesh.setColorAt(rampN, this.cRamp);
           rampN++;
           break;
       }
     }
 
-    this.collapseTail(this.boxMesh, boxN);
+    this.collapseTail(this.staticMesh, staticN);
+    this.collapseTail(this.moverMesh, moverN);
     this.collapseTail(this.gateMesh, gateN);
     this.collapseTail(this.rampMesh, rampN);
-    if (this.neon) {
-      this.boxEdges.finalize();
-      this.gateEdges.finalize();
-      this.rampEdges.finalize();
-    }
   }
 
   /** Emit a gate's two barrier bars (left + right of the opening); returns the
@@ -233,40 +247,28 @@ export class TrafficRenderer {
 
     const leftW = openL - leftEdge;
     if (leftW > TRAFFIC_VIS.gateMinBarWidth) {
-      this.place(this.gateMesh, this.gateEdges, gateN, (leftEdge + openL) / 2, TRAFFIC_VIS.gateY, z, leftW, TRAFFIC_VIS.gateHeight, depth);
+      this.place(this.gateMesh, gateN, (leftEdge + openL) / 2, TRAFFIC_VIS.gateY, z, leftW, TRAFFIC_VIS.gateHeight, depth);
       this.gateMesh.setColorAt(gateN, this.cGate);
       gateN++;
     }
     const rightW = rightEdge - openR;
     if (rightW > TRAFFIC_VIS.gateMinBarWidth) {
-      this.place(this.gateMesh, this.gateEdges, gateN, (openR + rightEdge) / 2, TRAFFIC_VIS.gateY, z, rightW, TRAFFIC_VIS.gateHeight, depth);
+      this.place(this.gateMesh, gateN, (openR + rightEdge) / 2, TRAFFIC_VIS.gateY, z, rightW, TRAFFIC_VIS.gateHeight, depth);
       this.gateMesh.setColorAt(gateN, this.cGate);
       gateN++;
     }
     return gateN;
   }
 
-  /** Compose a box transform into instance `i` (unit geometry scaled to size), and
-   *  stamp its neon edge outline into `batch` (HIGH only). The edge uses the SAME
-   *  centre+size as the fill box, so the wireframe sits exactly on the body — and on
-   *  the collision footprint, which is unchanged. */
-  private place(
-    mesh: THREE.InstancedMesh,
-    batch: EdgeBatch,
-    i: number,
-    x: number,
-    y: number,
-    z: number,
-    sx: number,
-    sy: number,
-    sz: number,
-  ): void {
+  /** Compose an instance transform (normalized geometry scaled to the footprint).
+   *  The geometry is authored within [-0.5,0.5]^3, so scaling by (sx,sy,sz) maps it
+   *  exactly onto the collision footprint — the detail never exceeds the hitbox. */
+  private place(mesh: THREE.InstancedMesh, i: number, x: number, y: number, z: number, sx: number, sy: number, sz: number): void {
     this.dummy.position.set(x, y, z);
     this.dummy.rotation.set(0, 0, 0);
     this.dummy.scale.set(sx, sy, sz);
     this.dummy.updateMatrix();
     mesh.setMatrixAt(i, this.dummy.matrix);
-    if (this.neon) batch.addBox(x, y, z, sx, sy, sz);
   }
 
   /** Collapse instances [from, capacity) to zero scale and flush the buffers. */

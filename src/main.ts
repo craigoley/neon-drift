@@ -180,7 +180,7 @@ const finishLine = new FinishLine(scene.scene);
 let mpRace: MpRace | null = null; // non-null + isRacing ⇒ a live 2P race is running
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
-traffic.setNeon(!settings.get('lowFx')); // HIGH = neon obstacle edges; LOW skips them
+traffic.setDetail(!settings.get('lowFx')); // HIGH = detailed obstacle silhouettes; LOW = plain boxes
 // Biome view drives the environment palette + star brightness + a faint traffic
 // tint, so it's built after the things it recolours.
 const biomeView = new BiomeView(scene.scene, environment, stars, traffic);
@@ -359,7 +359,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
   onLowFxChange: (lowFx) => {
     post.setQuality(!lowFx);
     vehicle.setDetail(lowFx ? 'simple' : 'hero'); // LOW drops the player car to the cheap silhouette
-    traffic.setNeon(!lowFx); // LOW skips the neon obstacle edges
+    traffic.setDetail(!lowFx); // LOW drops obstacles to plain boxes (detailed silhouettes on HIGH)
     scenery.setNeon(!lowFx); // LOW falls back to plain scenery pillars
   },
   onCinematicFxChange: (on) => post.setCinematicEnabled(on), // skip the fullscreen grade pass when off

@@ -140,6 +140,11 @@ export class CarMesh {
   private builtShape: CarShape;
   /** Render detail the chassis was last built for ('hero' = player, 'simple' = rival). */
   private builtDetail: CarDetail;
+  /** The most-recent car whose colours are applied (so a glow-cosmetic toggle can
+   *  re-apply without a fresh applyCar). */
+  private lastCar?: CarDef;
+  /** Equipped GLOW cosmetic colour override (PR2), or null for the car's own glow. */
+  private glowOverride: number | null = null;
 
   constructor(car?: CarDef, detail: CarDetail = 'hero') {
     this.bodyMat = new THREE.MeshBasicMaterial({ color: PALETTE.deepPurple, side: THREE.DoubleSide });
@@ -351,11 +356,23 @@ export class CarMesh {
 
   /** Set the material colours from a car's cosmetic (no geometry work). */
   private applyColours(car: CarDef): void {
+    this.lastCar = car;
+    // A purely-visual GLOW cosmetic (PR2) overrides the car's signature neon on the
+    // edges / ground glow / taillight; null = the car's own glow. Body + accent are
+    // never overridden (the car keeps its identity tint).
+    const glow = this.glowOverride ?? car.cosmetic.glow;
     this.bodyMat.color.setHex(car.cosmetic.body);
-    this.edgesMat.color.setHex(car.cosmetic.glow);
-    this.groundGlowMat.color.setHex(car.cosmetic.glow);
-    this.taillightMat.color.setHex(car.cosmetic.glow); // hero taillight tinted per car
+    this.edgesMat.color.setHex(glow);
+    this.groundGlowMat.color.setHex(glow);
+    this.taillightMat.color.setHex(glow);
     this.accentLineMat.color.setHex(car.cosmetic.accent);
+  }
+
+  /** Equip / clear a GLOW cosmetic override (purely visual). Sticky across applyCar,
+   *  so a car change keeps the equipped glow. Null restores the car's own glow. */
+  setGlowOverride(hex: number | null): void {
+    this.glowOverride = hex;
+    if (this.lastCar) this.applyColours(this.lastCar);
   }
 
   /** Free all owned geometry + materials (CarPreview calls this on teardown). */

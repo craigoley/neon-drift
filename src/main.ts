@@ -62,7 +62,11 @@ import { lerp } from './utils/math';
 import {
   BIOMES,
   CARS,
+  COSMETICS,
+  cosmeticById,
+  type CosmeticSlot,
   CREDITS,
+  STORE_CARS,
   carById,
   cssHex,
   GHOST,
@@ -194,6 +198,17 @@ const biomeView = new BiomeView(scene.scene, environment, stars, traffic);
 const speedLines = new SpeedLines(scene.scene, isTouch ? JUICE.speedLineCountTouch : JUICE.speedLineCount);
 const trail = new CarTrail(scene.scene, isTouch);
 const trailInfo = { active: 0, cap: 0 };
+
+// PROG-1 PR2: apply the player's EQUIPPED cosmetics (purely visual) to the renderer.
+// Trail colour → CarTrail; glow colour → the player car's neon edges/ground glow.
+// The glow override is sticky across car changes (CarMesh), so this only re-runs at
+// boot + after an equip. NEVER touches the sim / per-car handling.
+function applyCosmetics(): void {
+  const trailCos = cosmeticById(progress.getEquipped('trail'));
+  trail.setColor(trailCos ? trailCos.color : null);
+  const glowCos = cosmeticById(progress.getEquipped('glow'));
+  vehicle.setGlow(glowCos ? glowCos.color : null);
+}
 const shards = new CrashShards(scene.scene);
 const screenFx = new ScreenFx(app);
 const hud = new HUD(app);
@@ -385,6 +400,42 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     });
   },
   credits: () => progress.getCredits(), // PROG-1 balance readout (start + WIPEOUT)
+  // PROG-1 PR2 STORE: live data + spend/equip actions. Buying a car adds it to the
+  // SAME unlocked[] the stat path fills (dual-unlock); cosmetics are purely visual.
+  store: {
+    balance: () => progress.getCredits(),
+    cars: () =>
+      STORE_CARS.map((sc) => ({
+        id: sc.carId,
+        name: carById(sc.carId).displayName,
+        price: sc.price,
+        owned: progress.isUnlocked(sc.carId), // bought OR stat-earned (dual-unlock)
+        affordable: progress.canAfford(sc.price),
+      })),
+    cosmetics: () =>
+      COSMETICS.map((c) => ({
+        id: c.id,
+        name: c.name,
+        slot: c.slot,
+        price: c.price,
+        color: cssHex(c.color),
+        owned: progress.isOwned(c.id),
+        equipped: progress.getEquipped(c.slot) === c.id,
+        affordable: progress.canAfford(c.price),
+      })),
+    buyCar: (id) => {
+      const sc = STORE_CARS.find((s) => s.carId === id);
+      if (sc) progress.buyCar(id, sc.price);
+    },
+    buyCosmetic: (id) => {
+      const c = cosmeticById(id);
+      if (c) progress.buyCosmetic(id, c.price);
+    },
+    equip: (slot, id) => {
+      progress.equip(slot as CosmeticSlot, id);
+      applyCosmetics(); // reflect the newly-equipped cosmetic on the car immediately
+    },
+  },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),
   // 3D car-picker preview (own light renderer; created on enter, disposed on
   // exit — never runs behind the game).
@@ -452,6 +503,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     history: () => daily.history(),
   },
 });
+applyCosmetics(); // apply any persisted equipped cosmetics from the first frame
 shell.showStart();
 
 // MULTIPLAYER CONNECTION TEST (MP-1 PR1): a standalone overlay reached via ?mp=1.

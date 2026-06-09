@@ -33,6 +33,12 @@ export class CarTrail {
   private readonly cool = new THREE.Color(JUICE.trailColor);
   private readonly scratch = new THREE.Color();
 
+  /** Equip / clear a TRAIL cosmetic colour (PR2). Null restores the default cyan.
+   *  Purely visual; never touches the sim. */
+  setColor(hex: number | null): void {
+    this.cool.setHex(hex ?? JUICE.trailColor);
+  }
+
   constructor(scene: THREE.Scene, isTouch: boolean) {
     this.count = isTouch ? JUICE.trailPointsTouch : JUICE.trailPoints;
     this.positions = new Float32Array(this.count * 3);

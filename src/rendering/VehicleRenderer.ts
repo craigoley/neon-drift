@@ -38,6 +38,13 @@ export class VehicleRenderer {
     this.car.applyCar(car);
   }
 
+  /** Equip / clear a GLOW cosmetic override (PR2) — overrides the car's neon edge +
+   *  ground-glow colour. Sticky across applyCar; null restores the car's own glow.
+   *  Purely visual; never touches the sim. */
+  setGlow(hex: number | null): void {
+    this.car.setGlowOverride(hex);
+  }
+
   /** Switch hero ⇄ simple detail (player LOW-quality fallback / rival). */
   setDetail(detail: CarDetail): void {
     this.car.setDetail(detail);

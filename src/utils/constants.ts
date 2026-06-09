@@ -2214,6 +2214,57 @@ export const CREDITS = {
 } as const;
 
 /**
+ * THE STORE (PROG-1 PR2) — what credits buy. HORIZONTAL only: every item is either
+ * a no-dominance car sidegrade (#74) or a purely-visual cosmetic; nothing here buys
+ * stat-power, so the leaderboard + MP/bot fairness are untouched. Prices are pegged
+ * to the calibrated earn rate and tunable in PR3.
+ */
+
+/** A car offered for purchase (the PURCHASE half of dual-unlock: a car unlocks by
+ *  hitting its stat milestone OR buying it here). Cars in the widened STARTING SET
+ *  are free and NOT listed. Buying adds the id to the SAME `unlocked[]` the stat
+ *  path fills, so it's dual-unlock by construction + monotonic. */
+export interface StoreCar {
+  carId: string;
+  price: number;
+}
+export const STORE_CARS: readonly StoreCar[] = [
+  // The deeper-achievement cars (the only ones not in STARTING_CAR_IDS). Tier-2.
+  { carId: 'onyx', price: 1200 },
+  { carId: 'nova', price: 1200 },
+  { carId: 'slipstream', price: 1200 },
+] as const;
+
+/** Cosmetic equip slots (one active item per slot). Purely visual. */
+export type CosmeticSlot = 'trail' | 'glow';
+export const COSMETIC_SLOTS: readonly CosmeticSlot[] = ['trail', 'glow'];
+
+/** A purely-visual cosmetic: a colour applied to a render slot (trail ribbon or the
+ *  car's neon glow). ZERO gameplay effect — never touches the sim or per-car
+ *  handling. Owned in ProgressStore.owned[]; one equipped per slot. */
+export interface Cosmetic {
+  id: string;
+  name: string;
+  slot: CosmeticSlot;
+  price: number;
+  /** The colour applied to the slot (0xRRGGBB). */
+  color: number;
+}
+export const COSMETICS: readonly Cosmetic[] = [
+  { id: 'trail-magenta', name: 'Magenta Trail', slot: 'trail', price: 150, color: 0xff00ff },
+  { id: 'trail-toxic', name: 'Toxic Trail', slot: 'trail', price: 150, color: 0x39ff14 },
+  { id: 'trail-gold', name: 'Gold Trail', slot: 'trail', price: 250, color: 0xffc400 },
+  { id: 'glow-magenta', name: 'Magenta Glow', slot: 'glow', price: 250, color: 0xff00ff },
+  { id: 'glow-gold', name: 'Gold Glow', slot: 'glow', price: 250, color: 0xffc400 },
+] as const;
+
+/** Resolve a cosmetic by id (catalog lookup), or undefined. */
+export function cosmeticById(id: string | null | undefined): Cosmetic | undefined {
+  return id ? COSMETICS.find((c) => c.id === id) : undefined;
+}
+
+
+/**
  * Lifetime (cross-run) stats that drive unlocks. Accumulated at the end of each
  * run and persisted; the unlock evaluation is a pure function of these.
  */

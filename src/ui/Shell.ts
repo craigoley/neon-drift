@@ -27,9 +27,42 @@ type Screen =
   | 'missions'
   | 'leaderboard'
   | 'daily'
+  | 'store'
   | 'crash'
   | 'pause'
   | null;
+
+/** One purchasable car in the STORE (PROG-1 PR2). */
+export interface StoreCarView {
+  id: string;
+  name: string;
+  price: number;
+  owned: boolean; // already unlocked (bought or stat-earned)
+  affordable: boolean;
+}
+/** One cosmetic in the STORE (PROG-1 PR2). */
+export interface StoreCosmeticView {
+  id: string;
+  name: string;
+  slot: string;
+  price: number;
+  /** CSS colour for the swatch. */
+  color: string;
+  owned: boolean;
+  equipped: boolean;
+  affordable: boolean;
+}
+/** Live data + actions for the STORE screen (all read fresh when it opens / after an
+ *  action). Buying/equipping mutates the persisted progression in the composition
+ *  root; the panel just re-reads. */
+export interface StorePanel {
+  balance: () => number;
+  cars: () => StoreCarView[];
+  cosmetics: () => StoreCosmeticView[];
+  buyCar: (id: string) => void;
+  buyCosmetic: (id: string) => void;
+  equip: (slot: string, id: string) => void;
+}
 
 /** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
 export interface MissionView {
@@ -102,6 +135,8 @@ export interface ShellOptions {
   onVsComputer?: () => void;
   /** Current credit balance provider (PROG-1). Absent → no credits readout (tests). */
   credits?: () => number;
+  /** STORE panel data + actions (PROG-1 PR2). Absent → no STORE button (tests). */
+  store?: StorePanel;
   /** "Rival Ghost" toggled — the next run reads the persisted setting; this lets
    *  the composition root react immediately if it wants (optional). */
   onGhostRaceChange?: (on: boolean) => void;
@@ -121,6 +156,7 @@ export class Shell {
   private readonly settingsScreen: HTMLElement;
   private readonly carScreen: HTMLElement;
   private readonly missionsScreen: HTMLElement;
+  private readonly storeScreen: HTMLElement;
   private readonly leaderboardScreen: HTMLElement;
   private readonly dailyScreen: HTMLElement;
   private readonly crashScreen: HTMLElement;
@@ -145,6 +181,10 @@ export class Shell {
   /** PROG-1 credit readouts (start balance + per-run earned). */
   private readonly startCreditsEl: HTMLElement;
   private readonly crashCreditsEl: HTMLElement;
+  /** STORE screen nodes (PROG-1 PR2). */
+  private readonly storeBalanceEl: HTMLElement;
+  private readonly storeCarsEl: HTMLElement;
+  private readonly storeCosmeticsEl: HTMLElement;
   private readonly leaderboardListEl: HTMLElement;
   private readonly leaderboardCarsEl: HTMLElement;
   private readonly dailyTodayEl: HTMLElement;
@@ -194,6 +234,7 @@ export class Shell {
     this.settingsScreen = this.buildSettings();
     this.carScreen = this.buildCarPicker();
     this.missionsScreen = this.buildMissions();
+    this.storeScreen = this.buildStore();
     this.leaderboardScreen = this.buildLeaderboard();
     this.dailyScreen = this.buildDaily();
     this.crashScreen = this.buildCrash();
@@ -203,6 +244,9 @@ export class Shell {
     this.startBest = this.startScreen.querySelector('.shell-best')!;
     this.startCreditsEl = this.startScreen.querySelector('.shell-credits')!;
     this.crashCreditsEl = this.crashScreen.querySelector('.shell-crash-credits')!;
+    this.storeBalanceEl = this.storeScreen.querySelector('.shell-store-balance')!;
+    this.storeCarsEl = this.storeScreen.querySelector('.shell-store-cars')!;
+    this.storeCosmeticsEl = this.storeScreen.querySelector('.shell-store-cosmetics')!;
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashPlacementEl = this.crashScreen.querySelector('.shell-crash-placement')!;
@@ -245,6 +289,7 @@ export class Shell {
       this.settingsScreen,
       this.carScreen,
       this.missionsScreen,
+      this.storeScreen,
       this.leaderboardScreen,
       this.dailyScreen,
       this.crashScreen,
@@ -367,6 +412,7 @@ export class Shell {
     this.settingsScreen.style.display = screen === 'settings' ? 'flex' : 'none';
     this.carScreen.style.display = screen === 'carpicker' ? 'flex' : 'none';
     this.missionsScreen.style.display = screen === 'missions' ? 'flex' : 'none';
+    this.storeScreen.style.display = screen === 'store' ? 'flex' : 'none';
     this.leaderboardScreen.style.display = screen === 'leaderboard' ? 'flex' : 'none';
     this.dailyScreen.style.display = screen === 'daily' ? 'flex' : 'none';
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
@@ -376,6 +422,8 @@ export class Shell {
 
     // Refresh the missions panel from live progression data when it opens.
     if (screen === 'missions' && prev !== 'missions') this.renderMissions();
+    // Refresh the store from live progression (balance / owned / equipped) on open.
+    if (screen === 'store' && prev !== 'store') this.renderStore();
     // Refresh the leaderboard from the store each time it opens (live data).
     if (screen === 'leaderboard' && prev !== 'leaderboard') this.renderLeaderboard();
     // Refresh the daily challenge view from the store each time it opens.
@@ -445,6 +493,10 @@ export class Shell {
       (this.opts.missions
         ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
         : '') +
+      // STORE (PROG-1 PR2) — only when the composition root wired it up.
+      (this.opts.store
+        ? `<button class="shell-btn shell-btn--ghost shell-store-open" type="button">STORE</button>`
+        : '') +
       // vs-COMPUTER race — only when the composition root wired it up.
       (this.opts.onVsComputer
         ? `<button class="shell-btn shell-btn--ghost shell-vscpu-open" type="button">vs COMPUTER</button>`
@@ -462,6 +514,7 @@ export class Shell {
     s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
     s.querySelector('.shell-daily-open')?.addEventListener('click', () => this.go('daily'));
     s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
+    s.querySelector('.shell-store-open')?.addEventListener('click', () => this.go('store'));
     s.querySelector('.shell-vscpu-open')?.addEventListener('click', () => {
       this.hide(); // leave the menu; the vs-Computer picker + race take over
       this.opts.onVsComputer?.();
@@ -714,6 +767,69 @@ export class Shell {
     s.querySelector('.shell-sb-next')!.addEventListener('click', () => this.cycleStartBiome(1));
     s.querySelector('.shell-close-missions')!.addEventListener('click', () => this.showStart());
     return s;
+  }
+
+  /** The STORE screen (PROG-1 PR2): browse + buy cars / cosmetics, equip cosmetics.
+   *  Lists are (re)rendered from live data; clicks are delegated so dynamic rows need
+   *  no per-row listeners. */
+  private buildStore(): HTMLElement {
+    const s = screen('shell-store');
+    s.innerHTML =
+      `<h2 class="shell-subtitle">STORE</h2>` +
+      `<p class="shell-store-balance"></p>` +
+      `<h3 class="shell-store-heading">CARS</h3>` +
+      `<div class="shell-store-cars shell-store-list"></div>` +
+      `<h3 class="shell-store-heading">COSMETICS</h3>` +
+      `<div class="shell-store-cosmetics shell-store-list"></div>` +
+      `<button class="shell-btn shell-close-store" type="button">DONE</button>`;
+
+    s.querySelector('.shell-close-store')!.addEventListener('click', () => this.showStart());
+    // Delegated buy/equip: the row button carries data-action / data-id / data-slot.
+    const onClick = (e: Event) => {
+      const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null;
+      if (!btn || btn.disabled || !this.opts.store) return;
+      const id = btn.dataset.id ?? '';
+      if (btn.dataset.action === 'buy-car') this.opts.store.buyCar(id);
+      else if (btn.dataset.action === 'buy-cosmetic') this.opts.store.buyCosmetic(id);
+      else if (btn.dataset.action === 'equip') this.opts.store.equip(btn.dataset.slot ?? '', id);
+      this.renderStore(); // reflect the new balance / owned / equipped state
+    };
+    s.querySelector('.shell-store-cars')!.addEventListener('click', onClick);
+    s.querySelector('.shell-store-cosmetics')!.addEventListener('click', onClick);
+    return s;
+  }
+
+  /** Render the store lists + balance from live progression data. */
+  private renderStore(): void {
+    const store = this.opts.store;
+    if (!store) return;
+    this.storeBalanceEl.textContent = `★ ${Math.round(store.balance())} credits`;
+
+    this.storeCarsEl.innerHTML = store
+      .cars()
+      .map((c) => {
+        const right = c.owned
+          ? `<span class="shell-store-owned">OWNED</span>`
+          : `<button class="shell-btn shell-store-buy" type="button" data-action="buy-car" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.price} ★</button>`;
+        return `<div class="shell-store-row"><span class="shell-store-name">${c.name}</span>${right}</div>`;
+      })
+      .join('');
+
+    this.storeCosmeticsEl.innerHTML = store
+      .cosmetics()
+      .map((c) => {
+        const swatch = `<span class="shell-store-swatch" style="background:${c.color};box-shadow:0 0 6px ${c.color};"></span>`;
+        let right: string;
+        if (!c.owned) {
+          right = `<button class="shell-btn shell-store-buy" type="button" data-action="buy-cosmetic" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.price} ★</button>`;
+        } else if (c.equipped) {
+          right = `<span class="shell-store-owned">EQUIPPED</span>`;
+        } else {
+          right = `<button class="shell-btn shell-store-equip" type="button" data-action="equip" data-slot="${c.slot}" data-id="${c.id}">EQUIP</button>`;
+        }
+        return `<div class="shell-store-row">${swatch}<span class="shell-store-name">${c.name}</span>${right}</div>`;
+      })
+      .join('');
   }
 
   /** Render the missions panel from the live progression data (on open). */
@@ -1040,6 +1156,12 @@ export class Shell {
           e.preventDefault();
           this.cycleStartBiome(1);
         } else if (e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault();
+          this.showStart();
+        }
+        break;
+      case 'store':
+        if (e.key === 'Escape') {
           e.preventDefault();
           this.showStart();
         }

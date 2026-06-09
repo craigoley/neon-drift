@@ -19,6 +19,7 @@ import {
   PROGRESS_STORAGE_KEY,
   STARTER_CAR_ID,
   STARTING_CAR_IDS,
+  type CosmeticSlot,
   type LifetimeStats,
 } from '../utils/constants';
 import { evaluateUnlockedIds, isCarUnlocked } from './Unlocks';
@@ -42,8 +43,12 @@ interface ProgressData {
   version: number;
   stats: LifetimeStats;
   unlocked: string[];
-  /** Earned-but-unspent currency (PROG-1). Spending arrives in PR2. */
+  /** Earned-but-unspent currency (PROG-1). */
   credits: number;
+  /** Owned cosmetic ids (PR2). Purely-visual; bought with credits, owned forever. */
+  owned: string[];
+  /** The equipped cosmetic per slot (PR2). One active item per slot. */
+  equipped: Partial<Record<CosmeticSlot, string>>;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -101,6 +106,65 @@ export class ProgressStore {
     return this.data.credits;
   }
 
+  /** Can the player afford `price`? */
+  canAfford(price: number): boolean {
+    return this.data.credits >= price;
+  }
+
+  /** Is a cosmetic owned? */
+  isOwned(id: string): boolean {
+    return this.data.owned.includes(id);
+  }
+
+  /** All owned cosmetic ids (defensive copy). */
+  ownedIds(): string[] {
+    return [...this.data.owned];
+  }
+
+  /** The equipped cosmetic id for a slot, or null. */
+  getEquipped(slot: CosmeticSlot): string | null {
+    return this.data.equipped[slot] ?? null;
+  }
+
+  /**
+   * BUY a car: the PURCHASE half of dual-unlock. Adds `carId` to the SAME unlocked[]
+   * the stat path fills (monotonic union). No-op (returns false) if already unlocked
+   * or unaffordable. Deducts the price + persists on success.
+   */
+  buyCar(carId: string, price: number): boolean {
+    if (this.isUnlocked(carId) || !this.canAfford(price)) return false;
+    this.data.credits = Math.max(0, this.data.credits - Math.floor(price));
+    this.data.unlocked = Array.from(new Set([...this.data.unlocked, carId]));
+    this.persist();
+    return true;
+  }
+
+  /**
+   * BUY a cosmetic: add to owned[] (forever). No-op if already owned or unaffordable.
+   * Purely visual — never touches the sim. Deducts the price + persists on success.
+   */
+  buyCosmetic(id: string, price: number): boolean {
+    if (this.isOwned(id) || !this.canAfford(price)) return false;
+    this.data.credits = Math.max(0, this.data.credits - Math.floor(price));
+    this.data.owned = Array.from(new Set([...this.data.owned, id]));
+    this.persist();
+    return true;
+  }
+
+  /** EQUIP an OWNED cosmetic into its slot (only if owned). Persists. Returns false
+   *  if the item isn't owned. Pass null to unequip the slot. */
+  equip(slot: CosmeticSlot, id: string | null): boolean {
+    if (id === null) {
+      delete this.data.equipped[slot];
+      this.persist();
+      return true;
+    }
+    if (!this.isOwned(id)) return false;
+    this.data.equipped[slot] = id;
+    this.persist();
+    return true;
+  }
+
   /** Per-run credit award for a finished run (pure formula; capped anti-farm). */
   private runCredits(run: RunResult): number {
     const raw = Math.floor(num(run.score) / CREDITS.runScoreDivisor) + Math.floor(num(run.distance) / CREDITS.runDistanceDivisor);
@@ -136,6 +200,8 @@ export class ProgressStore {
       stats: { ...EMPTY_LIFETIME_STATS },
       unlocked: [...STARTING_CAR_IDS],
       credits: 0,
+      owned: [],
+      equipped: {},
     });
     if (!this.storage) return this.reconcile(fresh());
     try {
@@ -153,9 +219,19 @@ export class ProgressStore {
       const unlocked = Array.isArray(parsed.unlocked)
         ? parsed.unlocked.filter((id): id is string => typeof id === 'string')
         : [];
+      // `owned`/`equipped` absent on pre-PR2 blobs → empty (no cosmetics yet).
+      const owned = Array.isArray(parsed.owned)
+        ? parsed.owned.filter((id): id is string => typeof id === 'string')
+        : [];
+      const equipped: Partial<Record<CosmeticSlot, string>> = {};
+      if (parsed.equipped && typeof parsed.equipped === 'object') {
+        for (const [slot, id] of Object.entries(parsed.equipped)) {
+          if (typeof id === 'string') equipped[slot as CosmeticSlot] = id;
+        }
+      }
       // `credits` absent on pre-PROG-1 blobs → 0 (a returning player isn't gifted a
       // balance they never earned, but never loses earned credits either).
-      return this.reconcile({ version: PROGRESS_BLOB_VERSION, stats, unlocked, credits: num(parsed.credits) });
+      return this.reconcile({ version: PROGRESS_BLOB_VERSION, stats, unlocked, credits: num(parsed.credits), owned, equipped });
     } catch {
       // Corrupt / blocked — fall back to a clean starter-set record.
       return this.reconcile(fresh());

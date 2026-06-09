@@ -1168,8 +1168,15 @@ export const BLOOM = {
   threshold: 0.45,
   /** Tone-mapping exposure applied by the renderer (OutputPass reads this). */
   exposure: 1.0,
-  /** Bloom internal-resolution divisor on touch devices (GPU headroom). */
-  mobileResolutionScale: 0.5,
+  /**
+   * Bloom blur-target resolution scale (ALL devices). The bloom pass — UnrealBloom's
+   * 5-mip down/blur/up chain — is the #1 GPU cost (profiled: ~31% of the HIGH frame /
+   * +7.5ms at a GPU-bound resolution). Bloom is a BLUR, so rendering its target at
+   * half resolution is visually near-identical while costing ~¼ the bloom pixel work.
+   * The SCENE + HUD stay full-resolution — only this blur buffer is halved. (Was
+   * touch-only at 0.5; extended to desktop so HIGH itself is cheaper, not just LOW.)
+   */
+  resolutionScale: 0.5,
 } as const;
 
 /**

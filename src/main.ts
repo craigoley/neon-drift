@@ -148,6 +148,7 @@ const scene = new SceneManager(app, isTouch);
 const post = new PostProcessing(scene.scene, scene.camera, scene.renderer, isTouch);
 // Honour the persisted "Retro FX" setting (off = disable the cinematic pass).
 post.setQuality(!settings.get('lowFx')); // Retro FX off = LOW quality (skips bloom — the perf lever)
+post.setCinematicEnabled(settings.get('cinematicFx')); // independent fullscreen-grade toggle
 const environment = new Environment(scene.scene, game.seed);
 const stars = new Starfield(scene.scene, game.seed);
 const scenery = new ParallaxScenery(scene.scene);
@@ -357,6 +358,8 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     post.setQuality(!lowFx);
     vehicle.setDetail(lowFx ? 'simple' : 'hero'); // LOW drops the player car to the cheap silhouette
   },
+  onCinematicFxChange: (on) => post.setCinematicEnabled(on), // skip the fullscreen grade pass when off
+
   // MISSIONS panel data (read fresh each time the panel opens). All cosmetic —
   // nothing here gates the core run.
   missions: {

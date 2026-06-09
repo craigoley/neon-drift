@@ -19,11 +19,17 @@ import { DEFAULT_CAR_ID, SETTINGS_STORAGE_KEY } from '../utils/constants';
 export interface Settings {
   soundEnabled: boolean;
   selectedCarId: string;
-  /** "Retro FX" = the graphics-quality HIGH/LOW lever. OFF (LOW) skips the WHOLE post
-   *  pipeline — bloom glow AND the cinematic pass (aberration / scanlines / grain /
-   *  vignette) — and renders direct: a genuinely cheap frame for weaker GPUs (bloom is
-   *  the main GPU cost). ON (HIGH) = the full neon glow. Default ON (lowFx false). */
+  /** "Retro FX" = the BLOOM / quality lever. OFF (LOW) skips the WHOLE post pipeline —
+   *  bloom AND cinematic — and renders direct: the cheapest frame. ON = the composer
+   *  runs (bloom glow; the cinematic grade follows its own `cinematicFx` toggle). Bloom
+   *  is the named main GPU cost. Default ON (lowFx false). */
   lowFx: boolean;
+  /** "Cinematic FX" = the fullscreen grade pass (chromatic aberration / scanlines /
+   *  grain / vignette), toggled INDEPENDENTLY of bloom. OFF keeps the neon glow but
+   *  drops the fullscreen shader — a fill-rate cost (~3.6ms on an M4, likely bigger on a
+   *  phone), so "bloom on + cinematic off" is a cheaper MEDIUM. Default ON. (No effect
+   *  while Retro FX is off, since the composer isn't used then.) */
+  cinematicFx: boolean;
   /** "Rival Ghost" on → race a translucent replay of your best run for the mode.
    *  Off by default so the seed/course behaviour is unchanged until opted in. */
   ghostRace: boolean;
@@ -34,6 +40,7 @@ export const DEFAULT_SETTINGS: Settings = {
   soundEnabled: true,
   selectedCarId: DEFAULT_CAR_ID,
   lowFx: false,
+  cinematicFx: true,
   ghostRace: false,
 };
 
@@ -96,6 +103,8 @@ export class SettingsStore {
             ? parsed.selectedCarId
             : DEFAULT_SETTINGS.selectedCarId,
         lowFx: typeof parsed.lowFx === 'boolean' ? parsed.lowFx : DEFAULT_SETTINGS.lowFx,
+        cinematicFx:
+          typeof parsed.cinematicFx === 'boolean' ? parsed.cinematicFx : DEFAULT_SETTINGS.cinematicFx,
         ghostRace:
           typeof parsed.ghostRace === 'boolean' ? parsed.ghostRace : DEFAULT_SETTINGS.ghostRace,
       };

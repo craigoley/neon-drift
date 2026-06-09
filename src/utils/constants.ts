@@ -2172,8 +2172,46 @@ export const DEFAULT_CAR_ID = CARS[0].id;
 /** The starter car: always unlocked, can never be gated. */
 export const STARTER_CAR_ID = CARS[0].id;
 
+/**
+ * The GENEROUS STARTING SET (PROG-1): cars every fresh profile owns from the start,
+ * available everywhere (solo + competitive). Picked for VARIETY — cars are
+ * no-dominance sidegrades (#74), so any set is fair; this spans the axes so the
+ * free starting choice is meaningful: pulse (balanced), vapor (grip / slow-mo
+ * heavy: cap 4 @ 0.4), ember (fast / loose), ghost (loosest tail / drift). The
+ * remaining cars (onyx / nova / slipstream) keep their stat-milestone unlocks (and
+ * gain a credit-purchase path in PR2). Includes STARTER_CAR_ID.
+ */
+export const STARTING_CAR_IDS: readonly string[] = ['pulse', 'vapor', 'ember', 'ghost'];
+
 /** localStorage key for cross-run progression (lifetime stats + unlocked cars). */
 export const PROGRESS_STORAGE_KEY = 'neon-drift.progress';
+
+/** Blob-schema version for the PROGRESS store (NOT SIM_MATH_VERSION — this is the
+ *  meta store's own format). Bumped when the persisted progress shape changes;
+ *  PROG-1 adds `credits`, so pre-credits blobs (no version) migrate to credits 0. */
+export const PROGRESS_BLOB_VERSION = 1;
+
+/**
+ * CREDITS economy (PROG-1) — ONE currency earned from a MIX of sources and (in PR2)
+ * spent on cars / cosmetics / modes. HORIZONTAL only: credits never buy stat-power,
+ * so the leaderboard + MP/bot fairness are untouched. All first-pass + tunable.
+ */
+export const CREDITS = {
+  /** Per-run drip: floor(score / runScoreDivisor) + floor(distance / runDistanceDivisor),
+   *  CAPPED at runCap so a marathon score can't be ground infinitely (races + daily
+   *  are the high-value, low-grind paths). */
+  runScoreDivisor: 100,
+  runDistanceDivisor: 250,
+  runCap: 300,
+  /** Race WIN bonus (MP + vs-Computer); a small consolation on a non-win finish. */
+  raceWin: 50,
+  raceConsolation: 10,
+  /** Daily challenge: flat for completing today + a streak bonus (per consecutive
+   *  day, capped). Awarded once per day (the first run of the day). */
+  dailyComplete: 40,
+  dailyStreakPerDay: 10,
+  dailyStreakCap: 80,
+} as const;
 
 /**
  * Lifetime (cross-run) stats that drive unlocks. Accumulated at the end of each

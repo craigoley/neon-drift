@@ -13,15 +13,20 @@
  */
 
 import {
+  CREDITS,
   EMPTY_LIFETIME_STATS,
+  PROGRESS_BLOB_VERSION,
   PROGRESS_STORAGE_KEY,
   STARTER_CAR_ID,
+  STARTING_CAR_IDS,
   type LifetimeStats,
 } from '../utils/constants';
 import { evaluateUnlockedIds, isCarUnlocked } from './Unlocks';
 
 /** The numbers a finished run contributes to the lifetime totals. */
 export interface RunResult {
+  /** This run's score (drives the per-run credit award; not a lifetime stat). */
+  score: number;
   /** Distance driven this run (added to the cumulative total). */
   distance: number;
   /** Peak combo this run (raises the lifetime best). */
@@ -33,8 +38,12 @@ export interface RunResult {
 }
 
 interface ProgressData {
+  /** Blob-schema version (PROGRESS_BLOB_VERSION) — meta-store format, NOT sim math. */
+  version: number;
   stats: LifetimeStats;
   unlocked: string[];
+  /** Earned-but-unspent currency (PROG-1). Spending arrives in PR2. */
+  credits: number;
 }
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
@@ -77,12 +86,33 @@ export class ProgressStore {
     return [...this.data.unlocked];
   }
 
+  /** Current earned-but-unspent credit balance (PROG-1). */
+  getCredits(): number {
+    return this.data.credits;
+  }
+
+  /** Adjust the balance by `n` (floored), clamped so it never goes below 0; persist
+   *  and return the new balance. The earn seam for race wins + daily completion;
+   *  a negative `n` (a future PR2 purchase) deducts, clamped at 0. */
+  addCredits(n: number): number {
+    const delta = Number.isFinite(n) ? Math.floor(n) : 0;
+    this.data.credits = Math.max(0, this.data.credits + delta);
+    this.persist();
+    return this.data.credits;
+  }
+
+  /** Per-run credit award for a finished run (pure formula; capped anti-farm). */
+  private runCredits(run: RunResult): number {
+    const raw = Math.floor(num(run.score) / CREDITS.runScoreDivisor) + Math.floor(num(run.distance) / CREDITS.runDistanceDivisor);
+    return Math.min(raw, CREDITS.runCap);
+  }
+
   /**
-   * Fold a finished run into the lifetime totals, re-evaluate unlocks, persist,
-   * and return the ids unlocked FOR THE FIRST TIME by this run (so a celebration
-   * fires exactly once). Never throws.
+   * Fold a finished run into the lifetime totals, re-evaluate unlocks, AWARD the
+   * per-run credits, persist, and return the ids unlocked FOR THE FIRST TIME by
+   * this run (so a celebration fires exactly once) + the credits earned. Never throws.
    */
-  recordRun(run: RunResult): { newlyUnlocked: string[] } {
+  recordRun(run: RunResult): { newlyUnlocked: string[]; creditsAwarded: number } {
     const prev = new Set(this.data.unlocked);
     const s = this.data.stats;
     s.totalDistance += num(run.distance);
@@ -94,14 +124,18 @@ export class ProgressStore {
     const newlyUnlocked = nowUnlocked.filter((id) => !prev.has(id));
     // Monotonic union — never drop an already-earned id.
     this.data.unlocked = Array.from(new Set([...this.data.unlocked, ...nowUnlocked]));
+    const creditsAwarded = this.runCredits(run);
+    this.data.credits = Math.max(0, this.data.credits + creditsAwarded);
     this.persist();
-    return { newlyUnlocked };
+    return { newlyUnlocked, creditsAwarded };
   }
 
   private load(): ProgressData {
     const fresh = (): ProgressData => ({
+      version: PROGRESS_BLOB_VERSION,
       stats: { ...EMPTY_LIFETIME_STATS },
-      unlocked: [STARTER_CAR_ID],
+      unlocked: [...STARTING_CAR_IDS],
+      credits: 0,
     });
     if (!this.storage) return this.reconcile(fresh());
     try {
@@ -119,21 +153,24 @@ export class ProgressStore {
       const unlocked = Array.isArray(parsed.unlocked)
         ? parsed.unlocked.filter((id): id is string => typeof id === 'string')
         : [];
-      return this.reconcile({ stats, unlocked });
+      // `credits` absent on pre-PROG-1 blobs → 0 (a returning player isn't gifted a
+      // balance they never earned, but never loses earned credits either).
+      return this.reconcile({ version: PROGRESS_BLOB_VERSION, stats, unlocked, credits: num(parsed.credits) });
     } catch {
-      // Corrupt / blocked — fall back to a clean starter-only record.
+      // Corrupt / blocked — fall back to a clean starter-set record.
       return this.reconcile(fresh());
     }
   }
 
-  /** Guarantee the starter is present and fold in any unlocks the stats already
-   *  satisfy (self-heals after a threshold change or a partial blob). */
+  /** Guarantee the STARTING SET is present and fold in any stat-earned unlocks
+   *  (self-heals after a threshold change, a widened starting set, or a partial
+   *  blob). Monotonic: only ever ADDS ids — a returning player keeps every car
+   *  they had AND gains the (now-wider) starting set. */
   private reconcile(data: ProgressData): ProgressData {
     const union = new Set<string>(data.unlocked);
+    for (const id of STARTING_CAR_IDS) union.add(id);
     union.add(STARTER_CAR_ID);
     for (const id of evaluateUnlockedIds(data.stats)) union.add(id);
-    // Drop any id that isn't actually unlockable-by-stats AND isn't the starter?
-    // No — keep unknown/earned ids (monotonic); only ensure starter + earned.
     data.unlocked = [...union];
     return data;
   }

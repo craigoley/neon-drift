@@ -23,6 +23,22 @@ export function dailyDateKey(date: Date): number {
 }
 
 /**
+ * True if `curKey` is the calendar day immediately AFTER `prevKey` (both YYYYMMDD
+ * keys from dailyDateKey) — i.e. they're consecutive days. Used for the daily
+ * STREAK: handles month/year boundaries via real date arithmetic (YYYYMMDD keys are
+ * NOT simply ±1 across those). Pure; `prevKey <= 0` (no prior day) → false.
+ */
+export function isConsecutiveDay(prevKey: number, curKey: number): boolean {
+  if (prevKey <= 0) return false;
+  const y = Math.floor(prevKey / 10000);
+  const m = Math.floor((prevKey % 10000) / 100);
+  const d = prevKey % 100;
+  // Local-midnight date; +1 day normalizes month/year rollover, then re-key it.
+  const next = new Date(y, m - 1, d + 1);
+  return dailyDateKey(next) === curKey;
+}
+
+/**
  * The fixed road seed for a given date's daily challenge — a well-spread 32-bit
  * unsigned integer (matching the random-run seed range). The raw YYYYMMDD key
  * only increments by 1 per day, so consecutive days would otherwise produce

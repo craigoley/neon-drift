@@ -872,6 +872,11 @@ export const TRAFFIC_VIS = {
   /** RAMP boost-strip: a low, wide flat slab on the road surface. */
   rampHeight: 0.35,
   rampY: 0.18,
+  /** Neon edge-outline colour (HIGH only) — a bright on-palette cyan that catches the
+   *  bloom so every obstacle reads as a glowing neon object, while the BODY keeps its
+   *  threat colour. Cyan contrasts the warm bodies + matches the car/road neon language;
+   *  distinct from the magenta road markings. */
+  edgeColor: 0x00ffff, // = PALETTE.cyan
 } as const;
 
 /** Horizon backdrop placement + wireframe mountains (procedural, fog-excluded). */
@@ -1001,6 +1006,47 @@ export const SCENERY = {
   behind: 1,
   /** Y of each prop's base (on the grid plane). */
   baseY: 0,
+  /**
+   * HIGH-quality silhouettes/accents (gfx). Each layer keeps its MUTED body colour +
+   * low opacity (BUG-01: decor must stay quieter than the orange/red hazards); the only
+   * bright bits are SMALL accents (a lamp cap, a few windows) that read as light without
+   * out-shouting obstacles. LOW falls back to the plain box pillar. Cheap: richer SHARED
+   * geometry per layer (1 instanced draw call each, unchanged) — no extra meshes.
+   */
+  detail: {
+    /** Near 'pylon' → an outrun PALM silhouette (trunk + a fan of frond triangles),
+     *  all in the layer's muted colour — a recognisable shape, NOT a glowing thing. */
+    palm: {
+      trunkWidth: 0.32,
+      trunkHeightFrac: 0.6, // of layer.height
+      frondLenFrac: 0.36, // of layer.height
+      frondHalfWidth: 0.16,
+      /** Frond tips as [dx, dy] fractions of frond length, fanned around the crown. */
+      frondTips: [
+        [-1.0, 0.25], [-0.6, 0.8], [0.0, 1.0], [0.6, 0.8], [1.0, 0.25],
+      ],
+    },
+    /** Mid 'pole' → a thin light-pole + a SMALL bright cap (a lit lamp) that catches
+     *  the bloom — a tiny accent, kept small so it stays subordinate. */
+    pole: {
+      shaftWidthFrac: 0.4, // of layer.width
+      shaftHeightFrac: 0.94, // of layer.height (cap sits on top)
+      capColor: 0x00ffff, // bright on-palette cyan lamp
+      capWidthFrac: 0.9, // of layer.width
+      capHeight: 0.6,
+    },
+    /** Far 'block' → a city block + a few DIM window dots (subtle — it's background
+     *  haze; deliberately under-bright so it never competes with hazards). */
+    block: {
+      windowColor: 0x2f8fb0, // muted lit-window blue-cyan (NOT full bright)
+      windowSize: 0.9,
+      windowZOffset: 0.05, // just proud of the +z face to avoid z-fighting
+      /** Window centres as [xFrac, yFrac] of the block's half-width / height, on +z. */
+      windows: [
+        [-0.45, 0.7], [0.4, 0.55], [-0.2, 0.35], [0.5, 0.85],
+      ],
+    },
+  },
 } as const;
 
 export type SceneryLayer = (typeof SCENERY.layers)[number];

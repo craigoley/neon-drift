@@ -142,6 +142,8 @@ export interface ShellOptions {
   onMultiplayer?: () => void;
   /** Open the vs-Computer (AI race) entry. Absent → no "vs COMPUTER" button. */
   onVsComputer?: () => void;
+  /** Enter ZEN free-roam (a parallel system). Absent → no "ZEN" button. */
+  onZen?: () => void;
   /** Current credit balance provider (PROG-1). Absent → no credits readout (tests). */
   credits?: () => number;
   /** STORE panel data + actions (PROG-1 PR2). Absent → no STORE button (tests). */
@@ -158,6 +160,9 @@ export interface ShellOptions {
 export class Shell {
   private readonly root: HTMLElement;
   private current: Screen = null;
+  /** True while a PARALLEL external system (Zen) owns the screen — suppresses the
+   *  racing `body.playing` touch controls while all shell screens are hidden. */
+  private externalMode = false;
   private carIndex = 0;
 
   // Screens.
@@ -324,6 +329,7 @@ export class Shell {
   // --- public screen transitions ----------------------------------------
 
   showStart(): void {
+    this.externalMode = false; // leaving any parallel system (Zen) → normal menu
     this.startBest.textContent = this.bestLine(this.leaderboard.bestRun());
     this.renderCredits(this.startCreditsEl, 0);
     this.go('start');
@@ -407,6 +413,15 @@ export class Shell {
     this.go(null);
   }
 
+  /** Hide every shell screen for a PARALLEL external system (e.g. Zen free-roam) that
+   *  renders on the canvas and owns its own overlay/controls — WITHOUT entering in-play
+   *  mode (no `body.playing`, so the racing touch controls stay hidden). Return via
+   *  showStart(). */
+  hideForExternal(): void {
+    this.externalMode = true;
+    this.go(null);
+  }
+
   /** Pause an in-progress run (from the PAUSE button, Esc/P, or tab-blur). Only
    *  acts while actually playing (no overlay shown). Idempotent. */
   requestPause(): void {
@@ -430,7 +445,9 @@ export class Shell {
     this.crashScreen.style.display = screen === 'crash' ? 'flex' : 'none';
     this.pauseScreen.style.display = screen === 'pause' ? 'flex' : 'none';
     // `body.playing` gates the in-run controls (DRIFT + PAUSE) — only while playing.
-    document.body.classList.toggle('playing', screen === null);
+    // `body.playing` gates the racing touch controls — set only for an actual in-play
+    // run, NOT for a parallel external system (Zen owns its own controls).
+    document.body.classList.toggle('playing', screen === null && !this.externalMode);
 
     // Refresh the missions panel from live progression data when it opens.
     if (screen === 'missions' && prev !== 'missions') this.renderMissions();
@@ -523,6 +540,10 @@ export class Shell {
       (this.opts.onMultiplayer
         ? `<button class="shell-btn shell-btn--ghost shell-mp-open" type="button">2P RACE</button>`
         : '') +
+      // ZEN free-roam (parallel system) — only when the composition root wired it up.
+      (this.opts.onZen
+        ? `<button class="shell-btn shell-btn--ghost shell-zen-open" type="button">ZEN</button>`
+        : '') +
       `<button class="shell-btn shell-btn--ghost shell-leaderboard-open" type="button">SCORES</button>` +
       `<button class="shell-btn shell-btn--ghost shell-settings-open" type="button">SETTINGS</button>` +
       `</div>` +
@@ -536,6 +557,10 @@ export class Shell {
     s.querySelector('.shell-vscpu-open')?.addEventListener('click', () => {
       this.hide(); // leave the menu; the vs-Computer picker + race take over
       this.opts.onVsComputer?.();
+    });
+    s.querySelector('.shell-zen-open')?.addEventListener('click', () => {
+      this.hideForExternal(); // hide the menu WITHOUT racing touch controls; Zen owns its own
+      this.opts.onZen?.();
     });
     s.querySelector('.shell-mp-open')?.addEventListener('click', () => {
       this.hide(); // leave the menu; the MP overlay + race take over

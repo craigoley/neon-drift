@@ -1760,6 +1760,56 @@ export const BOT = {
 /** Default RNG seed when none is supplied (keeps runs reproducible in tests). */
 export const DEFAULT_SEED = 0x9e3779b9;
 
+/**
+ * ZEN FREE-ROAM (a PARALLEL system — lives in its own src/zen/ module, never the
+ * forward sim). A calm, heading-based 2D cruise on an open plane. Single-player, no
+ * lockstep/replay → EXEMPT from detmath (free to use Math.sin/cos). First-pass tuning
+ * — EXPECT to adjust from playtest (PR1 is the FEEL gate). All movement values are
+ * deliberately CALM, well below the racing speeds.
+ */
+export const ZEN = {
+  // --- movement (the keystone) ---
+  /** Top cruise speed (world units/s) — modest/relaxing, not racing. */
+  maxSpeed: 70,
+  /** Forward acceleration (units/s²) at full throttle. */
+  accel: 38,
+  /** Braking deceleration (units/s²) at full brake. */
+  brakeAccel: 80,
+  /** Per-second retained fraction of speed while coasting (glide-to-rest). */
+  friction: 0.6,
+  /** Turn rate (radians/s) at full steer + full authority — gentle. */
+  turnRate: 1.6,
+  /** Speed at which turning reaches full authority; below it, turning eases in so the
+   *  car doesn't pivot in place when nearly stopped. */
+  turnFullSpeed: 20,
+  // --- chase camera (smoothed for a gliding, calm follow) ---
+  /** Camera distance behind the car (along its facing). */
+  camDistance: 12,
+  /** Camera height above the ground plane. */
+  camHeight: 5.5,
+  /** Look-at height above the car's base. */
+  camLookAtHeight: 1.2,
+  /** Per-second follow rate for the camera (smoothFollow); lower = floatier/calmer. */
+  camPosLerp: 4.5,
+  /** Gentle visual bank (radians) the chassis leans into a full-steer turn. */
+  leanMax: 0.18,
+  /** Camera field-of-view (degrees). */
+  camFov: 60,
+  /** Camera near clipping plane. */
+  camNear: 0.1,
+  /** Camera far clipping plane (draw distance for the grid). */
+  camFar: 4000,
+  // --- the empty plane (PR1 placeholder world: a streaming neon grid) ---
+  /** Ground grid total size (world units) + divisions. The grid recentres on the car
+   *  (snapped to a cell) so the plane reads as endless in every direction. */
+  gridSize: 600,
+  gridDivisions: 60,
+  gridColor: 0x16364a,
+  gridCenterColor: 0x16364a,
+  /** Ground / grid y. */
+  groundY: 0,
+} as const;
+
 
 /**
  * Per-car handling, expressed as MULTIPLIERS against the base VEHICLE tuning

@@ -187,6 +187,9 @@ rivalRenderer.setVisible(false);
 const finishLine = new FinishLine(scene.scene);
 let mpRace: MpRace | null = null; // non-null + isRacing ⇒ a live 2P race is running
 let botRace: BotRace | null = null; // non-null + isRacing ⇒ a vs-Computer race is running
+// ZEN free-roam (a PARALLEL system, lazy-loaded). Non-null ⇒ Zen owns the frame: the
+// forward sim + its renderers are bypassed entirely (see the frame() branch below).
+let zen: import('./zen/ZenSession').ZenSession | null = null;
 const traffic = new TrafficRenderer(scene.scene);
 const powerups = new PowerupRenderer(scene.scene);
 traffic.setDetail(!settings.get('lowFx')); // HIGH = detailed obstacle silhouettes; LOW = plain boxes
@@ -411,6 +414,27 @@ const shell = new Shell(app, settings, leaderboard, audio, {
       onExit: () => shell.showStart(),
     });
   },
+  // ZEN free-roam (PR1): a PARALLEL system — lazy-load the zen module (kept out of the
+  // racing bundle), then it OWNS the frame loop (forward sim bypassed) until EXIT.
+  onZen: () => {
+    // PR1 leaves audio as-is (no engine drone tuning yet — that's later polish).
+    const carId = resolvePlayCarId();
+    const glow = cosmeticById(progress.getEquipped('glow'))?.color ?? null;
+    void import('./zen/ZenSession').then(({ ZenSession }) => {
+      zen = new ZenSession({
+        renderer: scene.renderer,
+        car: carById(carId),
+        glow,
+        parent: app,
+        isTouch,
+        onExit: () => {
+          zen?.dispose();
+          zen = null;
+          shell.showStart();
+        },
+      });
+    });
+  },
   credits: () => progress.getCredits(), // PROG-1 balance readout (start + WIPEOUT)
   // PROG-1 PR2 STORE: live data + spend/equip actions. Buying a car adds it to the
   // SAME unlocked[] the stat path fills (dual-unlock); cosmetics are purely visual.
@@ -612,6 +636,17 @@ function frame(now: number): void {
   telemetry.push(ms);
 
   const realDt = Math.min(ms / 1000, MAX_FRAME_DT); // clamp tab-switch stalls
+
+  // ZEN free-roam owns the frame: drive its parallel model + renderer and BYPASS the
+  // entire forward sim/render path (no update(game,…), no forward renderers). Steering
+  // reuses the shared Controls; the throttle lives in the Zen session.
+  if (zen) {
+    zen.tick(controls.intent.steer, realDt);
+    controls.endFrame();
+    requestAnimationFrame(frame);
+    return;
+  }
+
   const playing = game.phase === Phase.Playing;
 
   // Advance the sim only while playing. When on the menu / paused / crash

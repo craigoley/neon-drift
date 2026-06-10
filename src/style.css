@@ -413,6 +413,86 @@ body,
   justify-content: center;
 }
 
+/* ── Start-screen hierarchy (home-screen reorg) ───────────────────────────────
+   ONE dominant primary (PLAY) → two grouped SECONDARY tiers (MODES / GARAGE) →
+   minimal corner UTILITY icons. Tighter gap than the shared screen rule so the
+   whole menu sits above the fold on a phone. */
+.shell-start {
+  gap: clamp(8px, 1.8vh, 16px);
+}
+
+/* Low-frequency utility (Settings / Share) as small corner icons, out of the
+   primary flow — research-standard nesting, not full-width labelled buttons. */
+.shell-utility {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: 14px;
+  display: flex;
+  gap: 10px;
+  z-index: 2;
+}
+.shell-utility-btn {
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  font-size: 22px;
+  line-height: 1;
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.06);
+  border: 2px solid rgba(0, 255, 255, 0.4);
+  border-radius: 12px;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.25);
+}
+.shell-utility-btn:active {
+  transform: translateY(1px);
+}
+
+/* A secondary GROUP: a quiet eyebrow label + a 2-up tap grid. */
+.shell-menu-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  width: min(360px, 88vw);
+}
+.shell-menu-group-label {
+  font: 700 clamp(10px, 2.8vw, 12px) / 1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: #a98fd6; /* dim lavender — a quiet label, clearly a tier below PLAY */
+  opacity: 0.8;
+}
+.shell-menu-tiles {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  width: 100%;
+}
+/* SECONDARY tile: clearly tappable but a tier below the filled PLAY primary —
+   ghost neon, compact, fills its grid cell. */
+.shell-tile {
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  font: 700 clamp(13px, 3.6vw, 16px) / 1.1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #00ffff;
+  background: rgba(0, 255, 255, 0.05);
+  border: 2px solid rgba(0, 255, 255, 0.4);
+  border-radius: 10px;
+  padding: 12px 8px;
+  min-height: 48px;
+  box-shadow: 0 0 10px rgba(0, 255, 255, 0.18);
+}
+.shell-tile:active {
+  transform: translateY(1px);
+}
+
 /* Settings rows. */
 .shell-setting {
   display: flex;

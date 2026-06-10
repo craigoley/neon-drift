@@ -73,6 +73,17 @@ export interface StorePanel {
   previewCosmetic: (slot: string, id: string | null) => void;
 }
 
+/** A start-screen menu entry (MODES / GARAGE groups). Data-driven so adding a future
+ *  mode or garage item is ONE list entry, not another loose top-level button. The
+ *  `cls` is the button's existing class (selectors/handlers preserved through the
+ *  reorg); `present` gates it on the matching composition-root callback. */
+interface MenuItem {
+  cls: string;
+  label: string;
+  present: boolean;
+  onTap: () => void;
+}
+
 /** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
 export interface MissionView {
   label: string;
@@ -515,61 +526,95 @@ export class Shell {
       ? 'drag to steer · tap SLOW-MO to deploy a banked charge'
       : '← → / A D to steer · SPACE to deploy a banked slow-mo';
     s.innerHTML =
+      // Low-frequency UTILITY nested as small corner icons (out of the primary flow).
+      `<div class="shell-utility">` +
+      `<button class="shell-utility-btn shell-settings-open" type="button" aria-label="Settings" title="Settings">⚙</button>` +
+      `<button class="shell-utility-btn shell-share" type="button" aria-label="Share" title="Share">↗</button>` +
+      `</div>` +
+      // HEADER: identity + the two live readouts.
       `<h1 class="shell-title">NEON DRIFT</h1>` +
       `<p class="shell-best"></p>` +
       `<p class="shell-credits"></p>` +
+      // PRIMARY: the one dominant action.
       `<button class="shell-btn shell-play" type="button">PLAY</button>` +
       `<p class="shell-hint">${hint}</p>` +
-      `<div class="shell-row">` +
-      `<button class="shell-btn shell-btn--ghost shell-cars" type="button">CARS</button>` +
-      (this.opts.daily
-        ? `<button class="shell-btn shell-btn--ghost shell-daily-open" type="button">DAILY</button>`
-        : '') +
-      (this.opts.missions
-        ? `<button class="shell-btn shell-btn--ghost shell-missions-open" type="button">MISSIONS</button>`
-        : '') +
-      // STORE (PROG-1 PR2) — only when the composition root wired it up.
-      (this.opts.store
-        ? `<button class="shell-btn shell-btn--ghost shell-store-open" type="button">STORE</button>`
-        : '') +
-      // vs-COMPUTER race — only when the composition root wired it up.
-      (this.opts.onVsComputer
-        ? `<button class="shell-btn shell-btn--ghost shell-vscpu-open" type="button">vs COMPUTER</button>`
-        : '') +
-      // 2-PLAYER live race (MP-1) — only when the composition root wired it up.
-      (this.opts.onMultiplayer
-        ? `<button class="shell-btn shell-btn--ghost shell-mp-open" type="button">2P RACE</button>`
-        : '') +
-      // ZEN free-roam (parallel system) — only when the composition root wired it up.
-      (this.opts.onZen
-        ? `<button class="shell-btn shell-btn--ghost shell-zen-open" type="button">ZEN</button>`
-        : '') +
-      `<button class="shell-btn shell-btn--ghost shell-leaderboard-open" type="button">SCORES</button>` +
-      `<button class="shell-btn shell-btn--ghost shell-settings-open" type="button">SETTINGS</button>` +
-      `</div>` +
-      `<button class="shell-btn shell-btn--ghost shell-share" type="button">SHARE</button>`;
+      // SECONDARY: two grouped tiers (MODES / GARAGE), built from the data lists below.
+      this.menuGroup('MODES', this.modeItems()) +
+      this.menuGroup('GARAGE', this.garageItems());
 
     s.querySelector('.shell-play')!.addEventListener('click', () => this.play());
-    s.querySelector('.shell-cars')!.addEventListener('click', () => this.go('carpicker'));
-    s.querySelector('.shell-daily-open')?.addEventListener('click', () => this.go('daily'));
-    s.querySelector('.shell-missions-open')?.addEventListener('click', () => this.go('missions'));
-    s.querySelector('.shell-store-open')?.addEventListener('click', () => this.go('store'));
-    s.querySelector('.shell-vscpu-open')?.addEventListener('click', () => {
-      this.hide(); // leave the menu; the vs-Computer picker + race take over
-      this.opts.onVsComputer?.();
-    });
-    s.querySelector('.shell-zen-open')?.addEventListener('click', () => {
-      this.hideForExternal(); // hide the menu WITHOUT racing touch controls; Zen owns its own
-      this.opts.onZen?.();
-    });
-    s.querySelector('.shell-mp-open')?.addEventListener('click', () => {
-      this.hide(); // leave the menu; the MP overlay + race take over
-      this.opts.onMultiplayer?.();
-    });
-    s.querySelector('.shell-leaderboard-open')!.addEventListener('click', () => this.go('leaderboard'));
     s.querySelector('.shell-settings-open')!.addEventListener('click', () => this.go('settings'));
     s.querySelector('.shell-share')!.addEventListener('click', () => this.doShare());
+    // Wire the two groups from the SAME data that rendered them (every action preserved).
+    for (const item of [...this.modeItems(), ...this.garageItems()]) {
+      if (!item.present) continue;
+      s.querySelector(`.${item.cls}`)!.addEventListener('click', item.onTap);
+    }
     return s;
+  }
+
+  /**
+   * MODES group — the alternate ways to play. DATA-DRIVEN: a future mode is ONE entry
+   * here, not another loose top-level button (the reorg's whole point). Each item keeps
+   * its existing class so selectors/handlers are unchanged; only the presentation moves.
+   */
+  private modeItems(): MenuItem[] {
+    return [
+      { cls: 'shell-daily-open', label: 'DAILY', present: !!this.opts.daily, onTap: () => this.go('daily') },
+      {
+        cls: 'shell-vscpu-open',
+        label: 'VS COMPUTER',
+        present: !!this.opts.onVsComputer,
+        onTap: () => {
+          this.hide();
+          this.opts.onVsComputer?.();
+        },
+      },
+      {
+        cls: 'shell-mp-open',
+        label: '2P RACE',
+        present: !!this.opts.onMultiplayer,
+        onTap: () => {
+          this.hide();
+          this.opts.onMultiplayer?.();
+        },
+      },
+      {
+        cls: 'shell-zen-open',
+        label: 'ZEN',
+        present: !!this.opts.onZen,
+        onTap: () => {
+          this.hideForExternal();
+          this.opts.onZen?.();
+        },
+      },
+    ];
+  }
+
+  /** GARAGE group — browse / manage / progression. DATA-DRIVEN (see modeItems). */
+  private garageItems(): MenuItem[] {
+    return [
+      { cls: 'shell-cars', label: 'CARS', present: true, onTap: () => this.go('carpicker') },
+      { cls: 'shell-store-open', label: 'STORE', present: !!this.opts.store, onTap: () => this.go('store') },
+      { cls: 'shell-missions-open', label: 'MISSIONS', present: !!this.opts.missions, onTap: () => this.go('missions') },
+      { cls: 'shell-leaderboard-open', label: 'SCORES', present: true, onTap: () => this.go('leaderboard') },
+    ];
+  }
+
+  /** A titled SECONDARY group of tiles (a quiet section label + a tap grid). Renders
+   *  nothing if the group is empty (so an all-unwired group never shows a bare label). */
+  private menuGroup(label: string, items: MenuItem[]): string {
+    const tiles = items
+      .filter((i) => i.present)
+      .map((i) => `<button class="shell-tile ${i.cls}" type="button">${i.label}</button>`)
+      .join('');
+    if (!tiles) return '';
+    return (
+      `<section class="shell-menu-group">` +
+      `<span class="shell-menu-group-label">${label}</span>` +
+      `<div class="shell-menu-tiles">${tiles}</div>` +
+      `</section>`
+    );
   }
 
   private bestLine(best: BestRun): string {

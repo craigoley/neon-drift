@@ -1782,19 +1782,35 @@ export const ZEN = {
   /** Speed at which turning reaches full authority; below it, turning eases in so the
    *  car doesn't pivot in place when nearly stopped. */
   turnFullSpeed: 20,
-  // --- chase camera (smoothed for a gliding, calm follow) ---
-  /** Camera distance behind the car (along its facing). */
-  camDistance: 12,
-  /** Camera height above the ground plane. */
-  camHeight: 5.5,
+  // --- chase camera (MOSTLY STEADY + a whisper of speed reactivity — the opposite of
+  //     the racing adrenaline cam, where FOV-punch / pull-back are speed-thrill tricks).
+  //     Speed adds only a small, eased distance/FOV change; the turn-glide is separate. ---
+  /** RESTING distance behind the car (speed 0). The comfortable FLOOR — far enough back
+   *  that the whole car reads without looming. */
+  camDistance: 16,
+  /** Extra distance added at FULL speed (eased in). THE swing knob: small = mostly
+   *  steady; set to 0 for a fully steady camera (option 1). Keep it well under
+   *  camDistance so the rest→max swing stays gentle. */
+  camDistanceSpeedGain: 4,
+  /** Camera height above the ground plane (steady — no speed term; raised so the car
+   *  reads comfortably at rest). */
+  camHeight: 6.5,
   /** Look-at height above the car's base. */
   camLookAtHeight: 1.2,
-  /** Per-second follow rate for the camera (smoothFollow); lower = floatier/calmer. */
+  /** Per-second easing for the camera BOOM swinging behind the car as it TURNS (the calm
+   *  turn-glide). Forward motion no longer adds distance lag, so this is decoupled from
+   *  the speed feel. Lower = floatier/calmer. */
   camPosLerp: 4.5,
+  /** Per-second easing of the SPEED FACTOR that drives distance/FOV, so brief throttle
+   *  changes don't pump the framing. Low = very calm onset. */
+  camSpeedLerp: 2,
   /** Gentle visual bank (radians) the chassis leans into a full-steer turn. */
   leanMax: 0.18,
-  /** Camera field-of-view (degrees). */
+  /** RESTING field-of-view (degrees, speed 0). */
   camFov: 60,
+  /** Extra FOV degrees added at FULL speed (eased in) — a subtle WIDEN (never tighten: a
+   *  tight FOV at speed is a known disorientation/motion-sickness trigger). Small cue. */
+  camFovSpeedGain: 4,
   /** Camera near clipping plane. */
   camNear: 0.1,
   /** Camera far clipping plane (draw distance for the grid). */

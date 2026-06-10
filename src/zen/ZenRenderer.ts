@@ -14,6 +14,7 @@ import { PALETTE, ZEN, type CarDef } from '../utils/constants';
 import { clamp, smoothFollow } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
+import { ZenScenery } from './ZenScenery';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -22,6 +23,7 @@ export class ZenRenderer {
   private readonly camera: THREE.PerspectiveCamera;
   private readonly car: CarMesh;
   private readonly grid: THREE.GridHelper;
+  private readonly scenery: ZenScenery;
   private readonly cell: number;
   private aspect = 0;
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
@@ -34,6 +36,9 @@ export class ZenRenderer {
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
     this.scene.background = new THREE.Color(PALETTE.deepPurple);
+    // Haze matching the background: distant props/grid fade INTO it, so the chunk
+    // load/cull boundary is invisible (props stream in from the fog, not pop in).
+    this.scene.fog = new THREE.FogExp2(PALETTE.deepPurple, ZEN.fogDensity);
 
     this.camera = new THREE.PerspectiveCamera(ZEN.camFov, 1, ZEN.camNear, ZEN.camFar);
     this.camera.position.set(0, ZEN.camHeight, ZEN.camDistance);
@@ -45,10 +50,18 @@ export class ZenRenderer {
     this.grid.position.y = ZEN.groundY;
     this.scene.add(this.grid);
 
+    // Chunk-streamed scenery (the populated world the car drives through).
+    this.scenery = new ZenScenery(this.scene);
+
     this.car = new CarMesh(car);
     this.scene.add(this.car.group);
 
     this.resize();
+  }
+
+  /** Quality lever — LOW (retro FX off) swaps scenery to the plain pillars (perf). */
+  setQuality(high: boolean): void {
+    this.scenery.setNeon(high);
   }
 
   /** Apply a car's cosmetic colours (selected car + its paint). */
@@ -76,6 +89,9 @@ export class ZenRenderer {
     // Grid: recentre on the car snapped to a cell → seamless infinite plane.
     this.grid.position.x = Math.round(v.x / this.cell) * this.cell;
     this.grid.position.z = Math.round(v.z / this.cell) * this.cell;
+
+    // World: stream scenery chunks around the car (rebuilds only on chunk crossings).
+    this.scenery.update(v.x, v.z);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
     // adrenaline). Two decoupled parts:
@@ -128,6 +144,7 @@ export class ZenRenderer {
     this.scene.remove(this.grid);
     this.grid.geometry.dispose();
     (this.grid.material as THREE.Material).dispose();
+    this.scenery.dispose();
   }
 }
 

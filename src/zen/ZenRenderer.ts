@@ -13,6 +13,7 @@ import * as THREE from 'three';
 import { PALETTE, ZEN, type CarDef } from '../utils/constants';
 import { clamp, smoothFollow } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
+import { zenFraming } from './ZenCamera';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -23,6 +24,12 @@ export class ZenRenderer {
   private readonly grid: THREE.GridHelper;
   private readonly cell: number;
   private aspect = 0;
+  /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
+   *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
+  private boomHeading = 0;
+  /** Eased speed factor (0..1) driving the gentle distance/FOV swing; smoothed so brief
+   *  throttle changes don't pump the framing. */
+  private speedFactor = 0;
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
@@ -70,16 +77,34 @@ export class ZenRenderer {
     this.grid.position.x = Math.round(v.x / this.cell) * this.cell;
     this.grid.position.z = Math.round(v.z / this.cell) * this.cell;
 
-    // Chase camera: target sits BEHIND the car along its facing, raised; ease toward
-    // it (smoothFollow) so turns feel like a gliding swing, not a snap. Always look at
-    // the car. Behind = opposite the movement dir (sin h, -cos h) → (-sin h, +cos h).
-    const tx = v.x - Math.sin(v.heading) * ZEN.camDistance;
-    const tz = v.z + Math.cos(v.heading) * ZEN.camDistance;
+    // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
+    // adrenaline). Two decoupled parts:
+    //   (1) TURN-GLIDE: ease a "boom" heading toward the car's facing, so the camera
+    //       swings behind as you turn (gliding, not snapping). Forward motion adds NO
+    //       distance lag here — the old fixed-target follow trailed further the faster
+    //       you went (an uncontrolled speed swing); easing the heading instead keeps the
+    //       resting distance steady at any cruise speed.
+    //   (2) SPEED FEEL: a small, eased distance pull-back + subtle FOV widen from speed
+    //       (the explicit zenFraming curve), so cruising still reads as motion.
     const f = smoothFollow(ZEN.camPosLerp, dt);
-    this.camera.position.x += (tx - this.camera.position.x) * f;
-    this.camera.position.z += (tz - this.camera.position.z) * f;
+    this.boomHeading += (v.heading - this.boomHeading) * f;
+
+    const targetFactor = clamp(v.speed / ZEN.maxSpeed, 0, 1);
+    this.speedFactor += (targetFactor - this.speedFactor) * smoothFollow(ZEN.camSpeedLerp, dt);
+    const { distance, fov } = zenFraming(this.speedFactor);
+
+    // Behind = opposite the facing dir (sin h, -cos h) → (-sin h, +cos h), at `distance`.
+    this.camera.position.x = v.x - Math.sin(this.boomHeading) * distance;
+    this.camera.position.z = v.z + Math.cos(this.boomHeading) * distance;
+    // Height eases toward its (steady) target — keeps the soft vertical glide.
     this.camera.position.y += (ZEN.camHeight - this.camera.position.y) * f;
     this.camera.lookAt(v.x, ZEN.camLookAtHeight, v.z);
+
+    // Apply the gentle FOV widen (only touch the projection when it actually moves).
+    if (Math.abs(fov - this.camera.fov) > 1e-3) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
 
     this.resize(); // cheap aspect check (updates only on a real size change)
     this.renderer.render(this.scene, this.camera);

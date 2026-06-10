@@ -299,6 +299,16 @@ body,
 }
 
 /* PROG-1 PR2 STORE screen. */
+.shell-store-preview {
+  width: min(280px, 70vw);
+  height: clamp(120px, 26vh, 200px);
+  margin: 2px 0 4px;
+}
+.shell-store-preview canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
 .shell-store-heading {
   margin: 10px 0 2px;
   font-size: clamp(12px, 3vw, 15px);
@@ -320,6 +330,14 @@ body,
   border: 1px solid rgba(0, 255, 255, 0.25);
   border-radius: 8px;
   background: rgba(0, 255, 255, 0.04);
+  transition: border-color 0.12s, background 0.12s;
+}
+/* Live-preview affordance: highlight the hovered/focused cosmetic row (PR3a). */
+.shell-store-cosmetics .shell-store-row[data-cos-slot]:hover,
+.shell-store-cosmetics .shell-store-row[data-cos-slot]:focus-within {
+  border-color: rgba(0, 255, 255, 0.7);
+  background: rgba(0, 255, 255, 0.1);
+  outline: none;
 }
 .shell-store-name {
   flex: 1;

@@ -1,0 +1,119 @@
+/**
+ * ZEN FREE-ROAM session (PR1) — the controller that ties the pure movement model
+ * (ZenVehicle) to the parallel renderer (ZenRenderer) and owns the Zen-only input
+ * (a THROTTLE; steering is reused from the shared Controls) + a minimal overlay
+ * (EXIT, and on touch a GAS/BRAKE pair). Lazy-loaded from the composition root so
+ * none of the Zen code ships in the racing bundle.
+ *
+ * The composition root drives `tick(steer, dt)` each frame INSTEAD of the forward sim
+ * while a session is alive (see main.ts). Nothing here imports src/game/.
+ */
+
+import * as THREE from 'three';
+import type { CarDef } from '../utils/constants';
+import { createZenVehicle, updateZen } from './ZenVehicle';
+import { ZenRenderer } from './ZenRenderer';
+
+export interface ZenSessionOptions {
+  /** The game's shared WebGLRenderer (Zen draws with it; never disposes it). */
+  renderer: THREE.WebGLRenderer;
+  /** The player's selected car (driven in Zen, cosmetics and all). */
+  car: CarDef;
+  /** Equipped GLOW cosmetic colour (or null) — purely visual. */
+  glow: number | null;
+  /** Where to mount the EXIT / touch-throttle overlay. */
+  parent: HTMLElement;
+  isTouch: boolean;
+  /** Leave Zen → the composition root disposes the session + returns to the menu. */
+  onExit: () => void;
+}
+
+const OVERLAY =
+  'position:fixed;inset:0;z-index:9990;pointer-events:none;font-family:system-ui,sans-serif;';
+const BTN =
+  'pointer-events:auto;font:inherit;font-weight:700;border:2px solid #00ffff;background:rgba(26,0,51,0.55);color:#00ffff;border-radius:10px;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:none;';
+
+export class ZenSession {
+  private readonly v = createZenVehicle();
+  private readonly renderer: ZenRenderer;
+  private readonly overlay: HTMLElement;
+  private readonly opts: ZenSessionOptions;
+
+  /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
+  private fwd = false;
+  private back = false;
+
+  private readonly onKey: (e: KeyboardEvent) => void;
+
+  constructor(opts: ZenSessionOptions) {
+    this.opts = opts;
+    this.renderer = new ZenRenderer(opts.renderer, opts.car);
+    this.renderer.setGlow(opts.glow);
+
+    // --- overlay: EXIT + (touch) GAS/BRAKE + a one-line hint ---
+    this.overlay = document.createElement('div');
+    this.overlay.className = 'zen-overlay';
+    this.overlay.style.cssText = OVERLAY;
+
+    const exit = document.createElement('button');
+    exit.className = 'zen-exit';
+    exit.textContent = 'EXIT';
+    exit.style.cssText = `${BTN};position:absolute;top:12px;left:12px;padding:8px 16px;`;
+    exit.addEventListener('click', () => this.opts.onExit());
+    this.overlay.appendChild(exit);
+
+    const hint = document.createElement('p');
+    hint.style.cssText =
+      'position:absolute;top:14px;left:50%;transform:translateX(-50%);margin:0;color:#e9d5ff;opacity:0.7;font-size:13px;text-align:center;';
+    hint.textContent = opts.isTouch
+      ? 'drag to steer · hold GAS to cruise'
+      : '← → / A D to steer · ↑ ↓ to accelerate · drift around';
+    this.overlay.appendChild(hint);
+
+    if (opts.isTouch) {
+      this.overlay.appendChild(this.makeHoldButton('GAS', 'right:14px', (h) => (this.fwd = h)));
+      this.overlay.appendChild(this.makeHoldButton('BRAKE', 'left:14px', (h) => (this.back = h)));
+    }
+    opts.parent.appendChild(this.overlay);
+
+    // Keyboard throttle (steering stays on the shared Controls: arrows / A-D / drag).
+    this.onKey = (e: KeyboardEvent) => {
+      const down = e.type === 'keydown';
+      if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') this.fwd = down;
+      else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') this.back = down;
+    };
+    window.addEventListener('keydown', this.onKey);
+    window.addEventListener('keyup', this.onKey);
+  }
+
+  /** Advance one frame: drive the movement model with the shared `steer` + the Zen
+   *  throttle, then render. Called by the composition root in place of the forward sim. */
+  tick(steer: number, dt: number): void {
+    const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
+    updateZen(this.v, steer, throttle, dt);
+    this.renderer.render(this.v, steer, dt);
+  }
+
+  /** Tear down: listeners, overlay, and the Zen-owned scene objects. */
+  dispose(): void {
+    window.removeEventListener('keydown', this.onKey);
+    window.removeEventListener('keyup', this.onKey);
+    this.overlay.remove();
+    this.renderer.dispose();
+  }
+
+  /** A hold-to-act touch button (GAS / BRAKE): held while pressed, released on lift. */
+  private makeHoldButton(label: string, side: string, set: (held: boolean) => void): HTMLButtonElement {
+    const b = document.createElement('button');
+    b.textContent = label;
+    b.style.cssText = `${BTN};position:absolute;bottom:24px;${side};padding:16px 22px;font-size:15px;`;
+    const press = (held: boolean) => (e: Event) => {
+      e.preventDefault();
+      set(held);
+    };
+    b.addEventListener('touchstart', press(true), { passive: false });
+    b.addEventListener('touchend', press(false));
+    b.addEventListener('touchcancel', press(false));
+    return b;
+  }
+}

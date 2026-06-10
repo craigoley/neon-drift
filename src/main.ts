@@ -209,6 +209,16 @@ function applyCosmetics(): void {
   const glowCos = cosmeticById(progress.getEquipped('glow'));
   vehicle.setGlow(glowCos ? glowCos.color : null);
 }
+
+// PROG-1 PR3a: apply the EQUIPPED cosmetics to the store's live preview car (the
+// same renderer path as in-game → WYSIWYG). Called on preview open + after an equip.
+function applyCosmeticsToPreview(): void {
+  if (!storePreview) return;
+  const trailCos = cosmeticById(progress.getEquipped('trail'));
+  storePreview.setTrail(trailCos ? trailCos.color : null);
+  const glowCos = cosmeticById(progress.getEquipped('glow'));
+  storePreview.setGlow(glowCos ? glowCos.color : null);
+}
 const shards = new CrashShards(scene.scene);
 const screenFx = new ScreenFx(app);
 const hud = new HUD(app);
@@ -234,6 +244,8 @@ const canonicalUrl = window.location.origin + window.location.pathname;
 // The car-picker 3D preview's renderer — created when the picker opens, disposed
 // when it closes (held here so the shell callbacks can manage its lifecycle).
 let carPreview: CarPreview | null = null;
+// STORE live cosmetic preview (PR3a) — a CarPreview shown inside the store screen.
+let storePreview: CarPreview | null = null;
 
 // Resolve the car to start a run in, defensively falling back to the always-free
 // starter if the persisted selection is somehow locked. Shared by the normal and
@@ -433,7 +445,26 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     },
     equip: (slot, id) => {
       progress.equip(slot as CosmeticSlot, id);
-      applyCosmetics(); // reflect the newly-equipped cosmetic on the car immediately
+      applyCosmetics(); // reflect the newly-equipped cosmetic on the in-game car
+      applyCosmeticsToPreview(); // ...and on the store preview
+    },
+    // LIVE PREVIEW (PR3a): a 3D preview of the SELECTED car with the equipped
+    // cosmetics; hovering a cosmetic previews it transiently (no commit).
+    onPreviewEnter: (container) => {
+      storePreview?.dispose();
+      storePreview = new CarPreview(container, carById(resolvePlayCarId()));
+      applyCosmeticsToPreview();
+    },
+    onPreviewExit: () => {
+      storePreview?.dispose();
+      storePreview = null;
+    },
+    previewCosmetic: (slot, id) => {
+      // id → preview that cosmetic on its slot; null → revert to the EQUIPPED item.
+      const source = id ?? progress.getEquipped(slot as CosmeticSlot);
+      const color = cosmeticById(source)?.color ?? null;
+      if (slot === 'trail') storePreview?.setTrail(color);
+      else if (slot === 'glow') storePreview?.setGlow(color);
     },
   },
   applyCar: (carId) => vehicle.applyCar(carById(carId)),

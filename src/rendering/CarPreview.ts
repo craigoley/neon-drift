@@ -11,7 +11,7 @@
  */
 
 import * as THREE from 'three';
-import { CAR_VIS, RENDER, UI, type CarDef } from '../utils/constants';
+import { CAR_VIS, JUICE, RENDER, UI, type CarDef } from '../utils/constants';
 import { CarMesh } from './CarMesh';
 
 export class CarPreview {
@@ -20,6 +20,10 @@ export class CarPreview {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly car: CarMesh;
+  /** A static glowing streak behind the car standing in for the TRAIL cosmetic (the
+   *  car doesn't move in the menu, so the trail is shown as a colour streak). */
+  private readonly trailStreak: THREE.Mesh;
+  private readonly trailMat: THREE.MeshBasicMaterial;
   // Timer (replaces the deprecated Clock). Unlike Clock, Timer must be update()'d
   // once per frame BEFORE getDelta() — an un-updated Timer returns 0. No-arg
   // update() uses performance.now() internally, exactly as Clock.getDelta() did,
@@ -47,6 +51,25 @@ export class CarPreview {
     this.car.group.rotation.x = UI.carPreviewTilt;
     this.scene.add(this.car.group);
 
+    // TRAIL streak: a flat additive plane behind the car, coloured by the trail
+    // cosmetic (default cyan = the in-game default, so it's WYSIWYG). Added to the
+    // car group so it shares the preview tilt but does NOT spin (only the chassis
+    // spins). Defaults to the in-game trail colour.
+    this.trailMat = new THREE.MeshBasicMaterial({
+      color: JUICE.trailColor,
+      transparent: true,
+      opacity: UI.storeTrailOpacity,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    const tw = CAR_VIS.width * UI.storeTrailWidthMul;
+    const tl = CAR_VIS.length * UI.storeTrailLengthMul;
+    this.trailStreak = new THREE.Mesh(new THREE.PlaneGeometry(tw, tl), this.trailMat);
+    this.trailStreak.rotation.x = -Math.PI / 2; // lie flat on the ground
+    this.trailStreak.position.z = CAR_VIS.length * UI.storeTrailOffsetMul; // behind the car
+    this.trailStreak.position.y = 0.02;
+    this.car.group.add(this.trailStreak);
+
     this.resize();
     window.addEventListener('resize', this.onResize);
     this.loop();
@@ -55,6 +78,17 @@ export class CarPreview {
   /** Show a car's cosmetic colours (body + neon glow + accent). */
   setCar(car: CarDef): void {
     this.car.applyCar(car);
+  }
+
+  /** Apply a GLOW cosmetic override to the previewed car (null = the car's own glow).
+   *  Drives the SAME CarMesh override the in-game car uses — WYSIWYG. */
+  setGlow(hex: number | null): void {
+    this.car.setGlowOverride(hex);
+  }
+
+  /** Colour the TRAIL streak (null = the in-game default cyan). */
+  setTrail(hex: number | null): void {
+    this.trailMat.color.setHex(hex ?? JUICE.trailColor);
   }
 
   private loop = (): void => {
@@ -79,6 +113,8 @@ export class CarPreview {
   dispose(): void {
     cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.onResize);
+    this.trailStreak.geometry.dispose();
+    this.trailMat.dispose();
     this.car.dispose();
     this.renderer.dispose();
     this.renderer.domElement.remove();

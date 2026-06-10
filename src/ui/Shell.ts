@@ -62,6 +62,15 @@ export interface StorePanel {
   buyCar: (id: string) => void;
   buyCosmetic: (id: string) => void;
   equip: (slot: string, id: string) => void;
+  /** LIVE PREVIEW (PR3a): mount a 3D car preview into `container` showing the
+   *  player's selected car with the currently-EQUIPPED cosmetics applied. */
+  onPreviewEnter: (container: HTMLElement) => void;
+  /** Tear the preview down (leaving the store). */
+  onPreviewExit: () => void;
+  /** Preview a cosmetic on the car WITHOUT committing it: `id` = show that cosmetic
+   *  on its slot; `null` = revert that slot to the actually-equipped item. Purely
+   *  visual; persists nothing (only buy+equip commits). */
+  previewCosmetic: (slot: string, id: string | null) => void;
 }
 
 /** Live data for the MISSIONS panel (all cosmetic; never gates the core run). */
@@ -185,6 +194,8 @@ export class Shell {
   private readonly storeBalanceEl: HTMLElement;
   private readonly storeCarsEl: HTMLElement;
   private readonly storeCosmeticsEl: HTMLElement;
+  /** STORE live cosmetic preview canvas mount (PR3a). */
+  private readonly storePreviewEl: HTMLElement;
   private readonly leaderboardListEl: HTMLElement;
   private readonly leaderboardCarsEl: HTMLElement;
   private readonly dailyTodayEl: HTMLElement;
@@ -247,6 +258,7 @@ export class Shell {
     this.storeBalanceEl = this.storeScreen.querySelector('.shell-store-balance')!;
     this.storeCarsEl = this.storeScreen.querySelector('.shell-store-cars')!;
     this.storeCosmeticsEl = this.storeScreen.querySelector('.shell-store-cosmetics')!;
+    this.storePreviewEl = this.storeScreen.querySelector('.shell-store-preview')!;
     this.crashScoreEl = this.crashScreen.querySelector('.shell-crash-score')!;
     this.crashComboEl = this.crashScreen.querySelector('.shell-crash-combo')!;
     this.crashPlacementEl = this.crashScreen.querySelector('.shell-crash-placement')!;
@@ -422,8 +434,14 @@ export class Shell {
 
     // Refresh the missions panel from live progression data when it opens.
     if (screen === 'missions' && prev !== 'missions') this.renderMissions();
-    // Refresh the store from live progression (balance / owned / equipped) on open.
-    if (screen === 'store' && prev !== 'store') this.renderStore();
+    // Refresh the store from live progression (balance / owned / equipped) on open,
+    // and spin up / tear down the live cosmetic preview (PR3a) with the screen.
+    if (screen === 'store' && prev !== 'store') {
+      this.renderStore();
+      this.opts.store?.onPreviewEnter(this.storePreviewEl);
+    } else if (prev === 'store' && screen !== 'store') {
+      this.opts.store?.onPreviewExit();
+    }
     // Refresh the leaderboard from the store each time it opens (live data).
     if (screen === 'leaderboard' && prev !== 'leaderboard') this.renderLeaderboard();
     // Refresh the daily challenge view from the store each time it opens.
@@ -777,6 +795,7 @@ export class Shell {
     s.innerHTML =
       `<h2 class="shell-subtitle">STORE</h2>` +
       `<p class="shell-store-balance"></p>` +
+      `<div class="shell-store-preview"></div>` +
       `<h3 class="shell-store-heading">CARS</h3>` +
       `<div class="shell-store-cars shell-store-list"></div>` +
       `<h3 class="shell-store-heading">COSMETICS</h3>` +
@@ -795,7 +814,24 @@ export class Shell {
       this.renderStore(); // reflect the new balance / owned / equipped state
     };
     s.querySelector('.shell-store-cars')!.addEventListener('click', onClick);
-    s.querySelector('.shell-store-cosmetics')!.addEventListener('click', onClick);
+    const cosmeticsEl = s.querySelector('.shell-store-cosmetics')!;
+    cosmeticsEl.addEventListener('click', onClick);
+    // LIVE PREVIEW (PR3a): hovering/focusing a cosmetic row previews it on the car;
+    // leaving reverts to the actually-equipped item (no commit). Pointer + keyboard.
+    const preview = (e: Event) => {
+      const row = (e.target as HTMLElement).closest('.shell-store-row[data-cos-slot]') as HTMLElement | null;
+      if (!row) return;
+      this.opts.store?.previewCosmetic(row.dataset.cosSlot ?? '', row.dataset.cosId ?? '');
+    };
+    const unpreview = (e: Event) => {
+      const row = (e.target as HTMLElement).closest('.shell-store-row[data-cos-slot]') as HTMLElement | null;
+      if (!row) return;
+      this.opts.store?.previewCosmetic(row.dataset.cosSlot ?? '', null); // back to equipped
+    };
+    cosmeticsEl.addEventListener('mouseover', preview);
+    cosmeticsEl.addEventListener('mouseout', unpreview);
+    cosmeticsEl.addEventListener('focusin', preview);
+    cosmeticsEl.addEventListener('focusout', unpreview);
     return s;
   }
 
@@ -827,7 +863,7 @@ export class Shell {
         } else {
           right = `<button class="shell-btn shell-store-equip" type="button" data-action="equip" data-slot="${c.slot}" data-id="${c.id}">EQUIP</button>`;
         }
-        return `<div class="shell-store-row">${swatch}<span class="shell-store-name">${c.name}</span>${right}</div>`;
+        return `<div class="shell-store-row" data-cos-slot="${c.slot}" data-cos-id="${c.id}" tabindex="0">${swatch}<span class="shell-store-name">${c.name}</span>${right}</div>`;
       })
       .join('');
   }

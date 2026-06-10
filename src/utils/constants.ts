@@ -1581,6 +1581,14 @@ export const UI = {
   carPreviewLookAtMul: 0.4,
   /** Fixed X-axis tilt (radians) so the rotation reads as 3D. */
   carPreviewTilt: 0.18,
+  /** STORE cosmetic preview — a static glowing TRAIL streak behind the previewed car
+   *  (the car is stationary in the menu, so the trail is shown as a colour streak).
+   *  Sizes are multiples of the car's width/length; opacity for the additive glow. */
+  storeTrailWidthMul: 0.7,
+  storeTrailLengthMul: 2.6,
+  storeTrailOpacity: 0.5,
+  /** The streak's centre offset behind the car (multiples of car length). */
+  storeTrailOffsetMul: 1.1,
 } as const;
 
 /** Touch-control tuning. */

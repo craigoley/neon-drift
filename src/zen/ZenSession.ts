@@ -24,6 +24,8 @@ export interface ZenSessionOptions {
   /** Where to mount the EXIT / touch-throttle overlay. */
   parent: HTMLElement;
   isTouch: boolean;
+  /** Persisted LOW-quality (retro FX off) setting — swaps scenery to plain pillars. */
+  lowFx: boolean;
   /** Leave Zen → the composition root disposes the session + returns to the menu. */
   onExit: () => void;
 }
@@ -49,6 +51,7 @@ export class ZenSession {
     this.opts = opts;
     this.renderer = new ZenRenderer(opts.renderer, opts.car);
     this.renderer.setGlow(opts.glow);
+    this.renderer.setQuality(!opts.lowFx); // honour the persisted quality setting
 
     // --- overlay: EXIT + (touch) GAS/BRAKE + a one-line hint ---
     this.overlay = document.createElement('div');

@@ -427,6 +427,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
         glow,
         parent: app,
         isTouch,
+        lowFx: settings.get('lowFx'),
         onExit: () => {
           zen?.dispose();
           zen = null;

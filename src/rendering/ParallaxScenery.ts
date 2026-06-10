@@ -70,8 +70,11 @@ function geometryFrom(pos: number[], col: number[]): THREE.BufferGeometry {
   return geo;
 }
 
-/** Today's plain box pillar (LOW fallback) — anchored base at y = 0, muted body. */
-function plainGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeometry {
+/** Today's plain box pillar (LOW fallback) — anchored base at y = 0, muted body.
+ *  EXPORTED so Zen free-roam (src/zen) can REUSE the same prop meshes for its 2D
+ *  chunk-streamed world without re-deriving the art (proves the pipeline before new
+ *  art). Zen builds its own instanced meshes from these + fancyGeometry. */
+export function plainGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeometry {
   const pos: number[] = [];
   const col: number[] = [];
   pushBox(pos, col, 0, layer.height / 2, 0, layer.width / 2, layer.height / 2, layer.width / 2, body);
@@ -134,8 +137,9 @@ function blockGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeom
   return geometryFrom(pos, col);
 }
 
-/** Build the HIGH 'fancy' geometry for a layer kind. */
-function fancyGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeometry {
+/** Build the HIGH 'fancy' geometry for a layer kind. EXPORTED for Zen reuse (see
+ *  plainGeometry) — same palm/pole/block silhouettes, independent of the 1D streaming. */
+export function fancyGeometry(layer: SceneryLayer, body: THREE.Color): THREE.BufferGeometry {
   switch (layer.kind) {
     case 'pylon':
       return palmGeometry(layer, body);

@@ -1824,6 +1824,25 @@ export const ZEN = {
   gridCenterColor: 0x16364a,
   /** Ground / grid y. */
   groundY: 0,
+  // --- world streaming (PR2): chunk-streamed scenery on the flat plane ---
+  /** Fixed seed for the world's POSITION-DETERMINISTIC prop placement. Zen is
+   *  single-player free-roam (no replay/lockstep), so a constant seed gives a stable
+   *  world every session — placement is keyed to world (x,z), never to the path taken. */
+  worldSeed: 0x5a2e17,
+  /** Side length (world units) of a streaming chunk square. chunk = floor(coord/size). */
+  chunkSize: 80,
+  /** Chebyshev radius (in chunks) of the active set around the car's chunk. The active
+   *  set is a (2R+1)² square — this bounds BOTH draw distance and the prop budget. */
+  chunkRadius: 4,
+  /** Max props placed per chunk (the per-chunk count varies via the hash for open
+   *  cruising space; it never exceeds this, so the instance pool is sized from it). */
+  propsPerChunk: 4,
+  /** Gentle per-prop scale variety (multiplier on the reused scenery mesh). */
+  propScaleMin: 0.8,
+  propScaleMax: 1.5,
+  /** Exponential fog density. Tuned so props fade IN from the haze near the cull radius
+   *  (chunkRadius × chunkSize) — hides chunk load/cull pop, and is on-aesthetic. */
+  fogDensity: 0.006,
 } as const;
 
 

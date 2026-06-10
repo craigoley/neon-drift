@@ -28,7 +28,7 @@ export class ZenRenderer {
     this.renderer = renderer;
     this.scene.background = new THREE.Color(PALETTE.deepPurple);
 
-    this.camera = new THREE.PerspectiveCamera(60, 1, 0.1, 4000);
+    this.camera = new THREE.PerspectiveCamera(ZEN.camFov, 1, ZEN.camNear, ZEN.camFar);
     this.camera.position.set(0, ZEN.camHeight, ZEN.camDistance);
 
     // Streaming neon grid = the "endless plane". Recentred on the car (snapped to a

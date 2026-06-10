@@ -1793,6 +1793,12 @@ export const ZEN = {
   camPosLerp: 4.5,
   /** Gentle visual bank (radians) the chassis leans into a full-steer turn. */
   leanMax: 0.18,
+  /** Camera field-of-view (degrees). */
+  camFov: 60,
+  /** Camera near clipping plane. */
+  camNear: 0.1,
+  /** Camera far clipping plane (draw distance for the grid). */
+  camFar: 4000,
   // --- the empty plane (PR1 placeholder world: a streaming neon grid) ---
   /** Ground grid total size (world units) + divisions. The grid recentres on the car
    *  (snapped to a cell) so the plane reads as endless in every direction. */

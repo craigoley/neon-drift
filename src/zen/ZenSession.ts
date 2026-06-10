@@ -9,14 +9,14 @@
  * while a session is alive (see main.ts). Nothing here imports src/game/.
  */
 
-import * as THREE from 'three';
+import type { WebGLRenderer } from 'three';
 import type { CarDef } from '../utils/constants';
 import { createZenVehicle, updateZen } from './ZenVehicle';
 import { ZenRenderer } from './ZenRenderer';
 
 export interface ZenSessionOptions {
   /** The game's shared WebGLRenderer (Zen draws with it; never disposes it). */
-  renderer: THREE.WebGLRenderer;
+  renderer: WebGLRenderer;
   /** The player's selected car (driven in Zen, cosmetics and all). */
   car: CarDef;
   /** Equipped GLOW cosmetic colour (or null) — purely visual. */

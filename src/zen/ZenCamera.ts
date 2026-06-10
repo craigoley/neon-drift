@@ -28,10 +28,12 @@ export interface ZenFraming {
  * back by exactly `camDistanceSpeedGain` and widened by `camFovSpeedGain` — the whole
  * swing. Set `camDistanceSpeedGain` to 0 for a fully steady camera.
  */
+// Reused scratch object — avoids allocating a new object every frame.
+const _scratch: ZenFraming = { distance: 0, fov: 0 };
+
 export function zenFraming(speedFactor: number): ZenFraming {
   const s = clamp(speedFactor, 0, 1);
-  return {
-    distance: ZEN.camDistance + ZEN.camDistanceSpeedGain * s,
-    fov: ZEN.camFov + ZEN.camFovSpeedGain * s,
-  };
+  _scratch.distance = ZEN.camDistance + ZEN.camDistanceSpeedGain * s;
+  _scratch.fov = ZEN.camFov + ZEN.camFovSpeedGain * s;
+  return _scratch;
 }

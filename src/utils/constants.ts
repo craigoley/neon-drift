@@ -1863,9 +1863,10 @@ export const ZEN = {
   /** Per-second ease of the car's Y toward the surface — tight enough to hug the ground,
    *  smooth enough that tiny gradient changes don't jitter the car/camera. */
   terrainFollowLerp: 12,
-  /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills,
-   *  more vertices. The windowed line-grid is rebuilt only on chunk crossings. */
-  terrainSegmentsPerChunk: 6,
+  /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills
+   *  AND peaks (raised from 6 for PR4 mountains to read without spiking), more vertices.
+   *  The windowed line-grid is rebuilt only on chunk crossings. */
+  terrainSegmentsPerChunk: 8,
   /** Opacity of the neon terrain wireframe. RAISED (was 0.42 — that read as an invisible
    *  void on near-black) so the glowing grid floor + its rolling relief clearly read. */
   terrainOpacity: 0.85,
@@ -1881,6 +1882,31 @@ export const ZEN = {
   terrainTiltFactor: 1,
   /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
   terrainTiltMax: 0.28,
+  // --- mountains (PR4): a LOW-FREQUENCY mask decides WHERE the gentle hills rise into
+  //     mountains (occasional clumps, not everywhere); there a PEAKY ridged octave scales
+  //     the height up. Gentle hills stay everywhere the mask is low; the transition is a
+  //     smooth lead-up. Continuous + world-keyed → still seams across chunks. ---
+  /** Mask spatial frequency (1 / wavelength). LOW → big regions (~625-unit wavelength), so
+   *  mountains come in landscape-scale clumps, not speckled everywhere. Craig's "how often
+   *  do mountains appear" knob (lower = rarer/bigger ranges). */
+  maskFrequency: 0.0016,
+  /** Mask value (0..1) above which the ground becomes mountainous. Higher = mountains are
+   *  RARER (a smaller fraction of the world); the majority stays gentle hills. */
+  maskThreshold: 0.6,
+  /** Mask ramp width above the threshold: the mountain factor eases 0→1 across this band,
+   *  so hills LEAD UP to mountains gradually (no cliff at the boundary). */
+  maskBlend: 0.2,
+  /** Peak height scale (world units) added at full mask × full ridge. The "grandeur" knob
+   *  — bigger = taller, more dramatic peaks (vs the ±~5 gentle hills). */
+  mountainAmplitude: 32,
+  /** Ridge (peaky) octave frequency (1 / wavelength). ~0.01 → ~100-unit peaks (several
+   *  mesh segments wide, so they read smooth, not aliased spikes). */
+  mountainFrequency: 0.01,
+  /** Ridged octave count + falloff/growth — a couple of inverted-abs (ridged) octaves give
+   *  sharp ridgelines that read as MOUNTAINS, not big lumps. */
+  mountainOctaves: 2,
+  mountainGain: 0.5,
+  mountainLacunarity: 2.2,
   // --- obstacle collision: props are SOLID — DEFLECT/SLIDE (replaces the #113 pass-through
   //     slowdown). The car can't enter a prop's circle; it's pushed to the edge along the
   //     normal and slides around (tangential motion preserved). No hard stop, no death. ---

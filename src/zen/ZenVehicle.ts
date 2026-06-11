@@ -56,13 +56,15 @@ export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: nu
   v.speed += (t >= 0 ? t * ZEN.accel : t * ZEN.brakeAccel) * dt;
 
   // GENTLE slope nudge: uphill (slope > 0) bleeds a little speed, downhill adds a little —
-  // a calm "I'm on a hill" cue. BOUNDED: the slope ALONE can never drag you below the
-  // uphill floor, so climbing is a nudge, never a grind/stall (the throttle still rules).
+  // a calm "I'm on a hill" cue. BOUNDED: uphill, the slope can never drag you below the
+  // floor (or below your current speed if already under it). So even a STEEP MOUNTAIN climb
+  // (PR4) never stalls — at extreme slopes the throttle alone can't overcome the bleed, so
+  // this clamp is what keeps a peak a calm drive-up rather than an impassable wall.
   const slopeAccel = -ZEN.slopeStrength * slope;
   const preSlope = v.speed;
   v.speed += slopeAccel * dt;
-  if (slopeAccel < 0 && preSlope > ZEN.slopeUphillFloor) {
-    v.speed = Math.max(v.speed, ZEN.slopeUphillFloor);
+  if (slopeAccel < 0) {
+    v.speed = Math.max(v.speed, Math.min(preSlope, ZEN.slopeUphillFloor));
   }
 
   // Coast-friction bleeds speed toward rest, then clamp to the calm cap.

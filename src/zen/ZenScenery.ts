@@ -19,6 +19,7 @@ import * as THREE from 'three';
 import { SCENERY, ZEN } from '../utils/constants';
 import { fancyGeometry, plainGeometry } from '../rendering/ParallaxScenery';
 import { ZenChunkField, maxActiveChunks } from './ZenWorld';
+import { heightAt } from './ZenHeight';
 
 export class ZenScenery {
   private readonly field: ZenChunkField;
@@ -89,7 +90,8 @@ export class ZenScenery {
     this.field.forEachProp((p) => {
       const n = this.counts[p.kind];
       if (n >= this.capacity) return; // guard — sizing guarantees this won't trip
-      this.dummy.position.set(p.x, ZEN.groundY, p.z);
+      // Sit each prop ON the terrain surface (PR3a) so it rests on the hills, not floats.
+      this.dummy.position.set(p.x, heightAt(ZEN.worldSeed, p.x, p.z), p.z);
       this.dummy.rotation.set(0, p.rotationY, 0);
       this.dummy.scale.setScalar(p.scale);
       this.dummy.updateMatrix();

@@ -1815,15 +1815,9 @@ export const ZEN = {
   camNear: 0.1,
   /** Camera far clipping plane (draw distance for the grid). */
   camFar: 4000,
-  // --- the empty plane (PR1 placeholder world: a streaming neon grid) ---
-  /** Ground grid total size (world units) + divisions. The grid recentres on the car
-   *  (snapped to a cell) so the plane reads as endless in every direction. */
-  gridSize: 600,
-  gridDivisions: 60,
+  /** Colour of the synthwave wireframe — the neon grid, now draped over the terrain
+   *  (PR3a replaced the flat plane with the heightmap surface). */
   gridColor: 0x16364a,
-  gridCenterColor: 0x16364a,
-  /** Ground / grid y. */
-  groundY: 0,
   // --- world streaming (PR2): chunk-streamed scenery on the flat plane ---
   /** Fixed seed for the world's POSITION-DETERMINISTIC prop placement. Zen is
    *  single-player free-roam (no replay/lockstep), so a constant seed gives a stable
@@ -1843,6 +1837,45 @@ export const ZEN = {
   /** Exponential fog density. Tuned so props fade IN from the haze near the cull radius
    *  (chunkRadius × chunkSize) — hides chunk load/cull pop, and is on-aesthetic. */
   fogDensity: 0.006,
+  // --- terrain (PR3a): rolling hills the car flows OVER (heightAt is a continuous,
+  //     world-keyed function so chunk meshes seam perfectly; props + car ride on it) ---
+  /** Peak height of the FIRST noise octave (world units). Modest = ROLLING hills, not
+   *  jagged peaks (grand mountains can come later). Total relief ≈ amplitude × (1+gain). */
+  terrainAmplitude: 3.5,
+  /** Spatial frequency of the first octave (1 / wavelength). Lower = broader, gentler
+   *  hills. ~0.0075 → ~130-unit wavelength (gentle swells ~1.5 chunks wide). */
+  terrainFrequency: 0.0075,
+  /** Octave count — CHEAP: a couple is plenty for rolling hills (cost scales with this,
+   *  the phone-perf killer). */
+  terrainOctaves: 2,
+  /** Per-octave amplitude falloff (each octave is quieter). */
+  terrainGain: 0.5,
+  /** Per-octave frequency growth (each octave is finer). */
+  terrainLacunarity: 2.0,
+  /** Half-step (world units) for the finite-difference slope sample along the heading. */
+  terrainSlopeEps: 1.5,
+  /** Extra height the car's base sits above the surface (0 = wheels on the ground). */
+  rideHeight: 0,
+  /** Per-second ease of the car's Y toward the surface — tight enough to hug the ground,
+   *  smooth enough that tiny gradient changes don't jitter the car/camera. */
+  terrainFollowLerp: 12,
+  /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills,
+   *  more vertices. The windowed line-grid is rebuilt only on chunk crossings. */
+  terrainSegmentsPerChunk: 6,
+  /** Opacity of the neon terrain wireframe (the synthwave grid draped over the hills). */
+  terrainOpacity: 0.42,
+  /** GENTLE slope effect: along-heading slope (rise/run) × this = the speed nudge accel
+   *  (units/s²). Uphill bleeds a little, downhill adds a little. SUBTLE by default (well
+   *  under the throttle accel) — set near 0 for a flat-feel, or up for more; THE knob
+   *  Craig dials on his phone. */
+  slopeStrength: 20,
+  /** Floor (units/s) the slope ALONE can never drag you below — climbing is a nudge,
+   *  never a grind/stall (you can still slow by lifting the throttle). ≈0.4 × maxSpeed. */
+  slopeUphillFloor: 28,
+  /** Visual-only car PITCH into the slope (0 = disable). Reads as ON the hill. */
+  terrainTiltFactor: 1,
+  /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
+  terrainTiltMax: 0.28,
 } as const;
 
 

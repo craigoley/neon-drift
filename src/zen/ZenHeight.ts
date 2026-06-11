@@ -11,7 +11,7 @@
  */
 
 import { hashNoise } from '../utils/rng';
-import { lerp } from '../utils/math';
+import { clamp, lerp } from '../utils/math';
 import { ZEN } from '../utils/constants';
 
 /** Value at an integer lattice point in [-1, 1] — a pure positional hash (2D key). */
@@ -38,12 +38,15 @@ function valueNoise(seed: number, x: number, z: number): number {
   return lerp(lerp(n00, n10, fx), lerp(n01, n11, fx), fz);
 }
 
-/**
- * Continuous terrain height at world (x, z). A few octaves of interpolated value noise,
- * keyed to world coords → seamless across chunks and deterministic per seed. Modest
- * amplitude = gentle ROLLING hills.
- */
-export function heightAt(seed: number, x: number, z: number): number {
+/** smoothstep(a, b, t): 0 below a, 1 above b, a C1 ease-in between (clamped). */
+function smoothstep(a: number, b: number, t: number): number {
+  if (a === b) return t < a ? 0 : 1;
+  const u = clamp((t - a) / (b - a), 0, 1);
+  return u * u * (3 - 2 * u);
+}
+
+/** The gentle rolling-hills baseline (the original heightAt) — kept EVERYWHERE. */
+function hillsAt(seed: number, x: number, z: number): number {
   let h = 0;
   let amp = ZEN.terrainAmplitude;
   let freq = ZEN.terrainFrequency;
@@ -54,6 +57,50 @@ export function heightAt(seed: number, x: number, z: number): number {
     freq *= ZEN.terrainLacunarity;
   }
   return h;
+}
+
+/**
+ * MOUNTAIN MASK in [0, 1] (PR4): a single LOW-frequency value-noise octave → big regions.
+ * 0 below the threshold (gentle hills); ramps smoothly 0→1 across the blend band above it
+ * (so hills LEAD UP to mountains, no cliff); 1 in the heart of a mountain region.
+ */
+export function maskAt(seed: number, x: number, z: number): number {
+  const n = valueNoise(seed + 4242, x * ZEN.maskFrequency, z * ZEN.maskFrequency); // [-1,1]
+  const m01 = (n + 1) * 0.5; // [0,1]
+  return smoothstep(ZEN.maskThreshold, ZEN.maskThreshold + ZEN.maskBlend, m01);
+}
+
+/** RIDGED peaky height in ~[0, 1]: a couple octaves of inverted-abs noise (1 − |n|) →
+ *  sharp ridgelines at the noise's zero-crossings, so it reads as MOUNTAINS, not lumps. */
+function ridgedAt(seed: number, x: number, z: number): number {
+  let sum = 0;
+  let norm = 0;
+  let amp = 1;
+  let freq = ZEN.mountainFrequency;
+  for (let o = 0; o < ZEN.mountainOctaves; o++) {
+    const r = 1 - Math.abs(valueNoise(seed + 7000 + o * 1013, x * freq, z * freq));
+    sum += amp * r;
+    norm += amp;
+    amp *= ZEN.mountainGain;
+    freq *= ZEN.mountainLacunarity;
+  }
+  return sum / norm;
+}
+
+/**
+ * Continuous terrain height at world (x, z) — keyed to world coords → seamless across
+ * chunks and deterministic per seed.
+ *   height = gentle_hills + mask_ramp × mountain_amplitude × ridged_peaks
+ * Gentle ROLLING hills everywhere; OCCASIONAL mountains rise where the low-frequency mask
+ * is high, leading up smoothly. The hills baseline is untouched where the mask is low —
+ * which is the majority of the world (Craig keeps the gradual hills he loves).
+ */
+export function heightAt(seed: number, x: number, z: number): number {
+  const hills = hillsAt(seed, x, z);
+  const mask = maskAt(seed, x, z);
+  // Majority of the world: pure gentle hills — and we skip the ridged octaves (cheap).
+  if (mask <= 0) return hills;
+  return hills + mask * ZEN.mountainAmplitude * ridgedAt(seed, x, z);
 }
 
 /**

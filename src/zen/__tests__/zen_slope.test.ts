@@ -41,6 +41,17 @@ describe('Zen slope — gentle, signed, bounded (no grind)', () => {
     expect(climbed).toBeGreaterThanOrEqual(ZEN.slopeUphillFloor);
   });
 
+  it('a STEEP MOUNTAIN climb is still drivable — the floor holds at extreme slopes', () => {
+    // PR4 mountains make ridged peaks far steeper than the gentle hills (slope ≫ 0.5).
+    // Climbing one at full throttle must still never stall: the uphill floor bounds it,
+    // so a peak is a calm drive-up, not an impassable wall.
+    for (const steep of [1.5, 3, 6]) {
+      // Floored ~uphill floor (coast-friction shaves a hair below it) — a STABLE crawl,
+      // never a stall, at any steepness.
+      expect(cruise(1, steep, 1800)).toBeGreaterThan(ZEN.slopeUphillFloor * 0.95);
+    }
+  });
+
   it('downhill speed still respects the calm cap (never runs away)', () => {
     const flown = cruise(1, -0.5, 1200);
     expect(flown).toBeLessThanOrEqual(ZEN.maxSpeed + 1e-9);

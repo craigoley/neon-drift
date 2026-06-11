@@ -5,10 +5,21 @@
  * derivative is well-formed. (The bounded slope EFFECT is tested in zen_vehicle.)
  */
 import { describe, expect, it } from 'vitest';
-import { heightAt, slopeAlong } from '../ZenHeight';
+import { heightAt, maskAt, slopeAlong } from '../ZenHeight';
 import { ZEN } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
+
+/** The gentle hills-only relief bound (summed hill-octave amplitudes). */
+function hillBound(): number {
+  let bound = 0;
+  let amp = ZEN.terrainAmplitude;
+  for (let o = 0; o < ZEN.terrainOctaves; o++) {
+    bound += amp;
+    amp *= ZEN.terrainGain;
+  }
+  return bound;
+}
 
 describe('Zen terrain — heightAt is continuous and seamless', () => {
   it('is deterministic per seed (same coords → same height)', () => {
@@ -42,22 +53,60 @@ describe('Zen terrain — heightAt is continuous and seamless', () => {
     }
   });
 
-  it('stays within the expected gentle amplitude band (rolling, not jagged)', () => {
-    let maxAbs = 0;
-    for (let i = 0; i < 4000; i++) {
-      const x = (i * 37) % 2000 - 1000;
-      const z = (i * 53) % 2000 - 1000;
-      maxAbs = Math.max(maxAbs, Math.abs(heightAt(SEED, x, z)));
+  it('is CONTINUOUS in MOUNTAIN regions too (the mask + ridges add no cracks)', () => {
+    // Find a mountainous point, then sample either side of it: still no jump (every
+    // component — hills, mask, ridged abs-noise — is continuous, so heightAt seams).
+    for (let i = 0; i < 5000; i++) {
+      const x = (i * 71) % 4000 - 2000;
+      const z = (i * 97) % 4000 - 2000;
+      if (maskAt(SEED, x, z) > 0.5) {
+        const lo = heightAt(SEED, x - 1e-4, z);
+        const hi = heightAt(SEED, x + 1e-4, z);
+        expect(Math.abs(hi - lo)).toBeLessThan(1e-1); // continuous even on a steep peak
+        return;
+      }
     }
-    // Total relief is bounded by the summed octave amplitudes.
-    let bound = 0;
-    let amp = ZEN.terrainAmplitude;
-    for (let o = 0; o < ZEN.terrainOctaves; o++) {
-      bound += amp;
-      amp *= ZEN.terrainGain;
+    throw new Error('no mountain region found to test');
+  });
+});
+
+describe('Zen terrain — mountains rise occasionally, hills stay everywhere', () => {
+  it('PRESERVES the gentle hills where the mask is low (the majority of the world)', () => {
+    const bound = hillBound();
+    let gentleSamples = 0;
+    let total = 0;
+    for (let i = 0; i < 6000; i++) {
+      const x = (i * 37) % 4000 - 2000;
+      const z = (i * 53) % 4000 - 2000;
+      total++;
+      if (maskAt(SEED, x, z) <= 0) {
+        gentleSamples++;
+        // Where the mask is off, height is EXACTLY the gentle hills — within the old band.
+        expect(Math.abs(heightAt(SEED, x, z))).toBeLessThanOrEqual(bound + 1e-6);
+      }
     }
-    expect(maxAbs).toBeLessThanOrEqual(bound + 1e-6);
-    expect(maxAbs).toBeGreaterThan(0); // there ARE hills
+    // Mountains are OCCASIONAL: the gentle-hills majority dominates the world.
+    expect(gentleSamples / total).toBeGreaterThan(0.5);
+  });
+
+  it('RAISES tall mountains where the mask is high (variety, not uniform hills)', () => {
+    const bound = hillBound();
+    let maxH = -Infinity;
+    let mountainSamples = 0;
+    for (let i = 0; i < 6000; i++) {
+      const x = (i * 37) % 4000 - 2000;
+      const z = (i * 53) % 4000 - 2000;
+      const h = heightAt(SEED, x, z);
+      if (maskAt(SEED, x, z) > 0) mountainSamples++;
+      maxH = Math.max(maxH, h);
+    }
+    expect(mountainSamples).toBeGreaterThan(0); // mountain regions exist
+    expect(maxH).toBeGreaterThan(bound * 3); // and they're TALL — clearly mountains, not bumps
+  });
+
+  it('is deterministic per seed in mountain regions too', () => {
+    expect(heightAt(SEED, 1234, -567)).toBe(heightAt(SEED, 1234, -567));
+    expect(maskAt(SEED, 1234, -567)).toBe(maskAt(SEED, 1234, -567));
   });
 });
 
@@ -71,11 +120,15 @@ describe('Zen terrain — slopeAlong derivative', () => {
     expect(down).toBeCloseTo(-up, 6); // reversing the direction negates rise/run
   });
 
-  it('is finite and modest for the gentle terrain (no cliffs)', () => {
-    for (let i = 0; i < 500; i++) {
-      const s = slopeAlong(SEED, i * 11, i * -7, Math.sin(i), -Math.cos(i));
-      expect(Number.isFinite(s)).toBe(true);
-      expect(Math.abs(s)).toBeLessThan(1); // < 45° everywhere — rolling, not jagged
+  it('is FINITE everywhere (incl. steep mountains) and gentle where the mask is low', () => {
+    for (let i = 0; i < 2000; i++) {
+      const x = i * 11;
+      const z = i * -7;
+      const s = slopeAlong(SEED, x, z, Math.sin(i), -Math.cos(i));
+      expect(Number.isFinite(s)).toBe(true); // never NaN, even on a ridge
+      if (maskAt(SEED, x, z) <= 0) {
+        expect(Math.abs(s)).toBeLessThan(1); // gentle hills stay rolling (< 45°)
+      }
     }
   });
 });

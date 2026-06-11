@@ -85,21 +85,27 @@ export function propSolidRadius(prop: ZenProp): number {
   return (SCENERY.layers[prop.kind].width / 2) * prop.scale + ZEN.deflectCarRadius;
 }
 
+// Scratch objects reused every frame so deflectPoint + resolve never allocate in the hot loop.
+const _deflect: { x: number; z: number } = { x: 0, z: 0 };
+const _resolve: { x: number; z: number } = { x: 0, z: 0 };
+
 /**
  * DEFLECT a point out of one solid circle (centre px,pz, radius r): if (x,z) is inside,
  * push it to the circle's EDGE along the outward normal; otherwise leave it. The point's
  * ANGLE around the centre is preserved, so a moving car slides ALONG the surface (the
  * into-prop component is removed, the tangential component continues) — no hard stop.
- * Pure; returns the corrected (x, z).
+ * Returns the shared scratch `_deflect` — read immediately, not retained.
  */
 export function deflectPoint(x: number, z: number, px: number, pz: number, r: number): { x: number; z: number } {
   const dx = x - px;
   const dz = z - pz;
   const d2 = dx * dx + dz * dz;
-  if (d2 >= r * r) return { x, z }; // outside the circle — unchanged
-  if (d2 < 1e-12) return { x: px + r, z: pz }; // dead centre — push out in a fixed dir
-  const s = r / Math.sqrt(d2); // scale the offset out to the edge
-  return { x: px + dx * s, z: pz + dz * s };
+  if (d2 >= r * r) { _deflect.x = x; _deflect.z = z; return _deflect; }
+  if (d2 < 1e-12) { _deflect.x = px + r; _deflect.z = pz; return _deflect; }
+  const s = r / Math.sqrt(d2);
+  _deflect.x = px + dx * s;
+  _deflect.z = pz + dz * s;
+  return _deflect;
 }
 
 interface LoadedChunk {
@@ -202,6 +208,8 @@ export class ZenChunkField {
         }
       }
     }
-    return { x: rx, z: rz };
+    _resolve.x = rx;
+    _resolve.z = rz;
+    return _resolve;
   }
 }

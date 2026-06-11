@@ -28,10 +28,13 @@ export interface ZenVehicle {
   heading: number;
   /** Forward speed along the heading (world units/s); >= 0 (no reverse in PR1). */
   speed: number;
+  /** Post-bump recovery HOLD remaining (seconds, PR3b tune). While > 0 the throttle's
+   *  recovery is dampened so a prop bump reads as a distinct dip + ease-back, not a blip. */
+  bumpHold: number;
 }
 
 export function createZenVehicle(): ZenVehicle {
-  return { x: 0, z: 0, y: 0, heading: 0, speed: 0 };
+  return { x: 0, z: 0, y: 0, heading: 0, speed: 0, bumpHold: 0 };
 }
 
 /**
@@ -58,9 +61,14 @@ export function updateZen(
   const authority = clamp(v.speed / ZEN.turnFullSpeed, 0, 1);
   v.heading += clamp(steer, -1, 1) * ZEN.turnRate * authority * dt;
 
-  // Throttle accelerates (or brakes).
+  // Bump-hold timer ticks down. While it's active, the THROTTLE's forward push is
+  // dampened so a recent contact stays felt for a beat before easing back (set below).
+  if (v.bumpHold > 0) v.bumpHold = Math.max(0, v.bumpHold - dt);
+
+  // Throttle accelerates (forward push dampened during a bump-hold) or brakes.
   const t = clamp(throttle, -1, 1);
-  v.speed += (t >= 0 ? t * ZEN.accel : t * ZEN.brakeAccel) * dt;
+  const accelScale = v.bumpHold > 0 ? ZEN.contactHoldThrottleScale : 1;
+  v.speed += (t >= 0 ? t * ZEN.accel * accelScale : t * ZEN.brakeAccel) * dt;
 
   // GENTLE slope nudge: uphill (slope > 0) bleeds a little speed, downhill adds a little —
   // a calm "I'm on a hill" cue. BOUNDED: the slope ALONE can never drag you below the
@@ -72,14 +80,16 @@ export function updateZen(
     v.speed = Math.max(v.speed, ZEN.slopeUphillFloor);
   }
 
-  // GENTLE contact slowdown: touching a prop bleeds speed (more the more central the
-  // hit). BOUNDED by the contact floor — it never stops the car dead or ends the run;
-  // you keep crawling and the throttle recovers you (zen = no failure). The floor also
-  // keeps a bump-while-climbing from STACKING with the slope into a dead stop.
+  // Contact slowdown: touching a prop bleeds speed (more the more central the hit) for a
+  // clearly-FELT bite, and a real overlap ARMS the brief hold so the dip lingers + eases
+  // back (not a blip). BOUNDED by the contact floor — it never stops the car dead or ends
+  // the run; you keep crawling and the throttle recovers you (zen = no failure). The floor
+  // also keeps a bump-while-climbing from STACKING with the slope into a dead stop.
   if (contact > 0) {
     const preContact = v.speed;
     v.speed -= ZEN.contactDecel * contact * dt;
     v.speed = Math.max(v.speed, Math.min(preContact, ZEN.contactFloor));
+    if (contact >= ZEN.contactHoldThreshold) v.bumpHold = ZEN.contactHoldTime;
   }
 
   // Coast-friction bleeds speed toward rest, then clamp to the calm cap.

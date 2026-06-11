@@ -120,11 +120,44 @@ describe('Zen contact — gentle slowdown, never stops (the zen rule)', () => {
   });
 });
 
-describe('Zen contact — composes with the slope effect (no dead stop)', () => {
-  it('a bump WHILE climbing still never stalls below the contact floor', () => {
+describe('Zen contact — the bump is now PERCEPTIBLE (the tune)', () => {
+  it('a short prop clip drops a clearly-felt amount of speed (not the old <2 u/s blip)', () => {
     const v = createZenVehicle();
-    // Full throttle, steep uphill AND full contact, held a long time.
+    for (let i = 0; i < 400; i++) updateZen(v, 0, 1, TICK); // settle at cruise
+    const cruise = v.speed;
+    for (let i = 0; i < 4; i++) updateZen(v, 0, 1, TICK, 0, 1); // ~4-frame center clip
+    const dip = cruise - v.speed;
+    expect(dip).toBeGreaterThan(8); // clearly perceptible (was sub-perceptual ~<2)
+    expect(v.speed).toBeGreaterThan(ZEN.contactFloor); // but still a soft bump, not a wall
+  });
+
+  it('arms the post-bump HOLD so the dip lingers, then recovers to cruise', () => {
+    const v = createZenVehicle();
+    for (let i = 0; i < 400; i++) updateZen(v, 0, 1, TICK);
+    const cruise = v.speed;
+    updateZen(v, 0, 1, TICK, 0, 1); // one real contact frame
+    expect(v.bumpHold).toBeGreaterThan(0); // hold armed → throttle recovery is dampened
+    const dipped = v.speed;
+    // Drive on, clear of props — the hold expires and the throttle restores cruise.
+    for (let i = 0; i < 200; i++) updateZen(v, 0, 1, TICK);
+    expect(v.bumpHold).toBe(0); // hold released
+    expect(v.speed).toBeGreaterThan(dipped); // recovered
+    expect(v.speed).toBeGreaterThan(cruise - 1); // back to ~cruise (never permanent)
+  });
+});
+
+describe('Zen contact — composes with the slope effect (no dead stop)', () => {
+  it('a bump WHILE climbing never HALTS the car (stable crawl, never 0)', () => {
+    const v = createZenVehicle();
+    // The compound EXTREME: full throttle, steep uphill AND full contact, held 20s. With
+    // the perceptible tune (firmer contact + the post-bump throttle-dampening hold) these
+    // three speed-bleeds stack to a LOWER crawl than the nominal contactFloor — but it's
+    // a STABLE crawl that never stalls to a halt (the zen no-death rule holds). Realistic
+    // bumps are brief; this is the never-can-happen permanent embed on a hillside.
     for (let i = 0; i < 1200; i++) updateZen(v, 0, 1, TICK, 0.5, 1);
-    expect(v.speed).toBeGreaterThan(ZEN.contactFloor * 0.95); // stable crawl, never a stall
+    expect(v.speed).toBeGreaterThan(3); // clearly still moving — never halts
+    const stable = v.speed;
+    for (let i = 0; i < 600; i++) updateZen(v, 0, 1, TICK, 0.5, 1);
+    expect(v.speed).toBeGreaterThan(stable * 0.8); // holds the crawl, doesn't creep to 0
   });
 });

@@ -14,7 +14,7 @@
  */
 
 import { hashNoise } from '../utils/rng';
-import { ZEN } from '../utils/constants';
+import { SCENERY, ZEN } from '../utils/constants';
 
 /** A placed scenery prop in WORLD space (visual only this PR — no collision until PR3). */
 export interface ZenProp {
@@ -78,6 +78,21 @@ export function chunkProps(seed: number, cx: number, cz: number, kinds: number):
 export function maxActiveChunks(radius: number): number {
   const side = 2 * radius + 1;
   return side * side;
+}
+
+/**
+ * Contact intensity (PR3b) of one prop at world (x, z): 1 dead-centre, fading to 0 at
+ * the edge of (prop footprint + car radius), 0 beyond. Graded so the slowdown is gentle
+ * (a soft nudge that bites more the more central the hit), not a hard on/off wall. Pure.
+ */
+export function propContactIntensity(prop: ZenProp, x: number, z: number): number {
+  const propRadius = (SCENERY.layers[prop.kind].width / 2) * prop.scale;
+  const reach = propRadius + ZEN.contactCarRadius;
+  const dx = x - prop.x;
+  const dz = z - prop.z;
+  const dist = Math.sqrt(dx * dx + dz * dz);
+  if (dist >= reach) return 0;
+  return 1 - dist / reach;
 }
 
 interface LoadedChunk {
@@ -154,5 +169,28 @@ export class ZenChunkField {
     for (const c of this.loaded.values()) {
       for (const p of c.props) fn(p);
     }
+  }
+
+  /**
+   * Strongest prop contact intensity (0..1) at world (x, z) — for the PR3b gentle
+   * slowdown. CHEAP + bounded: a prop can only be in contact range (≪ chunkSize) if it
+   * lives in the car's chunk or an immediate neighbour, so we scan just the 3×3 chunks
+   * around (x, z), never the whole world. Returns 0 when clear.
+   */
+  contactAt(x: number, z: number): number {
+    const ccx = worldToChunk(x, ZEN.chunkSize);
+    const ccz = worldToChunk(z, ZEN.chunkSize);
+    let max = 0;
+    for (let dz = -1; dz <= 1; dz++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        const c = this.loaded.get(`${ccx + dx},${ccz + dz}`);
+        if (!c) continue;
+        for (const p of c.props) {
+          const i = propContactIntensity(p, x, z);
+          if (i > max) max = i;
+        }
+      }
+    }
+    return max;
   }
 }

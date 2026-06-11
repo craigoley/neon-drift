@@ -1876,6 +1876,16 @@ export const ZEN = {
   terrainTiltFactor: 1,
   /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
   terrainTiltMax: 0.28,
+  // --- obstacle contact (PR3b): props gently SLOW you (never stop / never end) ---
+  /** The car's own contact radius, added to each prop's footprint to size the contact
+   *  reach. Bigger = props nudge you from a touch further out. */
+  contactCarRadius: 1.5,
+  /** Deceleration (units/s²) while overlapping a prop, scaled by how central the contact
+   *  is. GENTLE — a soft nudge to steer around, not a punishing wall. Craig's main knob. */
+  contactDecel: 120,
+  /** Speed (units/s) contact can NEVER drag you below — the zen rule: a bump slows you,
+   *  it never stops the car dead or ends the session. You can always crawl on through. */
+  contactFloor: 10,
 } as const;
 
 

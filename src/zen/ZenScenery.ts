@@ -104,6 +104,12 @@ export class ZenScenery {
     }
   }
 
+  /** Strongest prop contact (0..1) at the car's position — drives the PR3b slowdown.
+   *  Bounded: the field scans only the 3×3 chunks around (x, z), not the whole world. */
+  contactAt(x: number, z: number): number {
+    return this.field.contactAt(x, z);
+  }
+
   /** Bounded active prop count (debug / perf funnel). */
   get activePropCount(): number {
     return this.field.activePropCount;

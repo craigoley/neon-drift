@@ -37,13 +37,22 @@ export function createZenVehicle(): ZenVehicle {
 /**
  * Advance the Zen vehicle one frame. `steer` ∈ [-1, 1] turns (right = +); `throttle`
  * ∈ [-1, 1] drives (>= 0 accelerate, < 0 brake). `slope` (PR3a) is the rise/run of the
- * terrain along the heading (uphill > 0) — a GENTLE, bounded speed nudge. Mutates `v`.
+ * terrain along the heading (uphill > 0) — a GENTLE, bounded speed nudge. `contact`
+ * (PR3b, 0..1) is how firmly the car is touching a prop — a GENTLE, bounded slowdown
+ * (mirrors the MP crash=slowdown concept: slow, never stop, never end). Mutates `v`.
  *
  * Calm by construction: turn authority eases IN with speed (no pivot-in-place at
  * rest), coasting glides to rest via friction, and speed is clamped to a modest cap.
  * Heading 0 + speed → moves -z (forward); turning right then driving curves toward +x.
  */
-export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: number, slope = 0): ZenVehicle {
+export function updateZen(
+  v: ZenVehicle,
+  steer: number,
+  throttle: number,
+  dt: number,
+  slope = 0,
+  contact = 0,
+): ZenVehicle {
   // Turn authority ramps from 0 (stopped) to 1 (>= turnFullSpeed) so the car turns by
   // driving, not by spinning in place.
   const authority = clamp(v.speed / ZEN.turnFullSpeed, 0, 1);
@@ -61,6 +70,16 @@ export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: nu
   v.speed += slopeAccel * dt;
   if (slopeAccel < 0 && preSlope > ZEN.slopeUphillFloor) {
     v.speed = Math.max(v.speed, ZEN.slopeUphillFloor);
+  }
+
+  // GENTLE contact slowdown: touching a prop bleeds speed (more the more central the
+  // hit). BOUNDED by the contact floor — it never stops the car dead or ends the run;
+  // you keep crawling and the throttle recovers you (zen = no failure). The floor also
+  // keeps a bump-while-climbing from STACKING with the slope into a dead stop.
+  if (contact > 0) {
+    const preContact = v.speed;
+    v.speed -= ZEN.contactDecel * contact * dt;
+    v.speed = Math.max(v.speed, Math.min(preContact, ZEN.contactFloor));
   }
 
   // Coast-friction bleeds speed toward rest, then clamp to the calm cap.

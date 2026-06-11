@@ -1,163 +1,113 @@
 /**
- * Zen obstacle contact (PR3b) — props gently SLOW the car, the zen rule being: slow,
- * never stop, never end (a parallel of the MP crash=slowdown concept). Two pure pieces:
- * the contact-intensity field query (only NEARBY props, graded by how central) and the
- * bounded slowdown in updateZen (a soft bleed with a floor, composing sanely with slope).
+ * Zen SOLID props — DEFLECT/SLIDE collision (replaces the #113 pass-through slowdown).
+ * Props are solid circles: the car can't enter them, it's pushed to the edge along the
+ * normal and SLIDES around (tangential motion preserved) — no hard stop, no death, no NaN.
+ * Two pure pieces: the single-circle push-out (deflectPoint) and the bounded 3×3 field
+ * resolve that applies it against the real seeded world.
  */
 import { describe, expect, it } from 'vitest';
+import { ZenChunkField, chunkProps, deflectPoint, propSolidRadius, type ZenProp } from '../ZenWorld';
 import { createZenVehicle, updateZen } from '../ZenVehicle';
-import { ZenChunkField, chunkProps, propContactIntensity, type ZenProp } from '../ZenWorld';
 import { SCENERY, ZEN } from '../../utils/constants';
 
-const TICK = 1 / 60;
 const KINDS = SCENERY.layers.length;
+const TICK = 1 / 60;
+const dist = (x: number, z: number, px: number, pz: number) => Math.hypot(x - px, z - pz);
 
-/** A prop of `kind` parked at (px, pz) with unit scale, for footprint tests. */
-function prop(kind: number, px: number, pz: number): ZenProp {
-  return { kind, x: px, z: pz, rotationY: 0, scale: 1 };
-}
-
-describe('Zen contact — prop footprint intensity', () => {
-  it('is 1 dead-centre and fades to 0 at the edge of the reach', () => {
-    const p = prop(0, 0, 0);
-    const reach = (SCENERY.layers[0].width / 2) * 1 + ZEN.contactCarRadius;
-    expect(propContactIntensity(p, 0, 0)).toBeCloseTo(1, 6);
-    expect(propContactIntensity(p, reach, 0)).toBe(0); // exactly at the edge → clear
-    expect(propContactIntensity(p, reach * 2, 0)).toBe(0); // well beyond → clear
+describe('Zen deflect — push a point out of a solid circle', () => {
+  it('leaves a point OUTSIDE the circle unchanged', () => {
+    const r = deflectPoint(3, 0, 0, 0, 2);
+    expect(r).toEqual({ x: 3, z: 0 });
   });
 
-  it('is monotonic — closer to the prop means stronger contact', () => {
-    const p = prop(2, 10, 10); // the wide city-block kind
-    const near = propContactIntensity(p, 11, 10);
-    const far = propContactIntensity(p, 14, 10);
-    expect(near).toBeGreaterThan(far);
-    expect(near).toBeGreaterThan(0);
+  it('pushes an INSIDE point out to the edge along the normal (no penetration)', () => {
+    const r = deflectPoint(0.5, 0, 0, 0, 2); // head-on, 0.5u deep
+    expect(dist(r.x, r.z, 0, 0)).toBeCloseTo(2, 9); // exactly on the edge
+    expect(r.z).toBeCloseTo(0, 9); // straight out along +x
   });
 
-  it('scales the reach with the prop footprint (a wide block reaches further)', () => {
-    const palm = { ...prop(0, 0, 0) };
-    const block = { ...prop(2, 0, 0) };
-    // 4 units out: the thin palm is clear, the wide block still bites.
-    expect(propContactIntensity(palm, 4, 0)).toBe(0);
-    expect(propContactIntensity(block, 4, 0)).toBeGreaterThan(0);
+  it('PRESERVES the angle around the centre (so motion slides along the surface)', () => {
+    const r = deflectPoint(1, 1, 0, 0, 2); // inside, at 45°
+    expect(dist(r.x, r.z, 0, 0)).toBeCloseTo(2, 9); // on the edge
+    expect(Math.atan2(r.z, r.x)).toBeCloseTo(Math.atan2(1, 1), 9); // same bearing → tangential kept
+  });
+
+  it('handles a point at the DEAD CENTRE without NaN (pushes a fixed direction)', () => {
+    const r = deflectPoint(0, 0, 0, 0, 2);
+    expect(Number.isNaN(r.x) || Number.isNaN(r.z)).toBe(false);
+    expect(dist(r.x, r.z, 0, 0)).toBeCloseTo(2, 9);
+  });
+
+  it('solid radius is tied to the visible prop (palm/pole small, block big)', () => {
+    const palm: ZenProp = { kind: 0, x: 0, z: 0, rotationY: 0, scale: 1 };
+    const block: ZenProp = { kind: 2, x: 0, z: 0, rotationY: 0, scale: 1 };
+    expect(propSolidRadius(palm)).toBeCloseTo(SCENERY.layers[0].width / 2 + ZEN.deflectCarRadius, 9);
+    expect(propSolidRadius(block)).toBeGreaterThan(propSolidRadius(palm)); // the block is a bigger wall
   });
 });
 
-describe('Zen contact — field query is bounded to nearby props', () => {
-  it('returns 0 in open space and >0 on top of a real placed prop', () => {
-    const field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, KINDS);
-    field.update(0, 0);
-    // Find any actually-placed prop in a chunk near the origin.
-    let target: ZenProp | undefined;
-    outer: for (let cz = -1; cz <= 1; cz++) {
+describe('Zen deflect — field.resolve against the real world (bounded 3×3 scan)', () => {
+  /** Find a real placed prop near the origin to drive at. */
+  function nearbyProp(): ZenProp {
+    for (let cz = -1; cz <= 1; cz++) {
       for (let cx = -1; cx <= 1; cx++) {
         const ps = chunkProps(ZEN.worldSeed, cx, cz, KINDS);
-        if (ps.length) {
-          target = ps[0];
-          break outer;
-        }
+        if (ps.length) return ps[0];
       }
     }
-    expect(target).toBeDefined();
-    // On the prop → contact; far away in clear space → none.
-    expect(field.contactAt(target!.x, target!.z)).toBeGreaterThan(0);
-    expect(field.contactAt(target!.x + 9999, target!.z + 9999)).toBe(0);
-  });
-
-  it('the bounded 3×3 scan never MISSES a contact (matches a brute-force over all props)', () => {
-    // reach ≪ chunkSize, so the 3×3 neighbourhood is complete: scanning it must give the
-    // same answer as checking every loaded prop. Sample many car positions to confirm.
-    const field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, KINDS);
-    field.update(0, 0);
-    for (let s = 0; s < 200; s++) {
-      const x = ((s * 53) % 600) - 300;
-      const z = ((s * 31) % 600) - 300;
-      let brute = 0;
-      field.forEachProp((p) => {
-        brute = Math.max(brute, propContactIntensity(p, x, z));
-      });
-      expect(field.contactAt(x, z)).toBeCloseTo(brute, 9);
-    }
-  });
-});
-
-describe('Zen contact — gentle slowdown, never stops (the zen rule)', () => {
-  /** Drive at throttle holding a fixed contact for `frames` from rest; final speed. */
-  function driveContact(throttle: number, contact: number, frames: number): number {
-    const v = createZenVehicle();
-    for (let i = 0; i < frames; i++) updateZen(v, 0, throttle, TICK, 0, contact);
-    return v.speed;
+    throw new Error('no prop found near origin');
+  }
+  /** True if (x,z) is inside ANY active prop's solid circle (the penetration invariant). */
+  function insideAnyProp(field: ZenChunkField, x: number, z: number): boolean {
+    let inside = false;
+    field.forEachProp((p) => {
+      if (dist(x, z, p.x, p.z) < propSolidRadius(p) - 1e-6) inside = true;
+    });
+    return inside;
   }
 
-  it('contact while cruising slows you BELOW the clear cruise speed', () => {
-    const clear = driveContact(0.6, 0, 400);
-    const bumping = driveContact(0.6, 1, 400);
-    expect(bumping).toBeLessThan(clear);
+  it('leaves the car untouched in open space', () => {
+    const field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, KINDS);
+    field.update(0, 0);
+    const r = field.resolve(1e6, 1e6); // far from any prop
+    expect(r).toEqual({ x: 1e6, z: 1e6 });
   });
 
-  it('NEVER stops the car — full contact at full throttle holds a stable crawl ~floor', () => {
-    const crawl = driveContact(1, 1, 1200);
-    // The contact term floors at contactFloor; coast-friction then shaves a hair (a
-    // stable fixed point, never drifting toward 0). It holds a crawl, never a dead stop.
-    expect(crawl).toBeGreaterThan(ZEN.contactFloor * 0.95);
-    expect(crawl).toBeGreaterThan(0); // explicitly: not a dead stop
-  });
-
-  it('does not speed a slow car UP — contact only ever slows', () => {
+  it('a head-on drive CANNOT penetrate — it parks at the edge, never tunnels through', () => {
+    const field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, KINDS);
+    const p = nearbyProp();
     const v = createZenVehicle();
-    v.speed = 5; // already below the contact floor
-    const before = v.speed;
-    for (let i = 0; i < 60; i++) updateZen(v, 0, 0, TICK, 0, 1);
-    expect(v.speed).toBeLessThanOrEqual(before); // contact never accelerates
+    v.x = p.x;
+    v.z = p.z + 12; // 12u out on the +z side
+    v.heading = Math.PI; // face +z, straight at the prop centre
+    let minZ = Infinity;
+    for (let i = 0; i < 240; i++) {
+      updateZen(v, 0, 1, TICK);
+      const solved = field.resolve(v.x, v.z);
+      v.x = solved.x;
+      v.z = solved.z;
+      expect(Number.isNaN(v.x) || Number.isNaN(v.z)).toBe(false);
+      expect(insideAnyProp(field, v.x, v.z)).toBe(false); // never inside a solid
+      minZ = Math.min(minZ, v.z);
+    }
+    expect(minZ).toBeGreaterThan(p.z); // blocked — never tunnelled to/through the centre
   });
 
-  it('recovers after contact ends (throttle brings the speed back up)', () => {
+  it('an OFFSET drive slides AROUND the prop and continues past it (not stopped dead)', () => {
+    const field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, KINDS);
+    const p = nearbyProp();
+    const r = propSolidRadius(p);
     const v = createZenVehicle();
-    for (let i = 0; i < 60; i++) updateZen(v, 0, 1, TICK, 0, 1); // bumping at full throttle
-    const bumped = v.speed;
-    for (let i = 0; i < 200; i++) updateZen(v, 0, 1, TICK, 0, 0); // clear, keep driving
-    expect(v.speed).toBeGreaterThan(bumped); // recovered
-  });
-});
-
-describe('Zen contact — the bump is now PERCEPTIBLE (the tune)', () => {
-  it('a short prop clip drops a clearly-felt amount of speed (not the old <2 u/s blip)', () => {
-    const v = createZenVehicle();
-    for (let i = 0; i < 400; i++) updateZen(v, 0, 1, TICK); // settle at cruise
-    const cruise = v.speed;
-    for (let i = 0; i < 4; i++) updateZen(v, 0, 1, TICK, 0, 1); // ~4-frame center clip
-    const dip = cruise - v.speed;
-    expect(dip).toBeGreaterThan(8); // clearly perceptible (was sub-perceptual ~<2)
-    expect(v.speed).toBeGreaterThan(ZEN.contactFloor); // but still a soft bump, not a wall
-  });
-
-  it('arms the post-bump HOLD so the dip lingers, then recovers to cruise', () => {
-    const v = createZenVehicle();
-    for (let i = 0; i < 400; i++) updateZen(v, 0, 1, TICK);
-    const cruise = v.speed;
-    updateZen(v, 0, 1, TICK, 0, 1); // one real contact frame
-    expect(v.bumpHold).toBeGreaterThan(0); // hold armed → throttle recovery is dampened
-    const dipped = v.speed;
-    // Drive on, clear of props — the hold expires and the throttle restores cruise.
-    for (let i = 0; i < 200; i++) updateZen(v, 0, 1, TICK);
-    expect(v.bumpHold).toBe(0); // hold released
-    expect(v.speed).toBeGreaterThan(dipped); // recovered
-    expect(v.speed).toBeGreaterThan(cruise - 1); // back to ~cruise (never permanent)
-  });
-});
-
-describe('Zen contact — composes with the slope effect (no dead stop)', () => {
-  it('a bump WHILE climbing never HALTS the car (stable crawl, never 0)', () => {
-    const v = createZenVehicle();
-    // The compound EXTREME: full throttle, steep uphill AND full contact, held 20s. With
-    // the perceptible tune (firmer contact + the post-bump throttle-dampening hold) these
-    // three speed-bleeds stack to a LOWER crawl than the nominal contactFloor — but it's
-    // a STABLE crawl that never stalls to a halt (the zen no-death rule holds). Realistic
-    // bumps are brief; this is the never-can-happen permanent embed on a hillside.
-    for (let i = 0; i < 1200; i++) updateZen(v, 0, 1, TICK, 0.5, 1);
-    expect(v.speed).toBeGreaterThan(3); // clearly still moving — never halts
-    const stable = v.speed;
-    for (let i = 0; i < 600; i++) updateZen(v, 0, 1, TICK, 0.5, 1);
-    expect(v.speed).toBeGreaterThan(stable * 0.8); // holds the crawl, doesn't creep to 0
+    v.x = p.x + r * 0.5; // grazing offset
+    v.z = p.z + 14;
+    v.heading = 0; // faces -z (forward), drives past the prop
+    for (let i = 0; i < 240; i++) {
+      updateZen(v, 0, 1, TICK);
+      const solved = field.resolve(v.x, v.z);
+      v.x = solved.x;
+      v.z = solved.z;
+      expect(insideAnyProp(field, v.x, v.z)).toBe(false); // slides on the surface, never inside
+    }
+    expect(v.z).toBeLessThan(p.z - r); // slid past + kept going (not halted at the prop)
   });
 });

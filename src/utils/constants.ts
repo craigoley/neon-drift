@@ -1769,10 +1769,13 @@ export const DEFAULT_SEED = 0x9e3779b9;
  */
 export const ZEN = {
   // --- movement (the keystone) ---
-  /** Top cruise speed (world units/s) — modest/relaxing, not racing. */
-  maxSpeed: 70,
-  /** Forward acceleration (units/s²) at full throttle. */
-  accel: 38,
+  /** Top cruise speed (world units/s) — RAISED a notch for a faster-but-calm flow (was
+   *  70). The cap is the binding limit; `accel` was nudged up alongside it so the higher
+   *  cap is actually REACHED (the accel/friction equilibrium otherwise caps cruise ~74). */
+  maxSpeed: 84,
+  /** Forward acceleration (units/s²) at full throttle. RAISED (was 38) so cruise reaches
+   *  the higher maxSpeed rather than settling below it. */
+  accel: 46,
   /** Braking deceleration (units/s²) at full brake. */
   brakeAccel: 80,
   /** Per-second retained fraction of speed while coasting (glide-to-rest). */
@@ -1878,28 +1881,13 @@ export const ZEN = {
   terrainTiltFactor: 1,
   /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
   terrainTiltMax: 0.28,
-  // --- obstacle contact (PR3b): props gently SLOW you (never stop / never end) ---
-  /** The car's own contact radius, added to each prop's footprint to size the contact
-   *  reach. RAISED (was 1.5 — a ~1.8u catch for thin props that the ~2u-wide car crossed
-   *  in ~3 frames, sub-perceptual) so thin palms/poles actually ENGAGE for a felt beat. */
-  contactCarRadius: 3.5,
-  /** Deceleration (units/s²) while overlapping a prop, scaled by how central the contact
-   *  is. RAISED (was 120) for a firmer, clearly-FELT bite — still bounded by the floor +
-   *  hold below so it stays a soft bump, never a punishing wall. Craig's main knob. */
-  contactDecel: 320,
-  /** Speed (units/s) contact can NEVER drag you below — the zen rule: a bump slows you,
-   *  it never stops the car dead or ends the session. You can always crawl on through. */
-  contactFloor: 10,
-  /** Brief post-bump HOLD (seconds): after a real contact, throttle recovery is dampened
-   *  for this long so the dip reads as a distinct impact + ease-back, not a 1-frame blip
-   *  the throttle instantly erases. THIS is what makes a prop "feel like hitting something". */
-  contactHoldTime: 0.35,
-  /** Throttle-accel fraction DURING the hold (0..1) — lower = the dip lingers longer
-   *  before recovering. Still drives forward (never stalls), just eases back. */
-  contactHoldThrottleScale: 0.35,
-  /** Min contact intensity (0..1) that ARMS the hold — a real overlap triggers the held
-   *  dip; merely grazing the outer edge does not (no nagging hold from near-misses). */
-  contactHoldThreshold: 0.2,
+  // --- obstacle collision: props are SOLID — DEFLECT/SLIDE (replaces the #113 pass-through
+  //     slowdown). The car can't enter a prop's circle; it's pushed to the edge along the
+  //     normal and slides around (tangential motion preserved). No hard stop, no death. ---
+  /** Car radius added to a prop's footprint to form its SOLID circle. Tied to the VISIBLE
+   *  prop (≈ the car's half-width), so you slide around the object you SEE — not an
+   *  invisible oversized wall. Thin palms/poles are small circles; the block is a big one. */
+  deflectCarRadius: 1.0,
   // --- horizon / backdrop (kills the "void"): a serene SUNSET sky + sun + mountain ring
   //     so the upper screen is a WORLD, not black. The grid floor fades into horizonColor
   //     (the fog) so floor → horizon reads seamless. 360°-correct for the free zen camera. ---

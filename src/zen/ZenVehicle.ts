@@ -22,8 +22,13 @@ export interface ZenVehicle {
   /** World position. Ahead = -z (matches the renderer + the forward world's mapping). */
   x: number;
   z: number;
-  /** Surface height the car rides at (PR3a) — eased toward the terrain each frame. */
+  /** Surface height the car rides at (PR3a) — eased toward the terrain when GROUNDED, or
+   *  integrated ballistically while AIRBORNE (air-time). */
   y: number;
+  /** Vertical velocity (units/s) — 0 while grounded; set on launch + integrated in flight. */
+  vy: number;
+  /** True while the car is in the AIR (off the surface) — see updateVertical. */
+  airborne: boolean;
   /** Facing angle (radians). 0 = facing -z (forward). Increasing = turning right. */
   heading: number;
   /** Forward speed along the heading (world units/s); >= 0 (no reverse in PR1). */
@@ -31,7 +36,7 @@ export interface ZenVehicle {
 }
 
 export function createZenVehicle(): ZenVehicle {
-  return { x: 0, z: 0, y: 0, heading: 0, speed: 0 };
+  return { x: 0, z: 0, y: 0, vy: 0, airborne: false, heading: 0, speed: 0 };
 }
 
 /**
@@ -84,5 +89,52 @@ export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: nu
  */
 export function followSurface(v: ZenVehicle, targetY: number, dt: number): ZenVehicle {
   v.y += (targetY - v.y) * smoothFollow(ZEN.terrainFollowLerp, dt);
+  return v;
+}
+
+/**
+ * Vertical update with AIR-TIME. `groundY` = heightAt(x, z) + ride height (the surface the
+ * car is over now); `slope` = rise/run along the heading (0 while airborne).
+ *
+ * GROUNDED: ease onto the surface (followSurface) and carry the surface vertical velocity
+ *   `vy = slope × speed`. LAUNCH when the surface falls away FASTER than gravity
+ *   (`surfaceAccel < -airGravity`) while the car has real upward momentum
+ *   (`vy > launchMinUpVel`): i.e. cresting a SHARP rise at speed. Gentle hills curve far
+ *   too gently to trip this, so they stay grounded — no accidental air.
+ * AIRBORNE: a calm parabola — `vy -= airGravity·dt; y += vy·dt` — until `y` meets the
+ *   terrain again, then LAND smoothly (grounded, vy 0; no crash, no speed penalty).
+ *
+ * Pure; mutates and returns `v`. (Forward x,z motion is handled by updateZen; props are
+ * not collided while airborne — the car flies over them.)
+ */
+export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt: number): ZenVehicle {
+  if (v.airborne) {
+    v.vy -= ZEN.airGravity * dt;
+    v.y += v.vy * dt;
+    if (v.y <= groundY) {
+      v.y = groundY; // land smoothly on the surface
+      v.vy = 0;
+      v.airborne = false;
+    }
+    return v;
+  }
+
+  // Grounded: how fast the surface is moving up/down under us, and how fast THAT is
+  // changing (the crest curvature × speed). vy holds last frame's surface velocity.
+  const surfaceVy = slope * v.speed;
+  const surfaceAccel = (surfaceVy - v.vy) / dt;
+  if (v.vy > ZEN.launchMinUpVel && surfaceAccel < -ZEN.airGravity) {
+    // The ground drops away faster than we can fall → fly off the crest with our (capped,
+    // gentle) upward momentum.
+    v.airborne = true;
+    v.vy = Math.min(v.vy, ZEN.maxLaunchVel);
+    v.y += v.vy * dt;
+    return v;
+  }
+
+  // Stay glued: ease onto the surface (PR3a feel), carry the surface velocity for the
+  // next frame's launch test.
+  followSurface(v, groundY, dt);
+  v.vy = surfaceVy;
   return v;
 }

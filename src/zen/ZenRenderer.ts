@@ -91,14 +91,20 @@ export class ZenRenderer {
    * `steer` drives a gentle visual bank; `dt` paces the camera smoothing.
    */
   render(v: ZenVehicle, steer: number, dt: number): void {
-    // Car: ride the terrain surface (v.y, eased by the sim), yaw to face the heading,
-    // pitch into the slope, and bank into the turn (chassis only, so the wheels-on-ground
-    // read stays). rotation.y = -heading aligns the mesh's forward (-z) with the movement
-    // direction (sin h, -cos h).
-    const slope = slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+    // Car: ride the terrain surface (or fly its arc), yaw to face the heading, pitch into
+    // the slope (grounded) or along the flight arc (airborne), and bank into the turn
+    // (chassis only, so the wheels-on-ground read stays). rotation.y = -heading aligns the
+    // mesh's forward (-z) with the movement direction (sin h, -cos h).
     this.car.group.position.set(v.x, v.y, v.z);
     this.car.group.rotation.y = -v.heading;
-    this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
+    if (v.airborne) {
+      // Tip the nose to follow the parabola: up while rising, down toward landing.
+      const arc = Math.atan2(v.vy, Math.max(v.speed, 1));
+      this.car.group.rotation.x = clamp(arc * ZEN.terrainTiltFactor, -ZEN.airTiltMax, ZEN.airTiltMax);
+    } else {
+      const slope = slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+      this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
+    }
     this.car.chassis.rotation.z = -clamp(steer, -1, 1) * ZEN.leanMax;
 
     // Terrain + scenery: stream the heightmap surface + props around the car (both rebuild

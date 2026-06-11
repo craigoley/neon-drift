@@ -11,7 +11,7 @@
 
 import type { WebGLRenderer } from 'three';
 import { ZEN, type CarDef } from '../utils/constants';
-import { createZenVehicle, updateZen, followSurface } from './ZenVehicle';
+import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt, slopeAlong } from './ZenHeight';
 import { ZenRenderer } from './ZenRenderer';
 
@@ -96,16 +96,21 @@ export class ZenSession {
    *  throttle, then render. Called by the composition root in place of the forward sim. */
   tick(steer: number, dt: number): void {
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
-    // Slope along the heading drives the GENTLE speed nudge (sampled at the current pos).
-    const slope = slopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
+    // Slope drives the gentle speed nudge — GROUNDED only (no terrain grip in the air).
+    const slope = this.v.airborne
+      ? 0
+      : slopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
     updateZen(this.v, steer, throttle, dt, slope);
-    // Props are SOLID: push the car back out of any prop circle it just entered (it slides
-    // around — no hard stop). Bounded scan against the loaded chunks (from last frame).
-    const solved = this.renderer.resolve(this.v.x, this.v.z);
-    this.v.x = solved.x;
-    this.v.z = solved.z;
-    // Ease the car onto the terrain at its NEW position (flows over hills, no snap).
-    followSurface(this.v, heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight, dt);
+    // Props are SOLID — but only while GROUNDED: airborne, the car flies OVER them. Push
+    // the car back out of any prop circle it entered (slides around — no hard stop).
+    if (!this.v.airborne) {
+      const solved = this.renderer.resolve(this.v.x, this.v.z);
+      this.v.x = solved.x;
+      this.v.z = solved.z;
+    }
+    // Vertical: ride the surface, catch air off sharp crests, land smoothly (air-time).
+    const groundY = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+    updateVertical(this.v, groundY, slope, dt);
     this.renderer.render(this.v, steer, dt);
   }
 

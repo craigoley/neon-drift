@@ -1882,6 +1882,23 @@ export const ZEN = {
   terrainTiltFactor: 1,
   /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
   terrainTiltMax: 0.28,
+  // --- air-time (catch air off SHARP crests at speed; gentle/zen, never a violent launch
+  //     or crash landing). Gentle hills stay grounded — the surface there falls away far
+  //     slower than gravity, so the launch test never fires. ---
+  /** Downward acceleration in flight (units/s²). ALSO the crest-sharpness threshold: the
+   *  car launches only where the surface drops away FASTER than this (a sharp peak), so
+   *  gentle hills never throw you. Lower = more air + easier launches (heavier vs floatier). */
+  airGravity: 80,
+  /** Minimum upward surface velocity (climb rate = slope × speed) needed to catch air —
+   *  THE sensitivity knob. Lower = launches more easily / more often. High enough that
+   *  cresting a gentle hill (even at top speed) stays under it: no accidental launches. */
+  launchMinUpVel: 16,
+  /** Cap on the launch upward velocity → the MAX AIR (kept gentle so a steep ridge gives a
+   *  satisfying float, not a violent rocket). ~maxLaunchVel²/(2·airGravity) world units high. */
+  maxLaunchVel: 30,
+  /** Max nose-pitch (radians) while airborne — the car tips to follow its arc (nose up
+   *  rising, down toward landing). Visual only. */
+  airTiltMax: 0.5,
   // --- mountains (PR4): a LOW-FREQUENCY mask decides WHERE the gentle hills rise into
   //     mountains (occasional clumps, not everywhere); there a PEAKY ridged octave scales
   //     the height up. Gentle hills stay everywhere the mask is low; the transition is a

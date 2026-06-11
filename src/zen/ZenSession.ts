@@ -98,10 +98,12 @@ export class ZenSession {
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
     // Slope along the heading drives the GENTLE speed nudge (sampled at the current pos).
     const slope = slopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
-    // Prop contact (PR3b) at the current pos — bounded check against the loaded chunks
-    // (from last frame's stream); a soft slowdown, never a stop.
-    const contact = this.renderer.contactAt(this.v.x, this.v.z);
-    updateZen(this.v, steer, throttle, dt, slope, contact);
+    updateZen(this.v, steer, throttle, dt, slope);
+    // Props are SOLID: push the car back out of any prop circle it just entered (it slides
+    // around — no hard stop). Bounded scan against the loaded chunks (from last frame).
+    const solved = this.renderer.resolve(this.v.x, this.v.z);
+    this.v.x = solved.x;
+    this.v.z = solved.z;
     // Ease the car onto the terrain at its NEW position (flows over hills, no snap).
     followSurface(this.v, heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight, dt);
     this.renderer.render(this.v, steer, dt);

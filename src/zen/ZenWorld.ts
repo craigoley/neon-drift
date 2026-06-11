@@ -80,19 +80,32 @@ export function maxActiveChunks(radius: number): number {
   return side * side;
 }
 
+/** The SOLID circle radius of a prop (footprint × scale + the car radius). */
+export function propSolidRadius(prop: ZenProp): number {
+  return (SCENERY.layers[prop.kind].width / 2) * prop.scale + ZEN.deflectCarRadius;
+}
+
+// Scratch objects reused every frame so deflectPoint + resolve never allocate in the hot loop.
+const _deflect: { x: number; z: number } = { x: 0, z: 0 };
+const _resolve: { x: number; z: number } = { x: 0, z: 0 };
+
 /**
- * Contact intensity (PR3b) of one prop at world (x, z): 1 dead-centre, fading to 0 at
- * the edge of (prop footprint + car radius), 0 beyond. Graded so the slowdown is gentle
- * (a soft nudge that bites more the more central the hit), not a hard on/off wall. Pure.
+ * DEFLECT a point out of one solid circle (centre px,pz, radius r): if (x,z) is inside,
+ * push it to the circle's EDGE along the outward normal; otherwise leave it. The point's
+ * ANGLE around the centre is preserved, so a moving car slides ALONG the surface (the
+ * into-prop component is removed, the tangential component continues) — no hard stop.
+ * Returns the shared scratch `_deflect` — read immediately, not retained.
  */
-export function propContactIntensity(prop: ZenProp, x: number, z: number): number {
-  const propRadius = (SCENERY.layers[prop.kind].width / 2) * prop.scale;
-  const reach = propRadius + ZEN.contactCarRadius;
-  const dx = x - prop.x;
-  const dz = z - prop.z;
-  const dist = Math.sqrt(dx * dx + dz * dz);
-  if (dist >= reach) return 0;
-  return 1 - dist / reach;
+export function deflectPoint(x: number, z: number, px: number, pz: number, r: number): { x: number; z: number } {
+  const dx = x - px;
+  const dz = z - pz;
+  const d2 = dx * dx + dz * dz;
+  if (d2 >= r * r) { _deflect.x = x; _deflect.z = z; return _deflect; }
+  if (d2 < 1e-12) { _deflect.x = px + r; _deflect.z = pz; return _deflect; }
+  const s = r / Math.sqrt(d2);
+  _deflect.x = px + dx * s;
+  _deflect.z = pz + dz * s;
+  return _deflect;
 }
 
 interface LoadedChunk {
@@ -172,25 +185,31 @@ export class ZenChunkField {
   }
 
   /**
-   * Strongest prop contact intensity (0..1) at world (x, z) — for the PR3b gentle
-   * slowdown. CHEAP + bounded: a prop can only be in contact range (≪ chunkSize) if it
-   * lives in the car's chunk or an immediate neighbour, so we scan just the 3×3 chunks
-   * around (x, z), never the whole world. Returns 0 when clear.
+   * RESOLVE the car's position out of any SOLID prop circle it has entered (props are
+   * solid; the car slides around them). Reuses the same CHEAP, bounded DETECTION as the
+   * old contact check — a prop can only overlap if it lives in the car's chunk or an
+   * immediate neighbour, so we scan just the 3×3 chunks around (x, z), never the whole
+   * world. Pushes out of each overlapping circle along its normal (tangential motion is
+   * preserved → a glide-around, not a stop). Returns the corrected (x, z).
    */
-  contactAt(x: number, z: number): number {
+  resolve(x: number, z: number): { x: number; z: number } {
     const ccx = worldToChunk(x, ZEN.chunkSize);
     const ccz = worldToChunk(z, ZEN.chunkSize);
-    let max = 0;
+    let rx = x;
+    let rz = z;
     for (let dz = -1; dz <= 1; dz++) {
       for (let dx = -1; dx <= 1; dx++) {
         const c = this.loaded.get(`${ccx + dx},${ccz + dz}`);
         if (!c) continue;
         for (const p of c.props) {
-          const i = propContactIntensity(p, x, z);
-          if (i > max) max = i;
+          const out = deflectPoint(rx, rz, p.x, p.z, propSolidRadius(p));
+          rx = out.x;
+          rz = out.z;
         }
       }
     }
-    return max;
+    _resolve.x = rx;
+    _resolve.z = rz;
+    return _resolve;
   }
 }

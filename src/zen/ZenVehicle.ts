@@ -28,47 +28,32 @@ export interface ZenVehicle {
   heading: number;
   /** Forward speed along the heading (world units/s); >= 0 (no reverse in PR1). */
   speed: number;
-  /** Post-bump recovery HOLD remaining (seconds, PR3b tune). While > 0 the throttle's
-   *  recovery is dampened so a prop bump reads as a distinct dip + ease-back, not a blip. */
-  bumpHold: number;
 }
 
 export function createZenVehicle(): ZenVehicle {
-  return { x: 0, z: 0, y: 0, heading: 0, speed: 0, bumpHold: 0 };
+  return { x: 0, z: 0, y: 0, heading: 0, speed: 0 };
 }
 
 /**
  * Advance the Zen vehicle one frame. `steer` ∈ [-1, 1] turns (right = +); `throttle`
  * ∈ [-1, 1] drives (>= 0 accelerate, < 0 brake). `slope` (PR3a) is the rise/run of the
- * terrain along the heading (uphill > 0) — a GENTLE, bounded speed nudge. `contact`
- * (PR3b, 0..1) is how firmly the car is touching a prop — a GENTLE, bounded slowdown
- * (mirrors the MP crash=slowdown concept: slow, never stop, never end). Mutates `v`.
+ * terrain along the heading (uphill > 0) — a GENTLE, bounded speed nudge. Mutates `v`.
  *
- * Calm by construction: turn authority eases IN with speed (no pivot-in-place at
+ * Props are SOLID (a separate DEFLECT/SLIDE step resolves the car's position out of prop
+ * circles — see ZenWorld.resolve, applied by the session); movement here is unaware of
+ * them. Calm by construction: turn authority eases IN with speed (no pivot-in-place at
  * rest), coasting glides to rest via friction, and speed is clamped to a modest cap.
  * Heading 0 + speed → moves -z (forward); turning right then driving curves toward +x.
  */
-export function updateZen(
-  v: ZenVehicle,
-  steer: number,
-  throttle: number,
-  dt: number,
-  slope = 0,
-  contact = 0,
-): ZenVehicle {
+export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: number, slope = 0): ZenVehicle {
   // Turn authority ramps from 0 (stopped) to 1 (>= turnFullSpeed) so the car turns by
   // driving, not by spinning in place.
   const authority = clamp(v.speed / ZEN.turnFullSpeed, 0, 1);
   v.heading += clamp(steer, -1, 1) * ZEN.turnRate * authority * dt;
 
-  // Bump-hold timer ticks down. While it's active, the THROTTLE's forward push is
-  // dampened so a recent contact stays felt for a beat before easing back (set below).
-  if (v.bumpHold > 0) v.bumpHold = Math.max(0, v.bumpHold - dt);
-
-  // Throttle accelerates (forward push dampened during a bump-hold) or brakes.
+  // Throttle accelerates (or brakes).
   const t = clamp(throttle, -1, 1);
-  const accelScale = v.bumpHold > 0 ? ZEN.contactHoldThrottleScale : 1;
-  v.speed += (t >= 0 ? t * ZEN.accel * accelScale : t * ZEN.brakeAccel) * dt;
+  v.speed += (t >= 0 ? t * ZEN.accel : t * ZEN.brakeAccel) * dt;
 
   // GENTLE slope nudge: uphill (slope > 0) bleeds a little speed, downhill adds a little —
   // a calm "I'm on a hill" cue. BOUNDED: the slope ALONE can never drag you below the
@@ -78,18 +63,6 @@ export function updateZen(
   v.speed += slopeAccel * dt;
   if (slopeAccel < 0 && preSlope > ZEN.slopeUphillFloor) {
     v.speed = Math.max(v.speed, ZEN.slopeUphillFloor);
-  }
-
-  // Contact slowdown: touching a prop bleeds speed (more the more central the hit) for a
-  // clearly-FELT bite, and a real overlap ARMS the brief hold so the dip lingers + eases
-  // back (not a blip). BOUNDED by the contact floor — it never stops the car dead or ends
-  // the run; you keep crawling and the throttle recovers you (zen = no failure). The floor
-  // also keeps a bump-while-climbing from STACKING with the slope into a dead stop.
-  if (contact > 0) {
-    const preContact = v.speed;
-    v.speed -= ZEN.contactDecel * contact * dt;
-    v.speed = Math.max(v.speed, Math.min(preContact, ZEN.contactFloor));
-    if (contact >= ZEN.contactHoldThreshold) v.bumpHold = ZEN.contactHoldTime;
   }
 
   // Coast-friction bleeds speed toward rest, then clamp to the calm cap.

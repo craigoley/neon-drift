@@ -70,10 +70,10 @@ export class ZenRenderer {
     this.scenery.setNeon(high);
   }
 
-  /** Strongest prop contact (0..1) at world (x, z) — the sim reads this for the PR3b
-   *  gentle slowdown. (Props live in the scenery's chunk field; the check is bounded.) */
-  contactAt(x: number, z: number): number {
-    return this.scenery.contactAt(x, z);
+  /** Resolve the car's position out of solid props (DEFLECT/SLIDE). The sim calls this
+   *  after moving the car. (Props live in the scenery's chunk field; the scan is bounded.) */
+  resolve(x: number, z: number): { x: number; z: number } {
+    return this.scenery.resolve(x, z);
   }
 
   /** Apply a car's cosmetic colours (selected car + its paint). */

@@ -15,6 +15,8 @@ import { clamp, smoothFollow } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
 import { ZenScenery } from './ZenScenery';
+import { ZenTerrain } from './ZenTerrain';
+import { slopeAlong } from './ZenHeight';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -22,9 +24,8 @@ export class ZenRenderer {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly car: CarMesh;
-  private readonly grid: THREE.GridHelper;
+  private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
-  private readonly cell: number;
   private aspect = 0;
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
    *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
@@ -43,17 +44,17 @@ export class ZenRenderer {
     this.camera = new THREE.PerspectiveCamera(ZEN.camFov, 1, ZEN.camNear, ZEN.camFar);
     this.camera.position.set(0, ZEN.camHeight, ZEN.camDistance);
 
-    // Streaming neon grid = the "endless plane". Recentred on the car (snapped to a
-    // cell) each frame so the lines appear to flow under the car in any direction.
-    this.cell = ZEN.gridSize / ZEN.gridDivisions;
-    this.grid = new THREE.GridHelper(ZEN.gridSize, ZEN.gridDivisions, ZEN.gridCenterColor, ZEN.gridColor);
-    this.grid.position.y = ZEN.groundY;
-    this.scene.add(this.grid);
+    // The neon synthwave grid is now a HEIGHTMAP surface (rolling hills), streamed +
+    // recentred on the car. Seams perfectly because heights come from world coords.
+    this.terrain = new ZenTerrain(this.scene, ZEN.worldSeed);
 
-    // Chunk-streamed scenery (the populated world the car drives through).
+    // Chunk-streamed scenery (the populated world the car drives through), on the terrain.
     this.scenery = new ZenScenery(this.scene);
 
     this.car = new CarMesh(car);
+    // YXZ so the slope PITCH (rotation.x) is applied about the already-yawed lateral
+    // axis — nose tips up/down along the facing, not in world space.
+    this.car.group.rotation.order = 'YXZ';
     this.scene.add(this.car.group);
 
     this.resize();
@@ -79,18 +80,19 @@ export class ZenRenderer {
    * `steer` drives a gentle visual bank; `dt` paces the camera smoothing.
    */
   render(v: ZenVehicle, steer: number, dt: number): void {
-    // Car: position on the plane, yaw to face the heading (group), bank into the turn
-    // (chassis only, so the wheels-on-ground read stays). rotation.y = -heading aligns
-    // the mesh's forward (-z) with the movement direction (sin h, -cos h).
-    this.car.group.position.set(v.x, ZEN.groundY, v.z);
+    // Car: ride the terrain surface (v.y, eased by the sim), yaw to face the heading,
+    // pitch into the slope, and bank into the turn (chassis only, so the wheels-on-ground
+    // read stays). rotation.y = -heading aligns the mesh's forward (-z) with the movement
+    // direction (sin h, -cos h).
+    const slope = slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+    this.car.group.position.set(v.x, v.y, v.z);
     this.car.group.rotation.y = -v.heading;
+    this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
     this.car.chassis.rotation.z = -clamp(steer, -1, 1) * ZEN.leanMax;
 
-    // Grid: recentre on the car snapped to a cell → seamless infinite plane.
-    this.grid.position.x = Math.round(v.x / this.cell) * this.cell;
-    this.grid.position.z = Math.round(v.z / this.cell) * this.cell;
-
-    // World: stream scenery chunks around the car (rebuilds only on chunk crossings).
+    // Terrain + scenery: stream the heightmap surface + props around the car (both rebuild
+    // only on chunk crossings — cheap the rest of the time).
+    this.terrain.update(v.x, v.z);
     this.scenery.update(v.x, v.z);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
@@ -112,9 +114,10 @@ export class ZenRenderer {
     // Behind = opposite the facing dir (sin h, -cos h) → (-sin h, +cos h), at `distance`.
     this.camera.position.x = v.x - Math.sin(this.boomHeading) * distance;
     this.camera.position.z = v.z + Math.cos(this.boomHeading) * distance;
-    // Height eases toward its (steady) target — keeps the soft vertical glide.
-    this.camera.position.y += (ZEN.camHeight - this.camera.position.y) * f;
-    this.camera.lookAt(v.x, ZEN.camLookAtHeight, v.z);
+    // Height eases toward the car's surface height + the chase height, so cresting a hill
+    // is a smooth vertical glide (the eased follow), never a jarring snap.
+    this.camera.position.y += (v.y + ZEN.camHeight - this.camera.position.y) * f;
+    this.camera.lookAt(v.x, v.y + ZEN.camLookAtHeight, v.z);
 
     // Apply the gentle FOV widen (only touch the projection when it actually moves).
     if (Math.abs(fov - this.camera.fov) > 1e-3) {
@@ -141,9 +144,7 @@ export class ZenRenderer {
   dispose(): void {
     this.scene.remove(this.car.group);
     this.car.dispose();
-    this.scene.remove(this.grid);
-    this.grid.geometry.dispose();
-    (this.grid.material as THREE.Material).dispose();
+    this.terrain.dispose();
     this.scenery.dispose();
   }
 }

@@ -10,8 +10,9 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import type { CarDef } from '../utils/constants';
-import { createZenVehicle, updateZen } from './ZenVehicle';
+import { ZEN, type CarDef } from '../utils/constants';
+import { createZenVehicle, updateZen, followSurface } from './ZenVehicle';
+import { heightAt, slopeAlong } from './ZenHeight';
 import { ZenRenderer } from './ZenRenderer';
 
 export interface ZenSessionOptions {
@@ -49,6 +50,8 @@ export class ZenSession {
 
   constructor(opts: ZenSessionOptions) {
     this.opts = opts;
+    // Start resting ON the terrain so the car doesn't visibly rise from y=0 at spawn.
+    this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
     this.renderer = new ZenRenderer(opts.renderer, opts.car);
     this.renderer.setGlow(opts.glow);
     this.renderer.setQuality(!opts.lowFx); // honour the persisted quality setting
@@ -93,7 +96,11 @@ export class ZenSession {
    *  throttle, then render. Called by the composition root in place of the forward sim. */
   tick(steer: number, dt: number): void {
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
-    updateZen(this.v, steer, throttle, dt);
+    // Slope along the heading drives the GENTLE speed nudge (sampled at the current pos).
+    const slope = slopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
+    updateZen(this.v, steer, throttle, dt, slope);
+    // Ease the car onto the terrain at its NEW position (flows over hills, no snap).
+    followSurface(this.v, heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight, dt);
     this.renderer.render(this.v, steer, dt);
   }
 

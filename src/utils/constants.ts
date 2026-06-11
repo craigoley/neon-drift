@@ -1815,9 +1815,10 @@ export const ZEN = {
   camNear: 0.1,
   /** Camera far clipping plane (draw distance for the grid). */
   camFar: 4000,
-  /** Colour of the synthwave wireframe — the neon grid, now draped over the terrain
-   *  (PR3a replaced the flat plane with the heightmap surface). */
-  gridColor: 0x16364a,
+  /** Colour of the synthwave wireframe GRID FLOOR draped over the terrain. BRIGHT cyan
+   *  (PALETTE.cyan) so it reads as a glowing floor on the dark sky WITHOUT a bloom pass —
+   *  Zen has no post-processing. Fades into the horizon via the fog (ZEN.horizonColor). */
+  gridColor: 0x00ffff,
   // --- world streaming (PR2): chunk-streamed scenery on the flat plane ---
   /** Fixed seed for the world's POSITION-DETERMINISTIC prop placement. Zen is
    *  single-player free-roam (no replay/lockstep), so a constant seed gives a stable
@@ -1862,8 +1863,9 @@ export const ZEN = {
   /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills,
    *  more vertices. The windowed line-grid is rebuilt only on chunk crossings. */
   terrainSegmentsPerChunk: 6,
-  /** Opacity of the neon terrain wireframe (the synthwave grid draped over the hills). */
-  terrainOpacity: 0.42,
+  /** Opacity of the neon terrain wireframe. RAISED (was 0.42 — that read as an invisible
+   *  void on near-black) so the glowing grid floor + its rolling relief clearly read. */
+  terrainOpacity: 0.85,
   /** GENTLE slope effect: along-heading slope (rise/run) × this = the speed nudge accel
    *  (units/s²). Uphill bleeds a little, downhill adds a little. SUBTLE by default (well
    *  under the throttle accel) — set near 0 for a flat-feel, or up for more; THE knob
@@ -1886,6 +1888,32 @@ export const ZEN = {
   /** Speed (units/s) contact can NEVER drag you below — the zen rule: a bump slows you,
    *  it never stops the car dead or ends the session. You can always crawl on through. */
   contactFloor: 10,
+  // --- horizon / backdrop (kills the "void"): a serene SUNSET sky + sun + mountain ring
+  //     so the upper screen is a WORLD, not black. The grid floor fades into horizonColor
+  //     (the fog) so floor → horizon reads seamless. 360°-correct for the free zen camera. ---
+  /** Sky + fog colour at the HORIZON (a dark warm sunset purple). The floor's fog fades
+   *  to this, and the sky gradient's lower band IS this — so they meet with no seam. */
+  horizonColor: 0x2a0b3d,
+  /** Sky colour overhead (deep near-black purple). The background gradient runs
+   *  skyTopColor (top) → horizonColor (bottom). */
+  skyTopColor: 0x0c0118,
+  /** World distance the backdrop (sun + mountains) sits from the camera — far, so it
+   *  reads as the horizon and barely parallaxes as you drive. */
+  backdropDistance: 900,
+  /** Compass direction (radians) the sun sits in — 0 = straight ahead (-z) at spawn, so
+   *  you face the sunset on entry. Fixed in WORLD space (you drive past it, not with it). */
+  sunAzimuth: 0,
+  /** Sun disc centre height above the horizon (world units). */
+  sunHeight: 250,
+  /** Sun disc radius (world units). */
+  sunRadius: 150,
+  /** Radius of the 360° wireframe mountain ring around the camera (just inside the sun). */
+  mountainRingRadius: 850,
+  /** Number of peaks around the mountain ring (the horizon silhouette). */
+  mountainRingPeaks: 96,
+  /** Max mountain peak height (world units) + line opacity — faint, a calm distant ridge. */
+  mountainHeight: 90,
+  mountainOpacity: 0.5,
 } as const;
 
 

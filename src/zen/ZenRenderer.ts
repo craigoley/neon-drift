@@ -10,12 +10,13 @@
  */
 
 import * as THREE from 'three';
-import { PALETTE, ZEN, type CarDef } from '../utils/constants';
+import { ZEN, type CarDef } from '../utils/constants';
 import { clamp, smoothFollow } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
 import { ZenScenery } from './ZenScenery';
 import { ZenTerrain } from './ZenTerrain';
+import { ZenBackdrop } from './ZenBackdrop';
 import { slopeAlong } from './ZenHeight';
 import type { ZenVehicle } from './ZenVehicle';
 
@@ -24,6 +25,7 @@ export class ZenRenderer {
   private readonly scene = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
   private readonly car: CarMesh;
+  private readonly backdrop: ZenBackdrop;
   private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
   private aspect = 0;
@@ -36,13 +38,16 @@ export class ZenRenderer {
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
-    this.scene.background = new THREE.Color(PALETTE.deepPurple);
-    // Haze matching the background: distant props/grid fade INTO it, so the chunk
-    // load/cull boundary is invisible (props stream in from the fog, not pop in).
-    this.scene.fog = new THREE.FogExp2(PALETTE.deepPurple, ZEN.fogDensity);
+    // Fog tinted to the HORIZON colour so the grid floor fades into the sunset horizon
+    // (not a flat purple band) — the backdrop's sky gradient ends in the same colour, so
+    // floor and sky meet seamlessly. The backdrop sets scene.background (the sky gradient).
+    this.scene.fog = new THREE.FogExp2(ZEN.horizonColor, ZEN.fogDensity);
 
     this.camera = new THREE.PerspectiveCamera(ZEN.camFov, 1, ZEN.camNear, ZEN.camFar);
     this.camera.position.set(0, ZEN.camHeight, ZEN.camDistance);
+
+    // Serene sunset horizon (sky + sun + mountain ring) — kills the void, works 360°.
+    this.backdrop = new ZenBackdrop(this.scene, ZEN.worldSeed);
 
     // The neon synthwave grid is now a HEIGHTMAP surface (rolling hills), streamed +
     // recentred on the car. Seams perfectly because heights come from world coords.
@@ -100,6 +105,9 @@ export class ZenRenderer {
     // only on chunk crossings — cheap the rest of the time).
     this.terrain.update(v.x, v.z);
     this.scenery.update(v.x, v.z);
+    // Backdrop: horizon-lock the sunset sky/sun/mountains to the car so they stay on the
+    // far horizon as you drive (cheap — just a group translate).
+    this.backdrop.update(v.x, v.z);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
     // adrenaline). Two decoupled parts:
@@ -150,6 +158,7 @@ export class ZenRenderer {
   dispose(): void {
     this.scene.remove(this.car.group);
     this.car.dispose();
+    this.backdrop.dispose();
     this.terrain.dispose();
     this.scenery.dispose();
   }

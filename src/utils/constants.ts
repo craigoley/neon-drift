@@ -1893,12 +1893,32 @@ export const ZEN = {
    *  THE sensitivity knob. Lower = launches more easily / more often. High enough that
    *  cresting a gentle hill (even at top speed) stays under it: no accidental launches. */
   launchMinUpVel: 16,
-  /** Cap on the launch upward velocity → the MAX AIR (kept gentle so a steep ridge gives a
-   *  satisfying float, not a violent rocket). ~maxLaunchVel²/(2·airGravity) world units high. */
-  maxLaunchVel: 30,
+  /** Cap on the launch upward velocity → the MAX AIR. RAISED a notch (was 30) for a more
+   *  exhilarating but still ZEN float now that the air-shadow makes it READABLE. Only the
+   *  arc SIZE changes — the launch THRESHOLD (airGravity / launchMinUpVel) is untouched, so
+   *  gentle hills still never launch. ~maxLaunchVel²/(2·airGravity) world units high. */
+  maxLaunchVel: 38,
   /** Max nose-pitch (radians) while airborne — the car tips to follow its arc (nose up
    *  rising, down toward landing). Visual only. */
   airTiltMax: 0.5,
+  // --- air-shadow (the READABILITY fix): a glow ellipse pinned to the TERRAIN under the
+  //     car (NOT parented to it). Grounded, it sits under the car (reads as one); airborne,
+  //     the car rises but the shadow STAYS on the ground → a visible GAP = the "in the air"
+  //     cue. It shrinks + dims with height (a classic platformer shadow). ---
+  /** Shadow radius (world units) — a touch wider than the car so it reads as a soft spot. */
+  shadowRadius: 2.4,
+  /** Base opacity (grounded). */
+  shadowOpacity: 0.45,
+  /** Air height (world units) over which the shadow shrinks/dims to its minimum — about
+   *  the max arc, so at the apex the shadow is its smallest/dimmest. */
+  shadowFadeHeight: 9,
+  /** Shadow scale + opacity multiplier at full air height (smaller/dimmer = higher up). */
+  shadowMinScale: 0.45,
+  shadowMinOpacityMul: 0.4,
+  /** Lift above the terrain so the shadow doesn't z-fight the grid floor. */
+  shadowYOffset: 0.06,
+  /** Shadow glow colour (a purple-magenta ground spot, on the synthwave palette). */
+  shadowColor: 0xcc33ff,
   // --- mountains (PR4): a LOW-FREQUENCY mask decides WHERE the gentle hills rise into
   //     mountains (occasional clumps, not everywhere); there a PEAKY ridged octave scales
   //     the height up. Gentle hills stay everywhere the mask is low; the transition is a

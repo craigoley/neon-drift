@@ -17,7 +17,8 @@ import { zenFraming } from './ZenCamera';
 import { ZenScenery } from './ZenScenery';
 import { ZenTerrain } from './ZenTerrain';
 import { ZenBackdrop } from './ZenBackdrop';
-import { slopeAlong } from './ZenHeight';
+import { ZenShadow } from './ZenShadow';
+import { heightAt, slopeAlong } from './ZenHeight';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -28,6 +29,7 @@ export class ZenRenderer {
   private readonly backdrop: ZenBackdrop;
   private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
+  private readonly shadow: ZenShadow;
   private aspect = 0;
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
    *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
@@ -55,6 +57,9 @@ export class ZenRenderer {
 
     // Chunk-streamed scenery (the populated world the car drives through), on the terrain.
     this.scenery = new ZenScenery(this.scene);
+
+    // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
+    this.shadow = new ZenShadow(this.scene);
 
     this.car = new CarMesh(car);
     // YXZ so the slope PITCH (rotation.x) is applied about the already-yawed lateral
@@ -114,6 +119,10 @@ export class ZenRenderer {
     // Backdrop: horizon-lock the sunset sky/sun/mountains to the car so they stay on the
     // far horizon as you drive (cheap — just a group translate).
     this.backdrop.update(v.x, v.z);
+    // Air-shadow: pin a glow spot to the terrain under the car. Airborne, the car rises but
+    // the shadow stays on the ground → a visible gap (the readable "in the air" cue).
+    const groundY = heightAt(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
+    this.shadow.update(v.x, groundY, v.z, v.y - groundY);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
     // adrenaline). Two decoupled parts:
@@ -165,6 +174,7 @@ export class ZenRenderer {
     this.scene.remove(this.car.group);
     this.car.dispose();
     this.backdrop.dispose();
+    this.shadow.dispose();
     this.terrain.dispose();
     this.scenery.dispose();
   }

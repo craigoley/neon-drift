@@ -1209,6 +1209,140 @@ export const BIOME_CYCLE = {
   accentTintStrength: 0.18,
 } as const;
 
+/**
+ * ZEN-LOCAL biome palettes — the free-roam world's themed REGIONS. Distinct from
+ * the racing `BIOMES` on purpose: Zen is about SERENITY, so every biome here reads
+ * calm. The big change is the old acid-green "Toxic" wasteland → a CALM aurora-green
+ * (slot 2, `aurora`): same green family, but desaturated + deepened so it glows
+ * gently instead of buzzing. Keeping a Zen-local copy (rather than mutating `BIOMES`)
+ * leaves the racing look untouched AND lets Zen tune any biome for calm independently.
+ *
+ * ORDER MATTERS: `biomeAt` maps a low-frequency noise field's AMPLITUDE to these
+ * indices (valleys → slot 0, peaks → slot 3), and value-noise spends most of its
+ * time mid-range — so the two everyday-calm biomes (Midnight night, Aurora) sit in
+ * the common middle slots (1, 2) and the two "special" looks (Sunset basins, Dawn
+ * summits) sit at the rarer extremes (0, 3). The cycle's 3↔0 seam (Dawn↔Sunset) thus
+ * never borders directly in space (peaks don't touch valleys) — no jarring jump.
+ */
+export const ZEN_BIOMES: readonly BiomeDef[] = [
+  {
+    id: 'sunset',
+    displayName: 'Sunset',
+    gradient: SUN.gradient,
+    gridCenter: PALETTE.magenta,
+    gridLine: PALETTE.cyan,
+    fog: PALETTE.deepPurple,
+    mountain: PALETTE.cyan,
+    starIntensity: 0.0,
+    accent: 0xff66ff,
+    audioTone: 0.7,
+  },
+  {
+    id: 'midnight',
+    displayName: 'Midnight',
+    gradient: [
+      { at: 0.0, color: '#9fb6ff' },
+      { at: 0.3, color: '#5566cc' },
+      { at: 0.58, color: '#3a3a8a' },
+      { at: 0.82, color: '#241a5a' },
+      { at: 1.0, color: '#03001a' },
+    ],
+    gridCenter: 0x6a4cff,
+    gridLine: 0x2b6fff,
+    fog: 0x05001a,
+    mountain: 0x3a66cc,
+    starIntensity: 1.0,
+    accent: 0x6688ff,
+    audioTone: 0.15,
+  },
+  {
+    id: 'aurora',
+    displayName: 'Aurora',
+    // RETINTED from racing 'Toxic': the acid wasteland (#9bff3a / 0x00ff88) softened
+    // to a serene forest-aurora green — desaturated + deepened so it reads as a calm
+    // green night with a gentle glow, not a hazard zone.
+    gradient: [
+      { at: 0.0, color: '#bdf5d6' },
+      { at: 0.3, color: '#79d9a6' },
+      { at: 0.58, color: '#3fae84' },
+      { at: 0.82, color: '#1c6f56' },
+      { at: 1.0, color: '#04130d' },
+    ],
+    gridCenter: 0x66e6a8,
+    gridLine: 0x33b98a,
+    fog: 0x07180f,
+    mountain: 0x4ec99a,
+    starIntensity: 0.55, // aurora night — stars glow through
+    accent: 0x8af0bf,
+    audioTone: 0.5,
+  },
+  {
+    id: 'dawn',
+    displayName: 'Dawn',
+    gradient: [
+      { at: 0.0, color: '#fff0c0' },
+      { at: 0.3, color: '#ffb86b' },
+      { at: 0.58, color: '#ff8aa6' },
+      { at: 0.82, color: '#ff5e9c' },
+      { at: 1.0, color: '#2a0a2a' },
+    ],
+    gridCenter: 0xff6aa8,
+    gridLine: 0xffac66,
+    fog: 0x2a0a24,
+    mountain: 0xff99cc,
+    starIntensity: 0.1,
+    accent: 0xffaa88,
+    audioTone: 0.85,
+  },
+] as const;
+
+/**
+ * Zen BIOME REGION selection + transition cadence. `biomeAt(x, z)` samples ONE
+ * low-frequency value-noise octave (world-keyed → seamless + deterministic) and
+ * amplitude-bands it into the 4 ZEN_BIOMES, blending smoothly across band edges.
+ * Tuned so a region reads as a PLACE you drive into (~2500u ≈ 25s at cruise), not a
+ * flicker. (See ZenBiome.ts — reuses the racing updateBiome slot/from/to/blend math.)
+ */
+export const ZEN_BIOME = {
+  /** Region-selection noise frequency (1 / wavelength). LOW → broad regions; tuned with
+   *  the 4-way amplitude banding so a single biome holds for ~2500u of roaming. */
+  noiseFrequency: 0.00033,
+  /** Seed offset so biome regions are decorrelated from terrain/mask/ramp noise. */
+  seedOffset: 0x10937,
+  /** Fraction of a band (at its top edge) spent blending into the next biome — the
+   *  smooth ~hundreds-of-units cross-fade so a region change is a glide, not a pop. */
+  transitionFraction: 0.35,
+  /** Rendering throttle: re-apply the blended palette only once `blend` advances by at
+   *  least this much. Higher than the racing 0.02 — a Zen apply repaints TWO canvas
+   *  textures (sky + sun), so we coalesce a touch harder for mobile headroom. */
+  repaintBlendStep: 0.03,
+  /** How strongly props/scenery pick up the biome accent (multiplicative cast). LOW —
+   *  a faint tint, never a recolour. */
+  accentTintStrength: 0.2,
+  /** How much darker the sky's TOP is than the horizon (mix toward black). Gives each
+   *  biome a natural overhead-dark → horizon-lit gradient derived from its fog colour. */
+  skyTopDarken: 0.55,
+} as const;
+
+/** Zen free-roam STARFIELD — a 360° dome of seeded points around the camera, brightness
+ *  driven by the active biome's starIntensity (Midnight full, Sunset none). Distinct from
+ *  the racing STARFIELD (forward-locked box) — Zen's camera faces any direction. */
+export const ZEN_STARS = {
+  /** Number of stars (fixed buffer — allocated once, never grows). */
+  count: 480,
+  /** Radius (world units) of the star dome around the camera — just inside the far plane,
+   *  well beyond the mountain ring so stars read as the deep sky. */
+  radius: 1500,
+  /** Lowest the dome dips toward the horizon, as a fraction of radius (0 = horizon plane,
+   *  1 = straight up). Keeps stars in the UPPER sky, none below the mountains. */
+  minHeightFraction: 0.12,
+  /** Point size (world units) and base (full-intensity) opacity. */
+  size: 2.6,
+  baseOpacity: 0.9,
+  /** Render order — behind the sun + mountains. */
+  renderOrder: -3,
+} as const;
+
 /** Star-field backdrop (procedural points high in the night sky). Brightness is
  *  biome-driven (BiomeDef.starIntensity); positions are seeded + static. */
 export const STARFIELD = {

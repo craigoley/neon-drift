@@ -88,19 +88,55 @@ function ridgedAt(seed: number, x: number, z: number): number {
 }
 
 /**
+ * RAMP / DUNE contribution at (x, z) — a smooth raised dome where a SPARSE low-frequency
+ * cell hash has placed a designed launch spot. 0 almost everywhere (a delight you stumble
+ * on, not litter). At most one ramp per `rampCellSize` cell; its centre is jittered but kept
+ * ≥ rampRadius from the cell edges so the dome lives WHOLLY inside its cell — a point need
+ * only check its OWN cell (cheap) and the contribution is CONTINUOUS (the raised-cosine dome
+ * blends to 0 with 0 slope at its rim, and is 0 across cell boundaries → seams like the rest
+ * of heightAt). Gated to GENTLE terrain (mask ≤ rampMaxMask) so you launch UP-AND-OUT into
+ * landable space, never into a mountain. Exported for the renderer tint + tests.
+ */
+export function rampContribution(seed: number, x: number, z: number): number {
+  const cs = ZEN.rampCellSize;
+  const cx = Math.floor(x / cs);
+  const cz = Math.floor(z / cs);
+  const key = (Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663)) | 0;
+  const rseed = (seed + 91331) | 0; // decorrelate ramp placement from hills/mask/mountains
+  // Sparse: does this cell carry a ramp at all?
+  if ((hashNoise(rseed, key) + 1) * 0.5 > ZEN.rampChance) return 0;
+  // Ramp centre, jittered but kept a rampRadius margin off the cell edges.
+  const m = ZEN.rampRadius;
+  const jx = (hashNoise(rseed, (key * 2 + 1) | 0) + 1) * 0.5;
+  const jz = (hashNoise(rseed, (key * 2 + 2) | 0) + 1) * 0.5;
+  const centerX = cx * cs + lerp(m, cs - m, jx);
+  const centerZ = cz * cs + lerp(m, cs - m, jz);
+  const dx = x - centerX;
+  const dz = z - centerZ;
+  const d = Math.sqrt(dx * dx + dz * dz);
+  if (d >= m) return 0; // outside the dome → nothing (the common case in a ramp cell)
+  // GENTLE terrain only — gate on the mask at the CENTRE (constant for the whole dome, so it
+  // is present-or-absent as a unit; no per-point clipping that would crack continuity).
+  if (maskAt(seed, centerX, centerZ) > ZEN.rampMaxMask) return 0;
+  // Raised-cosine dome: 1 at the centre → 0 at the rim, 0 slope at the rim (smooth blend).
+  return ZEN.rampHeight * 0.5 * (1 + Math.cos((Math.PI * d) / m));
+}
+
+/**
  * Continuous terrain height at world (x, z) — keyed to world coords → seamless across
  * chunks and deterministic per seed.
- *   height = gentle_hills + mask_ramp × mountain_amplitude × ridged_peaks
+ *   height = gentle_hills + ramp_dome + mask_ramp × mountain_amplitude × ridged_peaks
  * Gentle ROLLING hills everywhere; OCCASIONAL mountains rise where the low-frequency mask
- * is high, leading up smoothly. The hills baseline is untouched where the mask is low —
- * which is the majority of the world (Craig keeps the gradual hills he loves).
+ * is high, leading up smoothly; SPARSE ramps/dunes add designed launch spots in the gentle
+ * majority. The hills baseline is untouched where the mask is low (Craig keeps his hills).
  */
 export function heightAt(seed: number, x: number, z: number): number {
   const hills = hillsAt(seed, x, z);
+  const ramp = rampContribution(seed, x, z);
   const mask = maskAt(seed, x, z);
-  // Majority of the world: pure gentle hills — and we skip the ridged octaves (cheap).
-  if (mask <= 0) return hills;
-  return hills + mask * ZEN.mountainAmplitude * ridgedAt(seed, x, z);
+  // Majority of the world: gentle hills (+ any ramp) — skip the ridged octaves (cheap).
+  if (mask <= 0) return hills + ramp;
+  return hills + ramp + mask * ZEN.mountainAmplitude * ridgedAt(seed, x, z);
 }
 
 /**

@@ -1889,21 +1889,19 @@ export const ZEN = {
   terrainTiltFactor: 1,
   /** Clamp (radians) on the visual pitch tilt so steep transients never over-rotate. */
   terrainTiltMax: 0.28,
-  // --- air-time (catch air off SHARP crests at speed; gentle/zen, never a violent launch
-  //     or crash landing). Gentle hills stay grounded — the surface there falls away far
-  //     slower than gravity, so the launch test never fires. ---
-  /** Downward acceleration in flight (units/s²). ALSO the crest-sharpness threshold: the
-   *  car launches only where the surface drops away FASTER than this (a sharp peak), so
-   *  gentle hills never throw you. Lower = more air + easier launches (heavier vs floatier). */
+  // --- air-time (DETACH-and-arc off crests; gentle/zen, never a violent launch or crash
+  //     landing). The car leaves the ground whenever the surface drops away FASTER than
+  //     gravity (so it can't stay glued without snapping down) and ARCS off under gravity —
+  //     a gentle jump. Gentle hills + mild downslopes drop slower than gravity → stay
+  //     grounded + smooth. THE knob (airGravity) is both the in-flight gravity AND the
+  //     detach threshold — one physical gravity, so it's coherent. ---
+  /** Downward acceleration in flight (units/s²). ALSO the DETACH threshold: the car arcs off
+   *  wherever the surface drops away faster than THIS. Lower = floatier arcs + air off
+   *  gentler crests (detaches more readily); higher = heavier, air only off sharper crests. */
   airGravity: 80,
-  /** Minimum upward surface velocity (climb rate = slope × speed) needed to catch air —
-   *  THE sensitivity knob. Lower = launches more easily / more often. High enough that
-   *  cresting a gentle hill (even at top speed) stays under it: no accidental launches. */
-  launchMinUpVel: 16,
-  /** Cap on the launch upward velocity → the MAX AIR. RAISED a notch (was 30) for a more
-   *  exhilarating but still ZEN float now that the air-shadow makes it READABLE. Only the
-   *  arc SIZE changes — the launch THRESHOLD (airGravity / launchMinUpVel) is untouched, so
-   *  gentle hills still never launch. ~maxLaunchVel²/(2·airGravity) world units high. */
+  /** Cap on the detach upward velocity → the MAX AIR off the steepest crests/ramps (a sharp
+   *  ramp face would otherwise fling huge upward velocity). Keeps the biggest arc gentle/zen
+   *  and readable. Small crests detach with small velocity, far under this cap. */
   maxLaunchVel: 38,
   /** Max nose-pitch (radians) while airborne — the car tips to follow its arc (nose up
    *  rising, down toward landing). Visual only. */

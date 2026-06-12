@@ -101,10 +101,12 @@ export function followSurface(v: ZenVehicle, targetY: number, dt: number): ZenVe
  * car is over now); `slope` = rise/run along the heading (0 while airborne).
  *
  * GROUNDED: ease onto the surface (followSurface) and carry the surface vertical velocity
- *   `vy = slope × speed`. LAUNCH when the surface falls away FASTER than gravity
- *   (`surfaceAccel < -airGravity`) while the car has real upward momentum
- *   (`vy > launchMinUpVel`): i.e. cresting a SHARP rise at speed. Gentle hills curve far
- *   too gently to trip this, so they stay grounded — no accidental air.
+ *   `vy = slope × speed`. DETACH when the surface falls away FASTER than gravity could pull
+ *   the car down (`surfaceAccel < -airGravity`): to stay glued there the car would have to
+ *   plunge faster than free-fall (the downward SNAP), so instead it leaves the ground and
+ *   ARCS off the crest under gravity. Cresting ANY rise that drops away fast gives air —
+ *   small crests small arcs, sharp peaks / ramps bigger (capped). Gentle hills + mild
+ *   downslopes drop slower than gravity → stay grounded, smooth (no accidental air).
  * AIRBORNE: a calm parabola — `vy -= airGravity·dt; y += vy·dt` — until `y` meets the
  *   terrain again, then LAND smoothly (grounded, vy 0; no crash, no speed penalty).
  *
@@ -128,20 +130,25 @@ export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt
   }
 
   // Grounded: how fast the surface is moving up/down under us, and how fast THAT is
-  // changing (the crest curvature × speed). vy holds last frame's surface velocity.
+  // changing. vy holds last frame's surface velocity.
   const surfaceVy = slope * v.speed;
   const surfaceAccel = (surfaceVy - v.vy) / dt;
-  if (v.vy > ZEN.launchMinUpVel && surfaceAccel < -ZEN.airGravity) {
-    // The ground drops away faster than we can fall → fly off the crest with our (capped,
-    // gentle) upward momentum.
+  // DETACH when the surface drops away FASTER than gravity could pull us down — i.e. the
+  // surface is accelerating downward harder than free-fall (`surfaceAccel < -airGravity`).
+  // To "stay glued" there the car would have to plunge faster than gravity = the downward
+  // SNAP. Instead we leave the ground and fall under gravity: a gentle ARC off the crest.
+  // Small crests → small arcs, sharp peaks / ramps → bigger arcs (capped); flat, uphill and
+  // mild downslopes drop slower than gravity → stay grounded + smooth. No upward-momentum
+  // gate: cresting a rise should always arc, not just when you're already climbing fast.
+  if (surfaceAccel < -ZEN.airGravity) {
     v.airborne = true;
-    v.vy = Math.min(v.vy, ZEN.maxLaunchVel);
+    v.vy = Math.min(v.vy, ZEN.maxLaunchVel); // detach with our current vertical velocity (capped)
     v.y += v.vy * dt;
     return v;
   }
 
   // Stay glued: ease onto the surface (PR3a feel), carry the surface velocity for the
-  // next frame's launch test.
+  // next frame's detach test.
   followSurface(v, groundY, dt);
   v.vy = surfaceVy;
   return v;

@@ -84,4 +84,12 @@ describe('Zen movement — calm tuning sanity', () => {
     expect(oneSec).toBeGreaterThan(ZEN.maxSpeed * 0.4); // responsive
     expect(oneSec).toBeLessThan(ZEN.maxSpeed + 1e-9); // but bounded
   });
+
+  it('full-throttle cruise actually REACHES the cap (accel co-tuned with maxSpeed)', () => {
+    // The cap only matters if the accel/friction equilibrium can reach it — verify cruising
+    // settles AT maxSpeed (not below), so the raised top speed is real.
+    const cruise = drive(0, 1, 1200).speed;
+    expect(cruise).toBeGreaterThan(ZEN.maxSpeed - 0.5);
+    expect(cruise).toBeLessThanOrEqual(ZEN.maxSpeed + 1e-9);
+  });
 });

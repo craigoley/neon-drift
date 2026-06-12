@@ -1769,13 +1769,15 @@ export const DEFAULT_SEED = 0x9e3779b9;
  */
 export const ZEN = {
   // --- movement (the keystone) ---
-  /** Top cruise speed (world units/s) — RAISED a notch for a faster-but-calm flow (was
-   *  70). The cap is the binding limit; `accel` was nudged up alongside it so the higher
-   *  cap is actually REACHED (the accel/friction equilibrium otherwise caps cruise ~74). */
-  maxSpeed: 84,
-  /** Forward acceleration (units/s²) at full throttle. RAISED (was 38) so cruise reaches
-   *  the higher maxSpeed rather than settling below it. */
-  accel: 46,
+  /** Top cruise speed (world units/s) — RAISED again (was 84) for a faster, more flowing
+   *  cruise. The cap is the binding limit; `accel` is co-tuned so the higher cap is actually
+   *  REACHED (the accel/friction equilibrium otherwise caps cruise below it). Faster cruise
+   *  → bigger/more-frequent crest arcs (#120: surfaceVy scales with speed) — dial airGravity
+   *  up if that gets too bouncy. */
+  maxSpeed: 96,
+  /** Forward acceleration (units/s²) at full throttle. RAISED (was 46) so cruise reaches the
+   *  higher maxSpeed rather than settling below it. */
+  accel: 52,
   /** Braking deceleration (units/s²) at full brake. */
   brakeAccel: 80,
   /** Per-second retained fraction of speed while coasting (glide-to-rest). */
@@ -1961,9 +1963,11 @@ export const ZEN = {
   rampChance: 0.28,
   /** Ramp radius (world units) — the dome's footprint (≈ rampRadius×2 across). */
   rampRadius: 20,
-  /** Ramp peak height (world units) above the surrounding terrain. Tuned with rampRadius so
-   *  the face slope reliably trips the air-time launch at cruise, but stays a GENTLE dune. */
-  rampHeight: 7,
+  /** Ramp peak height (world units) above the surrounding terrain. RAISED (was 7) so that
+   *  post-#120 — where EVERY crest gives a little gentle air — a ramp reads as a distinctly
+   *  BIGGER, intentional launch you aim for (you launch off a taller dune → more air than an
+   *  ambient crest hop). Still GENTLE + lands clean (mask-low placement + #118 soft landing). */
+  rampHeight: 11,
   /** Ramps only exist where the mountain mask is at/below this (i.e. GENTLE terrain), so the
    *  launch flings you UP-AND-OUT into open ground — never into a mountain face. */
   rampMaxMask: 0,

@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { createZenVehicle, updateVertical, updateZen } from '../ZenVehicle';
-import { heightAt, maskAt, slopeAlong } from '../ZenHeight';
+import { heightAt, slopeAlong } from '../ZenHeight';
 import { ZEN } from '../../utils/constants';
 
 const TICK = 1 / 60;
@@ -36,12 +36,42 @@ describe('Zen air-time — launch conditions', () => {
     expect(launched).toBe(false);
   });
 
-  it('too SLOW to launch even on a sharp crest (needs real upward momentum)', () => {
+  it('DETACHES off a crest even with LOW upward momentum (the old vy-gate is gone)', () => {
     const v = createZenVehicle();
-    v.speed = 10; // crawling
-    updateVertical(v, 0, 0.4, TICK);
-    updateVertical(v, 0, -0.4, TICK);
-    expect(v.airborne).toBe(false); // vy = 0.4×10 = 4 < launchMinUpVel → stays grounded
+    v.speed = 80;
+    updateVertical(v, 0, 0.1, TICK); // mild approach → vy carried = 8 (< the old gate 16)
+    expect(v.airborne).toBe(false);
+    updateVertical(v, 0, -0.3, TICK); // crest drops faster than gravity → detach anyway
+    expect(v.airborne).toBe(true); // arcs off the crest (used to snap down glued)
+  });
+
+  it('NO-SNAP: once it leaves a crest the downward velocity never exceeds free-fall', () => {
+    const v = createZenVehicle();
+    v.speed = 80;
+    updateVertical(v, 0, 0.2, TICK);
+    updateVertical(v, 0, -0.4, TICK); // crest → detach
+    expect(v.airborne).toBe(true);
+    let prevVy = v.vy;
+    for (let i = 0; i < 60; i++) {
+      updateVertical(v, -1000, 0, TICK); // groundY far below → keep falling
+      // the change in vertical velocity never drops faster than gravity (no glued snap)
+      expect(v.vy - prevVy).toBeGreaterThanOrEqual(-ZEN.airGravity * TICK - 1e-6);
+      prevVy = v.vy;
+    }
+  });
+
+  it('flat / uphill / gentle downslope stays GROUNDED (only fast-dropping crests detach)', () => {
+    for (const s of [0, 0.2, -0.1]) {
+      const v = createZenVehicle();
+      v.speed = 80;
+      v.vy = s * v.speed; // already settled on this slope (no first-frame transient)
+      let detached = false;
+      for (let i = 0; i < 30; i++) {
+        updateVertical(v, 0, s, TICK);
+        if (v.airborne) detached = true;
+      }
+      expect(detached).toBe(false); // a steady slope drops no faster than gravity → grounded
+    }
   });
 
   it('airborne is a PARABOLA that lands smoothly (no crash / no NaN / no speed penalty)', () => {
@@ -151,28 +181,38 @@ describe('Zen air-time — landing smooths the lurch (no teleport), clean landin
   });
 });
 
-describe('Zen air-time — gentle hills stay grounded over the REAL terrain', () => {
-  it('launches ONLY in steep/mountain terrain — gentle hills (mask off) never throw you', () => {
+describe('Zen air-time — over the REAL terrain: never snaps down faster than gravity', () => {
+  it('while airborne over real terrain the car falls under GRAVITY, never faster (no snap)', () => {
+    // The old bug glued the car to the descending surface and plunged it down a crest
+    // faster than free-fall. Drive the real seeded world; whenever airborne, the car's
+    // downward velocity can only grow at gravity. (That crests GIVE air on real terrain is
+    // covered by the ramp launch test; the synthetic tests above cover the detach trigger.)
     const v = createZenVehicle();
-    let gentleLaunches = 0;
-    let launches = 0;
-    for (let i = 0; i < 6000; i++) {
-      const slope = v.airborne
-        ? 0
-        : slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
-      updateZen(v, Math.sin(i * 0.005), 1, TICK, slope); // full throttle, lazy wandering
-      const groundY = heightAt(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
-      const wasAir = v.airborne;
-      updateVertical(v, groundY, slope, TICK);
-      if (!wasAir && v.airborne) {
-        launches++;
-        if (maskAt(ZEN.worldSeed, v.x, v.z) <= 0) gentleLaunches++; // launched on a GENTLE hill?
+    let prevVy = 0;
+    let airSamples = 0;
+    for (let trial = 0; trial < 8; trial++) {
+      v.x = trial * 1234;
+      v.z = trial * -911;
+      v.heading = trial * 0.8;
+      v.speed = ZEN.maxSpeed;
+      v.airborne = false;
+      v.vy = 0;
+      for (let i = 0; i < 1500; i++) {
+        const slope = v.airborne
+          ? 0
+          : slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+        updateZen(v, 0, 1, TICK, slope);
+        const groundY = heightAt(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
+        const wasAir = v.airborne;
+        updateVertical(v, groundY, slope, TICK);
+        if (wasAir && v.airborne) {
+          airSamples++;
+          expect(v.vy - prevVy).toBeGreaterThanOrEqual(-ZEN.airGravity * TICK - 1e-6);
+        }
+        prevVy = v.vy;
+        expect(Number.isNaN(v.y)).toBe(false);
       }
-      expect(Number.isNaN(v.y)).toBe(false);
     }
-    expect(gentleLaunches).toBe(0); // the gentle-hills majority NEVER launches (Craig's ask)
-    // (launches may be 0+ depending on the path; the synthetic test above proves the
-    //  mechanism. This guards the no-accidental-launch invariant on real terrain.)
-    expect(launches).toBeGreaterThanOrEqual(0);
+    expect(airSamples).toBeGreaterThan(0); // the drives DID catch air (so the guarantee was exercised)
   });
 });

@@ -116,6 +116,41 @@ describe('Zen air-time — the air-shadow GAP + the raised arc', () => {
   });
 });
 
+describe('Zen air-time — landing smooths the lurch (no teleport), clean landings unchanged', () => {
+  it('a BIG landing discontinuity (flew into high terrain) SETTLES over frames, not a teleport', () => {
+    const v = createZenVehicle();
+    v.speed = 80;
+    v.airborne = true;
+    v.vy = -5;
+    v.y = 4; // car low...
+    const groundY = 22; // ...but the far-side terrain it flew into is 18u higher
+    const before = v.y;
+    updateVertical(v, groundY, 0, TICK); // the landing frame
+    expect(v.airborne).toBe(false);
+    expect(v.y - before).toBeLessThanOrEqual(ZEN.maxLandStep + 0.2); // NOT an 18u teleport
+    // grounded frames settle the car up to the surface, each step bounded by the cap
+    let prev = v.y;
+    for (let i = 0; i < 60; i++) {
+      updateVertical(v, groundY, 0, TICK);
+      expect(v.y - prev).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // every step capped
+      prev = v.y;
+    }
+    expect(v.y).toBeCloseTo(groundY, 1); // ends ON the ground — no permanent hover
+    expect(v.airborne).toBe(false);
+  });
+
+  it('a normal touch-down still lands INSTANTLY (clean landings feel unchanged)', () => {
+    const v = createZenVehicle();
+    v.speed = 80;
+    v.airborne = true;
+    v.vy = -10;
+    v.y = 0.1; // a hair above the ground, descending
+    updateVertical(v, 0, 0, TICK); // groundY 0, tiny gap < maxLandStep
+    expect(v.airborne).toBe(false);
+    expect(v.y).toBe(0); // closed fully in one frame — immediate, not laggy
+  });
+});
+
 describe('Zen air-time — gentle hills stay grounded over the REAL terrain', () => {
   it('launches ONLY in steep/mountain terrain — gentle hills (mask off) never throw you', () => {
     const v = createZenVehicle();

@@ -37,6 +37,10 @@ export class ZenRenderer {
   /** Eased speed factor (0..1) driving the gentle distance/FOV swing; smoothed so brief
    *  throttle changes don't pump the framing. */
   private speedFactor = 0;
+  /** Eased look-at target height — tracks the car's Y at the SAME rate as position.y, so the
+   *  rig moves as one smooth unit. Easing this (vs aiming at the raw v.y) absorbs any v.y
+   *  discontinuity (e.g. a landing settle) instead of whipping the whole view. */
+  private lookY = ZEN.camLookAtHeight;
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
@@ -146,7 +150,11 @@ export class ZenRenderer {
     // Height eases toward the car's surface height + the chase height, so cresting a hill
     // is a smooth vertical glide (the eased follow), never a jarring snap.
     this.camera.position.y += (v.y + ZEN.camHeight - this.camera.position.y) * f;
-    this.camera.lookAt(v.x, v.y + ZEN.camLookAtHeight, v.z);
+    // Ease the look-at height at the SAME rate as position.y (was aimed at the raw v.y —
+    // a landing snap whipped the view ~41°/frame). Now a v.y discontinuity is absorbed into
+    // a smooth catch-up: position + look move as one unit, no whole-frame lurch.
+    this.lookY += (v.y + ZEN.camLookAtHeight - this.lookY) * f;
+    this.camera.lookAt(v.x, this.lookY, v.z);
 
     // Apply the gentle FOV widen (only touch the projection when it actually moves).
     if (Math.abs(fov - this.camera.fov) > 1e-3) {

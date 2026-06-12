@@ -79,6 +79,43 @@ describe('Zen air-time — launch conditions', () => {
   });
 });
 
+describe('Zen air-time — the air-shadow GAP + the raised arc', () => {
+  it('grounded: car Y == terrain (shadow under the car); airborne: car Y ABOVE it (a gap)', () => {
+    const v = createZenVehicle();
+    v.speed = 80;
+    // grounded on flat ground (groundY 0): the car sits on the surface → no gap
+    updateVertical(v, 0, 0, TICK);
+    expect(v.airborne).toBe(false);
+    expect(v.y).toBe(0); // car Y == groundY → the terrain-anchored shadow is under the car
+    // launch off a sharp crest
+    updateVertical(v, 0, 0.4, TICK);
+    updateVertical(v, 0, -0.4, TICK);
+    expect(v.airborne).toBe(true);
+    // mid-flight the car rises clearly ABOVE the terrain (groundY 0) → the shadow GAP
+    let maxGap = 0;
+    for (let i = 0; i < 60 && v.airborne; i++) {
+      updateVertical(v, 0, 0, TICK);
+      maxGap = Math.max(maxGap, v.y - 0); // car Y − terrain Y (where the shadow is drawn)
+    }
+    expect(maxGap).toBeGreaterThan(2); // a clearly visible gap opens between car + shadow
+  });
+
+  it('the raised maxLaunchVel gives a BIGGER but bounded arc (exhilarating, still zen)', () => {
+    const v = createZenVehicle();
+    v.speed = 80;
+    v.airborne = true;
+    v.vy = ZEN.maxLaunchVel;
+    let maxY = 0;
+    for (let i = 0; i < 300 && v.airborne; i++) {
+      updateVertical(v, 0, 0, TICK);
+      maxY = Math.max(maxY, v.y);
+    }
+    const arcCap = (ZEN.maxLaunchVel * ZEN.maxLaunchVel) / (2 * ZEN.airGravity);
+    expect(maxY).toBeGreaterThan(7); // bigger than the old ~5.6u arc
+    expect(maxY).toBeLessThanOrEqual(arcCap + 0.2); // but BOUNDED by the cap — not orbit
+  });
+});
+
 describe('Zen air-time — gentle hills stay grounded over the REAL terrain', () => {
   it('launches ONLY in steep/mountain terrain — gentle hills (mask off) never throw you', () => {
     const v = createZenVehicle();

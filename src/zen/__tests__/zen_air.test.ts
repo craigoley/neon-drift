@@ -1,9 +1,9 @@
 /**
- * Zen AIR-TIME (the car catches air off sharp crests at speed, then lands smoothly). The
- * FEEL is a phone playtest, but the launch CONDITION + flight physics are unit-testable:
- * a sharp crest at speed launches (capped, gentle); a gentle hill never does; too-slow
- * never does; airborne is a clean parabola that lands without crash/penalty/NaN; and over
- * the real terrain the gentle (mask-off) majority NEVER launches.
+ * Zen AIR-TIME (the car detaches and arcs off crests, then lands smoothly). The FEEL is a
+ * phone playtest, but the detach CONDITION + flight physics are unit-testable: a sharp
+ * crest detaches (capped, gentle); a gentle hill never does; flat/uphill/mild-downslope
+ * stays grounded; airborne is a clean parabola that lands without crash/penalty/NaN;
+ * and over the real terrain the car never snaps down faster than gravity.
  */
 import { describe, expect, it } from 'vitest';
 import { createZenVehicle, updateVertical, updateZen } from '../ZenVehicle';

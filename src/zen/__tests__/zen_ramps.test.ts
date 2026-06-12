@@ -109,4 +109,31 @@ describe('Zen ramps — continuous (seamless) + reliably launch at cruise', () =
     expect(launched).toBe(true); // a ramp is terrain SHAPED to launch you — it does
     expect(maxAir).toBeGreaterThan(3); // a satisfying arc, not a nudge
   });
+
+  it('a ramp is a DISTINCTLY bigger jump than an ambient crest hop, and LANDS soft', () => {
+    // Post-#120 every crest gives a little gentle air (ambient hops are sub-unit). A ramp
+    // must read as THE bigger intentional jump — and still settle softly (#118) on landing.
+    const r = findRamp();
+    const v = createZenVehicle();
+    v.x = r.x;
+    v.z = r.z + 80;
+    v.heading = 0;
+    v.speed = ZEN.maxSpeed;
+    let maxAir = 0;
+    let maxSettleStep = 0;
+    let prevY = v.y;
+    for (let i = 0; i < 400; i++) {
+      const slope = v.airborne ? 0 : slopeAlong(SEED, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+      updateZen(v, 0, 1, TICK, slope);
+      const groundY = heightAt(SEED, v.x, v.z) + ZEN.rideHeight;
+      const wasAir = v.airborne;
+      updateVertical(v, groundY, slope, TICK);
+      if (v.airborne) maxAir = Math.max(maxAir, v.y - groundY);
+      if (!v.airborne && wasAir === false) maxSettleStep = Math.max(maxSettleStep, Math.abs(v.y - prevY)); // grounded settle step
+      prevY = v.y;
+    }
+    expect(maxAir).toBeGreaterThan(6); // a BIG jump — far above the ~sub-unit ambient crest hops
+    expect(v.airborne).toBe(false); // came back down — lands, no permanent hover
+    expect(maxSettleStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // grounded settle stays #118-soft
+  });
 });

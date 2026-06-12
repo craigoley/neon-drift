@@ -88,7 +88,11 @@ export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: nu
  * smoothed so tiny gradient changes don't jitter. Mutates and returns `v`.
  */
 export function followSurface(v: ZenVehicle, targetY: number, dt: number): ZenVehicle {
-  v.y += (targetY - v.y) * smoothFollow(ZEN.terrainFollowLerp, dt);
+  // Cap the per-frame step so a big residual gap (e.g. settling after a flew-into-a-wall
+  // landing) is spread over frames, never a teleport. Real hill/descent tracking moves far
+  // less than maxLandStep per frame, so this is a no-op for normal grounded driving.
+  const step = (targetY - v.y) * smoothFollow(ZEN.terrainFollowLerp, dt);
+  v.y += clamp(step, -ZEN.maxLandStep, ZEN.maxLandStep);
   return v;
 }
 
@@ -112,7 +116,11 @@ export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt
     v.vy -= ZEN.airGravity * dt;
     v.y += v.vy * dt;
     if (v.y <= groundY) {
-      v.y = groundY; // land smoothly on the surface
+      // Land — but CAP the upward correction so flying into a high far-side wall settles
+      // over a few frames instead of teleporting the car up ~18u in one frame (the lurch).
+      // A normal touch-down (gap < maxLandStep) still snaps up instantly; followSurface
+      // finishes any larger settle on the grounded frames below.
+      v.y += Math.min(groundY - v.y, ZEN.maxLandStep);
       v.vy = 0;
       v.airborne = false;
     }

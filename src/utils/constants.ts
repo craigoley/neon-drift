@@ -1863,6 +1863,13 @@ export const ZEN = {
   /** Per-second ease of the car's Y toward the surface — tight enough to hug the ground,
    *  smooth enough that tiny gradient changes don't jitter the car/camera. */
   terrainFollowLerp: 12,
+  /** Max per-frame correction of the car's Y toward the surface (world units). Bounds the
+   *  LANDING discontinuity: flying off a ridge INTO higher far-side terrain used to snap the
+   *  car's Y up ~18u in one frame (a teleport that whipped the camera). The cap spreads a big
+   *  snap over a few frames (smooth settle) while leaving clean touch-downs instant — it only
+   *  bites on gaps the ease would close by > this in one frame (~14u), which real grounded
+   *  hill/descent tracking never reaches. */
+  maxLandStep: 2.5,
   /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills
    *  AND peaks (raised from 6 for PR4 mountains to read without spiking), more vertices.
    *  The windowed line-grid is rebuilt only on chunk crossings. */

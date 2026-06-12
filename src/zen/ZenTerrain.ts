@@ -8,12 +8,16 @@
  * rebuilt only on chunk-boundary CROSSINGS — rather than N per-chunk meshes (N draw
  * calls). Between crossings the surface is static and world-correct; the far edge sits
  * in heavy fog, so the recenter at a crossing is invisible (same trick as the props).
+ *
+ * RAMP TINT: vertices on a ramp/dune lerp the grid colour toward rampTintColor by their
+ * ramp height, so a launch spot reads as an inviting glowing dune you can aim for.
  */
 
 import * as THREE from 'three';
 import { ZEN } from '../utils/constants';
+import { clamp } from '../utils/math';
 import { worldToChunk } from './ZenWorld';
-import { heightAt } from './ZenHeight';
+import { heightAt, rampContribution } from './ZenHeight';
 
 export class ZenTerrain {
   private readonly seed: number;
@@ -21,8 +25,13 @@ export class ZenTerrain {
   private readonly mesh: THREE.LineSegments;
   private readonly mat: THREE.LineBasicMaterial;
   private readonly positions: Float32Array;
-  /** Lattice heights reused each rebuild (no per-rebuild allocation). */
+  private readonly colors: Float32Array;
+  /** Lattice heights + ramp amounts (0..1) reused each rebuild (no per-rebuild allocation). */
   private readonly heights: Float32Array;
+  private readonly rampAmt: Float32Array;
+  /** Grid + ramp-tint colours as plain RGB (no per-vertex Color allocation). */
+  private readonly grid = new THREE.Color(ZEN.gridColor);
+  private readonly tint = new THREE.Color(ZEN.rampTintColor);
   /** Cells per side of the windowed grid = (2R+1) chunks × segments-per-chunk. */
   private readonly gridN: number;
   private readonly segSize: number;
@@ -39,11 +48,14 @@ export class ZenTerrain {
     // 2·(N+1)·N grid-line segments (horizontals + verticals), 2 verts each, xyz each.
     const segCount = 2 * (N + 1) * N;
     this.positions = new Float32Array(segCount * 2 * 3);
+    this.colors = new Float32Array(segCount * 2 * 3);
     this.heights = new Float32Array((N + 1) * (N + 1));
+    this.rampAmt = new Float32Array((N + 1) * (N + 1));
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
+    this.geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
 
     this.mat = new THREE.LineBasicMaterial({
-      color: ZEN.gridColor,
+      vertexColors: true, // grid colour, tinting toward rampTintColor on ramp surfaces
       transparent: true,
       opacity: ZEN.terrainOpacity,
       fog: true,
@@ -73,41 +85,52 @@ export class ZenTerrain {
     const originX = (cx - ZEN.chunkRadius) * ZEN.chunkSize;
     const originZ = (cz - ZEN.chunkRadius) * ZEN.chunkSize;
 
-    // Sample the continuous height at every lattice point once.
+    // Sample the continuous height + ramp amount at every lattice point once.
     const h = this.heights;
+    const ra = this.rampAmt;
     for (let j = 0; j <= N; j++) {
       const wz = originZ + j * seg;
       for (let i = 0; i <= N; i++) {
-        h[j * stride + i] = heightAt(this.seed, originX + i * seg, wz);
+        const wx = originX + i * seg;
+        const idx = j * stride + i;
+        h[idx] = heightAt(this.seed, wx, wz);
+        ra[idx] = clamp(rampContribution(this.seed, wx, wz) / ZEN.rampHeight, 0, 1);
       }
     }
 
-    // Emit grid-line segments referencing the sampled heights.
     const pos = this.positions;
+    const col = this.colors;
+    const gr = this.grid.r, gg = this.grid.g, gb = this.grid.b;
+    const tr = this.tint.r, tg = this.tint.g, tb = this.tint.b;
     let p = 0;
+    // Write one vertex: position (wx, height[li], wz) + grid→tint colour by rampAmt[li].
+    const vert = (wx: number, wz: number, li: number): void => {
+      const a = ra[li];
+      pos[p] = wx;
+      pos[p + 1] = h[li];
+      pos[p + 2] = wz;
+      col[p] = gr + (tr - gr) * a;
+      col[p + 1] = gg + (tg - gg) * a;
+      col[p + 2] = gb + (tb - gb) * a;
+      p += 3;
+    };
+
     for (let j = 0; j <= N; j++) {
       const wz = originZ + j * seg;
       for (let i = 0; i < N; i++) {
-        pos[p++] = originX + i * seg;
-        pos[p++] = h[j * stride + i];
-        pos[p++] = wz;
-        pos[p++] = originX + (i + 1) * seg;
-        pos[p++] = h[j * stride + i + 1];
-        pos[p++] = wz;
+        vert(originX + i * seg, wz, j * stride + i);
+        vert(originX + (i + 1) * seg, wz, j * stride + i + 1);
       }
     }
     for (let i = 0; i <= N; i++) {
       const wx = originX + i * seg;
       for (let j = 0; j < N; j++) {
-        pos[p++] = wx;
-        pos[p++] = h[j * stride + i];
-        pos[p++] = originZ + j * seg;
-        pos[p++] = wx;
-        pos[p++] = h[(j + 1) * stride + i];
-        pos[p++] = originZ + (j + 1) * seg;
+        vert(wx, originZ + j * seg, j * stride + i);
+        vert(wx, originZ + (j + 1) * seg, (j + 1) * stride + i);
       }
     }
     this.geo.attributes.position.needsUpdate = true;
+    this.geo.attributes.color.needsUpdate = true;
   }
 
   /** Vertex count of the line buffer (perf funnel). */

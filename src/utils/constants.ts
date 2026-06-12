@@ -1951,6 +1951,27 @@ export const ZEN = {
   mountainOctaves: 2,
   mountainGain: 0.5,
   mountainLacunarity: 2.2,
+  // --- ramps / dunes (discovery #1): SPARSE, DESIGNED launch spots — a smooth raised dome
+  //     added into heightAt, placed rarely (low-freq cell hash, like the mask) in GENTLE
+  //     regions so you launch up-and-out into landable space. Reuses the air-time launch +
+  //     #117 shadow + #118 lurch-free landing. A delight you stumble on, NOT a stunt park. ---
+  /** Side length (world units) of a ramp-placement cell. Big = sparse. At most ONE ramp per
+   *  cell. Craig's "how spread out" knob. */
+  rampCellSize: 460,
+  /** Probability (0..1) a cell HAS a ramp. Start SPARSE — a find, not litter. With cellSize
+   *  460 and 0.28, that's roughly one ramp per ~870u of roaming. Craig's "how often" knob. */
+  rampChance: 0.28,
+  /** Ramp radius (world units) — the dome's footprint (≈ rampRadius×2 across). */
+  rampRadius: 20,
+  /** Ramp peak height (world units) above the surrounding terrain. Tuned with rampRadius so
+   *  the face slope reliably trips the air-time launch at cruise, but stays a GENTLE dune. */
+  rampHeight: 7,
+  /** Ramps only exist where the mountain mask is at/below this (i.e. GENTLE terrain), so the
+   *  launch flings you UP-AND-OUT into open ground — never into a mountain face. */
+  rampMaxMask: 0,
+  /** Ramp-surface grid TINT: ramp vertices lerp toward this colour by their ramp height, so
+   *  a dune reads as an inviting "launch off me" glow you can aim for (a discovery hook). */
+  rampTintColor: 0xff66cc,
   // --- obstacle collision: props are SOLID — DEFLECT/SLIDE (replaces the #113 pass-through
   //     slowdown). The car can't enter a prop's circle; it's pushed to the edge along the
   //     normal and slides around (tangential motion preserved). No hard stop, no death. ---

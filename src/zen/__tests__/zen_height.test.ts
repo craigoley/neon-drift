@@ -5,7 +5,7 @@
  * derivative is well-formed. (The bounded slope EFFECT is tested in zen_vehicle.)
  */
 import { describe, expect, it } from 'vitest';
-import { heightAt, maskAt, slopeAlong } from '../ZenHeight';
+import { heightAt, maskAt, rampContribution, slopeAlong } from '../ZenHeight';
 import { ZEN } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
@@ -81,8 +81,10 @@ describe('Zen terrain — mountains rise occasionally, hills stay everywhere', (
       total++;
       if (maskAt(SEED, x, z) <= 0) {
         gentleSamples++;
-        // Where the mask is off, height is EXACTLY the gentle hills — within the old band.
-        expect(Math.abs(heightAt(SEED, x, z))).toBeLessThanOrEqual(bound + 1e-6);
+        // Where the mask is off, the height is the gentle hills + any (sparse, additive)
+        // ramp dome. Subtract the ramp → the hills BASELINE is still within the old band.
+        const baseline = heightAt(SEED, x, z) - rampContribution(SEED, x, z);
+        expect(Math.abs(baseline)).toBeLessThanOrEqual(bound + 1e-6);
       }
     }
     // Mountains are OCCASIONAL: the gentle-hills majority dominates the world.

@@ -1297,6 +1297,52 @@ export const ZEN_BIOMES: readonly BiomeDef[] = [
 ] as const;
 
 /**
+ * Per-biome TERRAIN CHARACTER params (indexed parallel to ZEN_BIOMES). heightAt blends
+ * these by the SAME biomeAt weight that drives the look, so the world FEELS different to
+ * drive per region — not just looks different. PRONOUNCED contrast (really flat plains vs
+ * really peaky mountains) but all CALM-compatible: even Dawn's peaks are smooth gentle arcs,
+ * never treacherous. Craig dials each biome's feel here on his phone.
+ *
+ * Mapping (ZEN_BIOMES order — sunset, midnight, aurora, dawn):
+ *   SUNSET  → rolling hills  : the current baseline ("home" feel, unchanged).
+ *   MIDNIGHT→ flat plains    : low relief, no mountains — a serene near-flat night cruise.
+ *   AURORA  → gentle dunes   : broad soft swells (bigger amplitude, lower frequency), no peaks.
+ *   DAWN    → peaky mountains: taller + more-frequent peaks — the most crest-air, still calm.
+ */
+export interface ZenBiomeTerrain {
+  /** Rolling-hills amplitude (world units) — the octave-0 relief height. Low = flat plains,
+   *  high = big dune swells. (Replaces the global terrainAmplitude per biome.) */
+  hillAmplitude: number;
+  /** Multiplier on the hill base frequency (× ZEN.terrainFrequency). <1 = broader, smoother
+   *  swells (dunes); 1 = the baseline rolling-hill wavelength. */
+  hillFrequencyMul: number;
+  /** Multiplier on the mountain term (mask × mountainAmplitude × ridged). 0 = NO mountains
+   *  (flat/dune biomes); 1 = the baseline occasional peaks; >1 = taller, more dramatic. */
+  mountainAmount: number;
+  /** Added to the mountain mask before its threshold — widens mountain COVERAGE. 0 = the
+   *  baseline rarity; >0 = mountains appear more often (Dawn's frequent ranges). */
+  mountainBias: number;
+  /** Multiplier on the ridged-peak frequency (× ZEN.mountainFrequency). <1 = BROADER peaks
+   *  you arc over for a long gentle launch (vs buzzing over many narrow ridges at cruise —
+   *  the calm-vs-chaotic lever for a peaky biome); 1 = the baseline ridge wavelength. */
+  ridgeFrequencyMul: number;
+}
+
+export const ZEN_BIOME_TERRAIN: readonly ZenBiomeTerrain[] = [
+  // SUNSET — rolling hills (the current baseline; keep the "home" feel).
+  { hillAmplitude: 3.5, hillFrequencyMul: 1.0, mountainAmount: 1.0, mountainBias: 0.0, ridgeFrequencyMul: 1.0 },
+  // MIDNIGHT — flat serene plains: low relief, no mountains (gentle undulation, not dead-flat).
+  { hillAmplitude: 1.1, hillFrequencyMul: 0.9, mountainAmount: 0.0, mountainBias: 0.0, ridgeFrequencyMul: 1.0 },
+  // AURORA — gentle dunes: broad soft swells (bigger amplitude, lower frequency), no peaks.
+  { hillAmplitude: 6.5, hillFrequencyMul: 0.5, mountainAmount: 0.0, mountainBias: 0.0, ridgeFrequencyMul: 1.0 },
+  // DAWN — peaky mountains: TALL + somewhat broad peaks (ridge freq 0.65 → ~150u peaks) so you
+  //   launch off a big peak for a long gentle arc rather than buzzing narrow ridges. Higher
+  //   coverage (bias) makes mountains DOMINATE the biome (it reads as a mountain range, not the
+  //   occasional Sunset peak) — the MOST air, but flowing + calm (tuned down from a 34% buzz).
+  { hillAmplitude: 4.0, hillFrequencyMul: 1.0, mountainAmount: 2.0, mountainBias: 0.08, ridgeFrequencyMul: 0.65 },
+] as const;
+
+/**
  * Zen BIOME REGION selection + transition cadence. `biomeAt(x, z)` samples ONE
  * low-frequency value-noise octave (world-keyed → seamless + deterministic) and
  * amplitude-bands it into the 4 ZEN_BIOMES, blending smoothly across band edges.

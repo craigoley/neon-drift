@@ -18,7 +18,7 @@
  */
 
 import { ZEN_BIOMES, ZEN_BIOME } from '../utils/constants';
-import { valueNoise, smoothstep } from './ZenHeight';
+import { valueNoise, smoothstep } from './ZenNoise';
 
 export interface ZenBiomeState {
   /** Index of the biome currently in effect (0 .. ZEN_BIOMES.length-1). */

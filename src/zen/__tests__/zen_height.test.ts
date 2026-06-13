@@ -6,19 +6,37 @@
  */
 import { describe, expect, it } from 'vitest';
 import { heightAt, maskAt, rampContribution, slopeAlong } from '../ZenHeight';
-import { ZEN } from '../../utils/constants';
+import { biomeAt, createZenBiomeState } from '../ZenBiome';
+import { ZEN, ZEN_BIOME_TERRAIN } from '../../utils/constants';
+import { lerp } from '../../utils/math';
 
 const SEED = ZEN.worldSeed;
 
-/** The gentle hills-only relief bound (summed hill-octave amplitudes). */
-function hillBound(): number {
+/** Summed hill-octave relief bound for a given octave-0 amplitude (geometric by gain). */
+function hillBoundFor(amplitude: number): number {
   let bound = 0;
-  let amp = ZEN.terrainAmplitude;
+  let amp = amplitude;
   for (let o = 0; o < ZEN.terrainOctaves; o++) {
     bound += amp;
     amp *= ZEN.terrainGain;
   }
   return bound;
+}
+
+/** The baseline (Sunset) hills-only relief bound — the "home" rolling-hills feel. */
+function hillBound(): number {
+  return hillBoundFor(ZEN.terrainAmplitude);
+}
+
+/** Blended per-biome terrain params at (x, z) — the SAME weighted blend heightAt uses. */
+function blendedTerrain(x: number, z: number): { hillAmplitude: number; mountainAmount: number } {
+  const st = biomeAt(SEED, x, z, createZenBiomeState());
+  const a = ZEN_BIOME_TERRAIN[st.from];
+  const b = ZEN_BIOME_TERRAIN[st.to];
+  return {
+    hillAmplitude: lerp(a.hillAmplitude, b.hillAmplitude, st.blend),
+    mountainAmount: lerp(a.mountainAmount, b.mountainAmount, st.blend),
+  };
 }
 
 describe('Zen terrain — heightAt is continuous and seamless', () => {
@@ -71,24 +89,27 @@ describe('Zen terrain — heightAt is continuous and seamless', () => {
 });
 
 describe('Zen terrain — mountains rise occasionally, hills stay everywhere', () => {
-  it('PRESERVES the gentle hills where the mask is low (the majority of the world)', () => {
-    const bound = hillBound();
-    let gentleSamples = 0;
+  it('keeps NON-mountain biomes gentle — pure hills/dunes bounded by the biome amplitude', () => {
+    // The "raw mask 0 = gentle" invariant is now BIOME-aware: in a non-mountain biome
+    // (mountainAmount ≈ 0 — flat Midnight plains, gentle Aurora dunes), the height is pure
+    // blended hills (+ any sparse ramp), bounded by THAT biome's hill amplitude. (Peaky
+    // biomes legitimately rise far above this — tested below.)
+    let flatSamples = 0;
     let total = 0;
     for (let i = 0; i < 6000; i++) {
-      const x = (i * 37) % 4000 - 2000;
-      const z = (i * 53) % 4000 - 2000;
+      const x = (i * 37) % 8000 - 4000;
+      const z = (i * 53) % 8000 - 4000;
       total++;
-      if (maskAt(SEED, x, z) <= 0) {
-        gentleSamples++;
-        // Where the mask is off, the height is the gentle hills + any (sparse, additive)
-        // ramp dome. Subtract the ramp → the hills BASELINE is still within the old band.
+      const { hillAmplitude, mountainAmount } = blendedTerrain(x, z);
+      if (mountainAmount <= 1e-6) {
+        flatSamples++;
         const baseline = heightAt(SEED, x, z) - rampContribution(SEED, x, z);
-        expect(Math.abs(baseline)).toBeLessThanOrEqual(bound + 1e-6);
+        // A small epsilon over the bound for the gentle spatially-varying-frequency seam.
+        expect(Math.abs(baseline)).toBeLessThanOrEqual(hillBoundFor(hillAmplitude) + 1e-3);
       }
     }
-    // Mountains are OCCASIONAL: the gentle-hills majority dominates the world.
-    expect(gentleSamples / total).toBeGreaterThan(0.5);
+    // Non-mountain regions are a real chunk of the world (plains + dunes are 2 of 4 biomes).
+    expect(flatSamples / total).toBeGreaterThan(0.25);
   });
 
   it('RAISES tall mountains where the mask is high (variety, not uniform hills)', () => {
@@ -122,14 +143,16 @@ describe('Zen terrain — slopeAlong derivative', () => {
     expect(down).toBeCloseTo(-up, 6); // reversing the direction negates rise/run
   });
 
-  it('is FINITE everywhere (incl. steep mountains) and gentle where the mask is low', () => {
+  it('is FINITE everywhere (incl. steep mountains) and gentle in non-mountain biomes', () => {
     for (let i = 0; i < 2000; i++) {
       const x = i * 11;
       const z = i * -7;
       const s = slopeAlong(SEED, x, z, Math.sin(i), -Math.cos(i));
       expect(Number.isFinite(s)).toBe(true); // never NaN, even on a ridge
-      if (maskAt(SEED, x, z) <= 0) {
-        expect(Math.abs(s)).toBeLessThan(1); // gentle hills stay rolling (< 45°)
+      // In a non-mountain biome (flat plains / gentle dunes), the slope stays calm — well
+      // under 45° even for the tall-but-broad Aurora dunes (no sharp faces without peaks).
+      if (blendedTerrain(x, z).mountainAmount <= 1e-6) {
+        expect(Math.abs(s)).toBeLessThan(1);
       }
     }
   });

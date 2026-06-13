@@ -14,6 +14,7 @@ import { ZEN, type CarDef } from '../utils/constants';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt, slopeAlong } from './ZenHeight';
 import { ZenRenderer } from './ZenRenderer';
+import { ZenMinimap } from './ZenMinimap';
 
 export interface ZenSessionOptions {
   /** The game's shared WebGLRenderer (Zen draws with it; never disposes it). */
@@ -40,6 +41,7 @@ export class ZenSession {
   private readonly v = createZenVehicle();
   private readonly renderer: ZenRenderer;
   private readonly overlay: HTMLElement;
+  private readonly minimap: ZenMinimap;
   private readonly opts: ZenSessionOptions;
 
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
@@ -80,6 +82,10 @@ export class ZenSession {
       this.overlay.appendChild(this.makeHoldButton('GAS', 'right:14px', (h) => (this.fwd = h)));
       this.overlay.appendChild(this.makeHoldButton('BRAKE', 'left:14px', (h) => (this.back = h)));
     }
+
+    // Live navigation radar in the top-right corner (the other corners hold EXIT + GAS/BRAKE).
+    this.minimap = new ZenMinimap(this.overlay);
+
     opts.parent.appendChild(this.overlay);
 
     // Keyboard throttle (steering stays on the shared Controls: arrows / A-D / drag).
@@ -112,12 +118,15 @@ export class ZenSession {
     const groundY = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
     updateVertical(this.v, groundY, slope, dt);
     this.renderer.render(this.v, steer, dt);
+    // Live radar: me-centered, rotates with heading (throttled biome/ramp resample inside).
+    this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);
   }
 
   /** Tear down: listeners, overlay, and the Zen-owned scene objects. */
   dispose(): void {
     window.removeEventListener('keydown', this.onKey);
     window.removeEventListener('keyup', this.onKey);
+    this.minimap.dispose();
     this.overlay.remove();
     this.renderer.dispose();
   }

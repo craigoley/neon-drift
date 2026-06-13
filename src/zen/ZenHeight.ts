@@ -97,27 +97,54 @@ function ridgedAt(seed: number, x: number, z: number, frequencyMul: number): num
  */
 export function rampContribution(seed: number, x: number, z: number): number {
   const cs = ZEN.rampCellSize;
-  const cx = Math.floor(x / cs);
-  const cz = Math.floor(z / cs);
-  const key = (Math.imul(cx, 73856093) ^ Math.imul(cz, 19349663)) | 0;
+  // Resolve THIS cell's gated ramp centre into a reused scratch (no hot-loop allocation).
+  if (!rampCellCenter(seed, Math.floor(x / cs), Math.floor(z / cs), _rampScratch)) return 0;
+  const m = ZEN.rampRadius;
+  const dx = x - _rampScratch.x;
+  const dz = z - _rampScratch.z;
+  const d = Math.sqrt(dx * dx + dz * dz);
+  if (d >= m) return 0; // outside the dome → nothing (the common case in a ramp cell)
+  // Raised-cosine dome: 1 at the centre → 0 at the rim, 0 slope at the rim (smooth blend).
+  return ZEN.rampHeight * 0.5 * (1 + Math.cos((Math.PI * d) / m));
+}
+
+/** Reused scratch for the per-vertex ramp-centre resolve (no hot-loop allocation). */
+const _rampScratch = { x: 0, z: 0 };
+
+/**
+ * Resolve a ramp CELL's gated centre into `out`, returning whether the cell carries a ramp.
+ * The placement contract (shared by rampContribution + the minimap's marker scan): SPARSE
+ * (a low-freq cell hash), jittered a rampRadius margin off the cell edges (so the dome lives
+ * wholly inside its cell), and gated to GENTLE terrain (mask ≤ rampMaxMask). Pure + no
+ * allocation (writes `out`).
+ */
+function rampCellCenter(seed: number, cellX: number, cellZ: number, out: { x: number; z: number }): boolean {
+  const cs = ZEN.rampCellSize;
+  const key = (Math.imul(cellX, 73856093) ^ Math.imul(cellZ, 19349663)) | 0;
   const rseed = (seed + 91331) | 0; // decorrelate ramp placement from hills/mask/mountains
   // Sparse: does this cell carry a ramp at all?
-  if ((hashNoise(rseed, key) + 1) * 0.5 > ZEN.rampChance) return 0;
+  if ((hashNoise(rseed, key) + 1) * 0.5 > ZEN.rampChance) return false;
   // Ramp centre, jittered but kept a rampRadius margin off the cell edges.
   const m = ZEN.rampRadius;
   const jx = (hashNoise(rseed, (key * 2 + 1) | 0) + 1) * 0.5;
   const jz = (hashNoise(rseed, (key * 2 + 2) | 0) + 1) * 0.5;
-  const centerX = cx * cs + lerp(m, cs - m, jx);
-  const centerZ = cz * cs + lerp(m, cs - m, jz);
-  const dx = x - centerX;
-  const dz = z - centerZ;
-  const d = Math.sqrt(dx * dx + dz * dz);
-  if (d >= m) return 0; // outside the dome → nothing (the common case in a ramp cell)
-  // GENTLE terrain only — gate on the mask at the CENTRE (constant for the whole dome, so it
-  // is present-or-absent as a unit; no per-point clipping that would crack continuity).
-  if (maskAt(seed, centerX, centerZ) > ZEN.rampMaxMask) return 0;
-  // Raised-cosine dome: 1 at the centre → 0 at the rim, 0 slope at the rim (smooth blend).
-  return ZEN.rampHeight * 0.5 * (1 + Math.cos((Math.PI * d) / m));
+  const centerX = cellX * cs + lerp(m, cs - m, jx);
+  const centerZ = cellZ * cs + lerp(m, cs - m, jz);
+  // GENTLE terrain only — gate on the mask at the CENTRE (constant for the whole dome, so the
+  // ramp is present-or-absent as a unit; no per-point clipping that would crack continuity).
+  if (maskAt(seed, centerX, centerZ) > ZEN.rampMaxMask) return false;
+  out.x = centerX;
+  out.z = centerZ;
+  return true;
+}
+
+/**
+ * The gated ramp centre for a cell index, or null if the cell carries no ramp — the public
+ * (allocating) form for the minimap's marker scan (called off the hot path, on resample).
+ */
+export function rampCenterForCell(seed: number, cellX: number, cellZ: number): { x: number; z: number } | null {
+  const out = { x: 0, z: 0 };
+  return rampCellCenter(seed, cellX, cellZ, out) ? out : null;
 }
 
 /**

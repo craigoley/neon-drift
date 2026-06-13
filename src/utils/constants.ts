@@ -1389,6 +1389,53 @@ export const ZEN_STARS = {
   renderOrder: -3,
 } as const;
 
+/**
+ * Zen MINIMAP — a small, calm, always-on corner RADAR for navigating the infinite
+ * procedural world. ME-CENTERED + ROTATES with heading (car marker always points UP); the
+ * world has no stored map, so the radar is LIVE-SAMPLED each frame: biomeAt on a grid →
+ * coloured biome regions, plus ramp markers found in range. A 2D canvas DOM overlay (not
+ * 3D). Tunable here so Craig can dial size/opacity/reach on his phone.
+ */
+export const ZEN_MINIMAP = {
+  /** World-units radius the radar shows around the car (the inscribed circle of the grid). */
+  worldRadius: 1500,
+  /** On-screen diameter (CSS px) — tucked in a corner, sized for a phone (not intrusive). */
+  sizePx: 124,
+  /** Inset (CSS px) from the screen corner. */
+  margin: 14,
+  /** Biome sample grid resolution (N×N biomeAt samples → the coloured region wash). Coarse
+   *  = cheap; fine enough to read ~2800u regions. */
+  gridSamples: 28,
+  /** Frames between biome/ramp RESAMPLES. Regions are ~2800u (they barely move frame to
+   *  frame) so we resample the heavy biome grid only every N frames; the cheap ROTATION
+   *  still updates every frame, so turning stays smooth. */
+  resampleInterval: 8,
+  /** Per-second easing of the radar's rotation toward the car heading (smoothed so a quick
+   *  steer doesn't jitter the map). */
+  headingLerp: 9,
+  /** Overall overlay opacity — semi-transparent so it aids navigation without dominating
+   *  the calm screen. */
+  opacity: 0.82,
+  /** Neon scope RING colour (synthwave cyan) + its line width (CSS px). */
+  ringColor: 0x00ffff,
+  ringWidth: 2,
+  /** Scope BACKDROP (deep purple, behind/around the biome wash). */
+  backdropColor: 0x1a0033,
+  /** CAR marker (a triangle at centre, always pointing up) colour + half-size (CSS px). */
+  carColor: 0xffffff,
+  carSizePx: 5,
+  /** RAMP marker colour (matches the in-world ramp-dune tint so map ↔ world agree) + radius. */
+  rampColor: 0xff66cc,
+  rampMarkerPx: 3,
+  /** A short NORTH tick on the ring (world −z) so you can read your facing vs the world. */
+  northColor: 0xff6600,
+  northTickPx: 7,
+  /** Stroke width (CSS px) of the north tick. */
+  northTickWidth: 2,
+  /** Alpha of the biome wash layer (slightly transparent so the backdrop bleeds through). */
+  washAlpha: 0.9,
+} as const;
+
 /** Star-field backdrop (procedural points high in the night sky). Brightness is
  *  biome-driven (BiomeDef.starIntensity); positions are seeded + static. */
 export const STARFIELD = {

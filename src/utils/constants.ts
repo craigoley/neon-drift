@@ -1430,6 +1430,10 @@ export const ZEN_MINIMAP = {
   /** A short NORTH tick on the ring (world −z) so you can read your facing vs the world. */
   northColor: 0xff6600,
   northTickPx: 7,
+  /** Stroke width (CSS px) of the north tick. */
+  northTickWidth: 2,
+  /** Alpha of the biome wash layer (slightly transparent so the backdrop bleeds through). */
+  washAlpha: 0.9,
 } as const;
 
 /** Star-field backdrop (procedural points high in the night sky). Brightness is

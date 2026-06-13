@@ -39,13 +39,13 @@ export interface RadarOffset {
  * the delta onto those axes: RIGHT → screen +x, FORWARD → screen UP (−y, since canvas y is
  * down). This is exactly a rotation of (dx, dz) by −h.
  */
-export function projectToRadar(dx: number, dz: number, heading: number): RadarOffset {
+export function projectToRadar(dx: number, dz: number, heading: number, out?: RadarOffset): RadarOffset {
   const c = Math.cos(heading);
   const s = Math.sin(heading);
-  return {
-    x: dx * c + dz * s, // right component
-    y: dz * c - dx * s, // −forward component (forward → up; canvas y is down)
-  };
+  const o = out ?? { x: 0, y: 0 };
+  o.x = dx * c + dz * s;  // right component
+  o.y = dz * c - dx * s;  // −forward component (forward → up; canvas y is down)
+  return o;
 }
 
 /** The radar colour at a world point: the active biome's grid-line colour, blended across a

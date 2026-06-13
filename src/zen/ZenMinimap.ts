@@ -17,6 +17,7 @@ import {
   gatherMarkers,
   radarScale,
   type MinimapMarker,
+  type RadarOffset,
 } from './ZenMinimapModel';
 import { createZenBiomeState } from './ZenBiome';
 
@@ -35,6 +36,8 @@ export class ZenMinimap {
   private markers: MinimapMarker[] = [];
   /** Reused biome-state scratch for the wash sampling (no per-sample allocation). */
   private readonly biomeScratch = createZenBiomeState();
+  /** Reused scratch for projectToRadar calls in the per-frame draw (no hot-loop allocation). */
+  private readonly radarScratch: RadarOffset = { x: 0, y: 0 };
   /** Smoothed heading the radar rotates by (so a quick steer doesn't jitter the map). */
   private smoothedHeading = 0;
   private framesSinceResample = Number.MAX_SAFE_INTEGER; // force a resample on the first frame
@@ -137,21 +140,22 @@ export class ZenMinimap {
     ctx.translate(c, c);
     ctx.rotate(-this.smoothedHeading);
     ctx.imageSmoothingEnabled = true;
-    ctx.globalAlpha = 0.9;
+    ctx.globalAlpha = ZEN_MINIMAP.washAlpha;
     ctx.drawImage(this.wash, -R, -R, R * 2, R * 2);
     ctx.restore();
 
     // Markers (ramps first; extensible): project each world position into the radar frame.
     for (const m of this.markers) {
-      const off = projectToRadar(m.x - carX, m.z - carZ, this.smoothedHeading);
-      this.drawRamp(c + off.x * this.scale, c + off.y * this.scale);
+      projectToRadar(m.x - carX, m.z - carZ, this.smoothedHeading, this.radarScratch);
+      this.drawRamp(c + this.radarScratch.x * this.scale, c + this.radarScratch.y * this.scale);
     }
     ctx.restore(); // drop the circular clip
 
     // North tick on the ring (world -z), so you can read your facing vs the fixed world.
-    const north = projectToRadar(0, -1, this.smoothedHeading); // unit dir, already normalised
+    projectToRadar(0, -1, this.smoothedHeading, this.radarScratch);
+    const north = this.radarScratch;
     ctx.strokeStyle = cssHex(ZEN_MINIMAP.northColor);
-    ctx.lineWidth = 2;
+    ctx.lineWidth = ZEN_MINIMAP.northTickWidth;
     ctx.beginPath();
     ctx.moveTo(c + north.x * (R - ZEN_MINIMAP.northTickPx), c + north.y * (R - ZEN_MINIMAP.northTickPx));
     ctx.lineTo(c + north.x * R, c + north.y * R);

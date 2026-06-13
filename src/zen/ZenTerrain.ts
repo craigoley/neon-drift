@@ -14,10 +14,11 @@
  */
 
 import * as THREE from 'three';
-import { ZEN } from '../utils/constants';
-import { clamp } from '../utils/math';
+import { ZEN, ZEN_BIOMES } from '../utils/constants';
+import { clamp, mixHex } from '../utils/math';
 import { worldToChunk } from './ZenWorld';
 import { heightAt, rampContribution } from './ZenHeight';
+import { biomeAt, createZenBiomeState } from './ZenBiome';
 
 export class ZenTerrain {
   private readonly seed: number;
@@ -29,8 +30,13 @@ export class ZenTerrain {
   /** Lattice heights + ramp amounts (0..1) reused each rebuild (no per-rebuild allocation). */
   private readonly heights: Float32Array;
   private readonly rampAmt: Float32Array;
-  /** Grid + ramp-tint colours as plain RGB (no per-vertex Color allocation). */
-  private readonly grid = new THREE.Color(ZEN.gridColor);
+  /** Per-lattice BIOME grid colour (blended gridLine), packed RGB, filled each rebuild. */
+  private readonly gridRGB: Float32Array;
+  /** Per-biome gridLine colours pre-parsed once (the base grid colour varies by region). */
+  private readonly gridLineHex: number[];
+  /** Reused biome-state scratch for the per-vertex region sample (no per-vertex alloc). */
+  private readonly bstate = createZenBiomeState();
+  /** Ramp-tint colour as plain RGB (no per-vertex Color allocation). */
   private readonly tint = new THREE.Color(ZEN.rampTintColor);
   /** Cells per side of the windowed grid = (2R+1) chunks × segments-per-chunk. */
   private readonly gridN: number;
@@ -51,6 +57,8 @@ export class ZenTerrain {
     this.colors = new Float32Array(segCount * 2 * 3);
     this.heights = new Float32Array((N + 1) * (N + 1));
     this.rampAmt = new Float32Array((N + 1) * (N + 1));
+    this.gridRGB = new Float32Array((N + 1) * (N + 1) * 3);
+    this.gridLineHex = ZEN_BIOMES.map((b) => b.gridLine);
     this.geo.setAttribute('position', new THREE.BufferAttribute(this.positions, 3));
     this.geo.setAttribute('color', new THREE.BufferAttribute(this.colors, 3));
 
@@ -85,9 +93,14 @@ export class ZenTerrain {
     const originX = (cx - ZEN.chunkRadius) * ZEN.chunkSize;
     const originZ = (cz - ZEN.chunkRadius) * ZEN.chunkSize;
 
-    // Sample the continuous height + ramp amount at every lattice point once.
+    // Sample the continuous height + ramp amount + BIOME grid colour at every lattice
+    // point once. The biome grid colour is the blended gridLine of the region at THIS
+    // vertex — so the grid floor's hue varies across space (a region recolour at most one
+    // chunk behind the car ~80u, invisible against the ~2800u region size + the fog edge).
     const h = this.heights;
     const ra = this.rampAmt;
+    const grgb = this.gridRGB;
+    const glh = this.gridLineHex;
     for (let j = 0; j <= N; j++) {
       const wz = originZ + j * seg;
       for (let i = 0; i <= N; i++) {
@@ -95,20 +108,26 @@ export class ZenTerrain {
         const idx = j * stride + i;
         h[idx] = heightAt(this.seed, wx, wz);
         ra[idx] = clamp(rampContribution(this.seed, wx, wz) / ZEN.rampHeight, 0, 1);
+        biomeAt(this.seed, wx, wz, this.bstate);
+        const c = mixHex(glh[this.bstate.from], glh[this.bstate.to], this.bstate.blend);
+        grgb[idx * 3] = ((c >> 16) & 0xff) / 255;
+        grgb[idx * 3 + 1] = ((c >> 8) & 0xff) / 255;
+        grgb[idx * 3 + 2] = (c & 0xff) / 255;
       }
     }
 
     const pos = this.positions;
     const col = this.colors;
-    const gr = this.grid.r, gg = this.grid.g, gb = this.grid.b;
     const tr = this.tint.r, tg = this.tint.g, tb = this.tint.b;
     let p = 0;
-    // Write one vertex: position (wx, height[li], wz) + grid→tint colour by rampAmt[li].
+    // Write one vertex: position (wx, height[li], wz) + biome-grid→ramp-tint colour by
+    // rampAmt[li] (a ramp dune still glows toward rampTintColor over its biome base).
     const vert = (wx: number, wz: number, li: number): void => {
       const a = ra[li];
       pos[p] = wx;
       pos[p + 1] = h[li];
       pos[p + 2] = wz;
+      const gr = grgb[li * 3], gg = grgb[li * 3 + 1], gb = grgb[li * 3 + 2];
       col[p] = gr + (tr - gr) * a;
       col[p + 1] = gg + (tg - gg) * a;
       col[p + 2] = gb + (tb - gb) * a;

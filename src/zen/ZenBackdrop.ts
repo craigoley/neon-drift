@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { SUN, ZEN } from '../utils/constants';
+import { SUN, ZEN, type BiomeGradientStop } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 const TAU = Math.PI * 2;
@@ -25,7 +25,9 @@ export class ZenBackdrop {
   /** Sun + mountains, horizon-locked to the camera POSITION (not its rotation). */
   private readonly group = new THREE.Group();
   private readonly sky: THREE.CanvasTexture;
+  private readonly skyCanvas: HTMLCanvasElement;
   private readonly sunTex: THREE.CanvasTexture;
+  private readonly sunCanvas: HTMLCanvasElement;
   private readonly sunMat: THREE.MeshBasicMaterial;
   private readonly sunGeo: THREE.PlaneGeometry;
   private readonly mtnGeo: THREE.BufferGeometry;
@@ -33,11 +35,17 @@ export class ZenBackdrop {
 
   constructor(scene: THREE.Scene, seed: number) {
     // Serene sunset sky — fills the void in every direction (screen-space gradient).
-    this.sky = this.makeSky();
+    this.skyCanvas = document.createElement('canvas');
+    this.skyCanvas.width = 4;
+    this.skyCanvas.height = 256;
+    this.sky = this.makeSky(ZEN.skyTopColor, ZEN.horizonColor);
     scene.background = this.sky;
 
     // Retrosun, fixed in a world compass direction, on the horizon.
-    this.sunTex = this.makeSunTexture();
+    this.sunCanvas = document.createElement('canvas');
+    this.sunCanvas.width = SUN.textureSize;
+    this.sunCanvas.height = SUN.textureSize;
+    this.sunTex = this.makeSunTexture(SUN.gradient);
     this.sunMat = new THREE.MeshBasicMaterial({
       map: this.sunTex,
       transparent: true,
@@ -78,35 +86,72 @@ export class ZenBackdrop {
     this.group.position.set(cameraX, 0, cameraZ);
   }
 
+  /**
+   * Repaint the backdrop to a biome's blended palette (driven by ZenBiomeView, THROTTLED
+   * by ZEN_BIOME.repaintBlendStep so this fires a bounded number of times per transition
+   * and zero at rest). Repaints the sky + sun CanvasTextures and the mountain-ring colour.
+   *   - sunStops: the blended sun gradient stops (top → base).
+   *   - skyTop / horizon: the sky gradient ends (horizon = the biome fog, so floor + sky
+   *     still meet seamlessly under the matching fog).
+   *   - mountain: the wireframe mountain-ring colour.
+   */
+  setPalette(
+    sunStops: ReadonlyArray<BiomeGradientStop>,
+    skyTop: number,
+    horizon: number,
+    mountain: number,
+  ): void {
+    this.repaintSky(skyTop, horizon);
+    this.repaintSun(sunStops);
+    this.mtnMat.color.setHex(mountain);
+  }
+
   /** Vertical sky gradient: skyTop (top) → horizon (bottom). The fog fades the floor to
    *  the SAME horizon colour, so floor and sky meet seamlessly at the horizon line. */
-  private makeSky(): THREE.CanvasTexture {
-    const canvas = document.createElement('canvas');
-    canvas.width = 4;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    const g = ctx.createLinearGradient(0, 0, 0, 256);
-    g.addColorStop(0, hexStr(ZEN.skyTopColor));
-    g.addColorStop(1, hexStr(ZEN.horizonColor));
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 4, 256);
-    const tex = new THREE.CanvasTexture(canvas);
+  private makeSky(skyTop: number, horizon: number): THREE.CanvasTexture {
+    this.paintSky(skyTop, horizon);
+    const tex = new THREE.CanvasTexture(this.skyCanvas);
     tex.colorSpace = THREE.SRGBColorSpace;
     return tex;
+  }
+
+  private paintSky(skyTop: number, horizon: number): void {
+    const ctx = this.skyCanvas.getContext('2d')!;
+    const g = ctx.createLinearGradient(0, 0, 0, 256);
+    g.addColorStop(0, hexStr(skyTop));
+    g.addColorStop(1, hexStr(horizon));
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 4, 256);
+  }
+
+  private repaintSky(skyTop: number, horizon: number): void {
+    this.paintSky(skyTop, horizon);
+    this.sky.needsUpdate = true;
+  }
+
+  private repaintSun(stops: ReadonlyArray<BiomeGradientStop>): void {
+    this.paintSun(stops);
+    this.sunTex.needsUpdate = true;
   }
 
   /** Retrosun texture — the racing recipe: a vertical gradient disc with scanline bands
    *  carved (destination-out) that thin + tighten toward the bottom (a sunset, not a
    *  striped disc). Painted ONCE (no scroll drift — calm + zero per-frame texture work). */
-  private makeSunTexture(): THREE.CanvasTexture {
+  private makeSunTexture(stops: ReadonlyArray<BiomeGradientStop>): THREE.CanvasTexture {
+    this.paintSun(stops);
+    const tex = new THREE.CanvasTexture(this.sunCanvas);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+
+  /** Paint the retrosun disc into the persistent canvas with the given gradient stops. */
+  private paintSun(stops: ReadonlyArray<BiomeGradientStop>): void {
     const size = SUN.textureSize;
-    const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
-    const ctx = canvas.getContext('2d')!;
+    const ctx = this.sunCanvas.getContext('2d')!;
+    ctx.clearRect(0, 0, size, size);
 
     const grad = ctx.createLinearGradient(0, 0, 0, size);
-    for (const s of SUN.gradient) grad.addColorStop(s.at, s.color);
+    for (const s of stops) grad.addColorStop(s.at, s.color);
     ctx.fillStyle = grad;
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, TAU);
@@ -126,10 +171,6 @@ export class ZenBackdrop {
       ctx.fillRect(0, y - thickness / 2, size, thickness);
     }
     ctx.globalCompositeOperation = 'source-over';
-
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
-    return tex;
   }
 
   /** A ring of seeded wireframe peaks (base → peak → next base) around the camera. */

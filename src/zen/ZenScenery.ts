@@ -69,6 +69,17 @@ export class ZenScenery {
     }
   }
 
+  /**
+   * Faint per-biome cast on the props (driven by ZenBiomeView). MeshBasicMaterial.color
+   * MULTIPLIES the baked vertex colours, so a near-white tint nudged toward the biome
+   * accent gives every prop a subtle biome wash without recolouring it (default white =
+   * no change). Cheap (one colour set per material), and only called when the biome
+   * apply fires (throttled) — not per frame.
+   */
+  setTint(tint: THREE.Color): void {
+    for (const m of this.mats) m.color.copy(tint);
+  }
+
   /** Quality lever (parity with ParallaxScenery): HIGH = detailed silhouettes; LOW swaps
    *  every kind back to the plain box pillar (no extra geometry/fill). */
   setNeon(on: boolean): void {

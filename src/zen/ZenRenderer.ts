@@ -18,6 +18,9 @@ import { ZenScenery } from './ZenScenery';
 import { ZenTerrain } from './ZenTerrain';
 import { ZenBackdrop } from './ZenBackdrop';
 import { ZenShadow } from './ZenShadow';
+import { ZenStarfield } from './ZenStarfield';
+import { ZenBiomeView } from './ZenBiomeView';
+import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { heightAt, slopeAlong } from './ZenHeight';
 import type { ZenVehicle } from './ZenVehicle';
 
@@ -30,6 +33,10 @@ export class ZenRenderer {
   private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
   private readonly shadow: ZenShadow;
+  private readonly stars: ZenStarfield;
+  private readonly biomeView: ZenBiomeView;
+  /** Reused biome-state scratch sampled at the car each frame (no per-frame alloc). */
+  private readonly biomeState = createZenBiomeState();
   private aspect = 0;
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
    *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
@@ -64,6 +71,11 @@ export class ZenRenderer {
 
     // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
     this.shadow = new ZenShadow(this.scene);
+
+    // Biome REGIONS: a 360° star dome + the apply that pushes the blended biome palette
+    // (fog/sky/sun/mountains/stars/prop-tint) from the biome under the car each frame.
+    this.stars = new ZenStarfield(this.scene, ZEN.worldSeed);
+    this.biomeView = new ZenBiomeView(this.scene, this.backdrop, this.stars, this.scenery);
 
     this.car = new CarMesh(car);
     // YXZ so the slope PITCH (rotation.x) is applied about the already-yawed lateral
@@ -123,6 +135,12 @@ export class ZenRenderer {
     // Backdrop: horizon-lock the sunset sky/sun/mountains to the car so they stay on the
     // far horizon as you drive (cheap — just a group translate).
     this.backdrop.update(v.x, v.z);
+    // Biome region: resolve the look at the car's position and apply it (throttled inside
+    // — repaints fire a bounded number of times per transition, none at rest); keep the
+    // star dome centred on the car.
+    biomeAt(ZEN.worldSeed, v.x, v.z, this.biomeState);
+    this.biomeView.apply(this.biomeState);
+    this.stars.update(v.x, v.z);
     // Air-shadow: pin a glow spot to the terrain under the car. Airborne, the car rises but
     // the shadow stays on the ground → a visible gap (the readable "in the air" cue).
     const groundY = heightAt(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
@@ -185,6 +203,7 @@ export class ZenRenderer {
     this.shadow.dispose();
     this.terrain.dispose();
     this.scenery.dispose();
+    this.stars.dispose();
   }
 }
 

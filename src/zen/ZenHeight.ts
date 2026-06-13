@@ -25,8 +25,10 @@ function fade(t: number): number {
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
-/** One octave of interpolated value noise in [-1, 1], continuous in (x, z). */
-function valueNoise(seed: number, x: number, z: number): number {
+/** One octave of interpolated value noise in [-1, 1], continuous in (x, z). Exported so
+ *  the Zen BIOME-region selection (ZenBiome.ts) reuses the SAME seamless, world-keyed
+ *  noise the terrain is built on — no second noise implementation to keep in sync. */
+export function valueNoise(seed: number, x: number, z: number): number {
   const x0 = Math.floor(x);
   const z0 = Math.floor(z);
   const fx = fade(x - x0);
@@ -38,8 +40,9 @@ function valueNoise(seed: number, x: number, z: number): number {
   return lerp(lerp(n00, n10, fx), lerp(n01, n11, fx), fz);
 }
 
-/** smoothstep(a, b, t): 0 below a, 1 above b, a C1 ease-in between (clamped). */
-function smoothstep(a: number, b: number, t: number): number {
+/** smoothstep(a, b, t): 0 below a, 1 above b, a C1 ease-in between (clamped). Exported
+ *  for the Zen BIOME-region cross-fade (ZenBiome.ts) — the same C1 ease used here. */
+export function smoothstep(a: number, b: number, t: number): number {
   if (a === b) return t < a ? 0 : 1;
   const u = clamp((t - a) / (b - a), 0, 1);
   return u * u * (3 - 2 * u);

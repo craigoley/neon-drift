@@ -11,7 +11,7 @@
  * REACH MOMENT: when the car comes within reach of a landmark, a calm GLOW PULSE plays once — the
  * structure brightens toward white + gently swells, then settles. Debounced per visit (re-fires
  * only after you leave and return). Drive-THROUGH types (arch, ring) fire as you pass the opening;
- * the solid MONOLITH fires as you arrive. No score, no UI — a quiet acknowledgment.
+ * the arrival types (vista, tunnel) glow as you reach them. No score, no UI — a quiet acknowledgment.
  */
 
 import * as THREE from 'three';
@@ -31,9 +31,11 @@ import {
   openingRadius,
   type Landmark,
   type LandmarkType,
-  LANDMARK_ARCH,
-  LANDMARK_MONOLITH,
   LANDMARK_RING,
+  LANDMARK_ARCH,
+  LANDMARK_GATEWAY,
+  LANDMARK_VISTA,
+  LANDMARK_TUNNEL,
 } from './ZenLandmarkModel';
 
 interface Active {
@@ -45,8 +47,8 @@ interface Active {
   pulseT: number;
   /** Debounce: true while the car is within reach (so the glow fires once per visit). */
   near: boolean;
-  // --- drive-through GATE ripple (ring/arch only; null for the monolith) ---
-  /** Expanding neon circle on the opening plane, shown while crossing; null for sight types. */
+  // --- drive-through GATE ripple (ring/arch/gateway only; null for the surface types) ---
+  /** Expanding neon circle on the opening plane, shown while crossing; null for surface types. */
   gateMesh: THREE.LineSegments | null;
   gateMaterial: THREE.LineBasicMaterial | null;
   /** Gate-ripple elapsed seconds (>= gateSeconds = idle); -1 = not rippling. */
@@ -73,7 +75,8 @@ export class ZenLandmarks {
   constructor(scene: THREE.Scene, seed: number) {
     this.scene = scene;
     this.seed = seed;
-    this.geo = [this.buildArch(), this.buildMonolith(), this.buildRing()];
+    // Indexed by LandmarkType (ring, arch, gateway, vista, tunnel).
+    this.geo = [this.buildRing(), this.buildArch(), this.buildGateway(), this.buildVista(), this.buildTunnel()];
     this.rippleGeo = this.buildRippleCircle();
   }
 
@@ -117,7 +120,7 @@ export class ZenLandmarks {
       }
       a.near = within;
 
-      // Reach glow: SIGHT (monolith) ramps to a mid-window peak; DRIVE-THROUGH (ring, arch) is
+      // Reach glow: ARRIVAL (vista/tunnel) ramps to a mid-window peak; DRIVE-THROUGH (ring/arch/gateway) is
       // FRONT-LOADED so it flashes bright while the structure is still ahead + in view.
       let env = 0;
       if (a.pulseT >= 0) {
@@ -177,7 +180,7 @@ export class ZenLandmarks {
     mesh.visible = true;
   }
 
-  /** Push the car out of any landmark's SOLID parts (arch pillars / monolith trunk). Rings are
+  /** Push the car out of any landmark's SOLID parts (arch/gateway pillars). Rings + surface types are
    *  pass-through (no solid parts). Bounded: scans only landmarks near (x, z). */
   resolve(x: number, z: number): { x: number; z: number } {
     let rx = x;
@@ -212,8 +215,8 @@ export class ZenLandmarks {
     mesh.frustumCulled = false; // bounded set; avoids the from-afar cull edge case
     this.scene.add(mesh);
 
-    // Gate ripple mesh — drive-through types only (ring, arch). A unit circle on the opening
-    // plane (same colour), hidden until you cross. The MONOLITH (sight) gets none.
+    // Gate ripple mesh — drive-through types only (ring, arch, gateway). A unit circle on the
+    // opening plane (same colour), hidden until you cross. Vista/tunnel (arrival types) get none.
     let gateMesh: THREE.LineSegments | null = null;
     let gateMaterial: THREE.LineBasicMaterial | null = null;
     if (isDriveThrough(lm.type)) {
@@ -289,23 +292,127 @@ export class ZenLandmarks {
     return ZenLandmarks.lineGeo(p);
   }
 
-  /** MONOLITH — a tapered obelisk: base square → small top square → pyramidion apex. */
-  private buildMonolith(): THREE.BufferGeometry {
+  /** GATEWAY — a COLOSSAL double arch (the bigger drive-through). Two pillars + a bowed beam, plus
+   *  an inner frame, at gateway dimensions; you drive THROUGH along local Z (reuses the #126 reward). */
+  private buildGateway(): THREE.BufferGeometry {
     const p: number[] = [];
     const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
       p.push(ax, ay, az, bx, by, bz);
-    const H = ZEN_LANDMARK.monolithHeight;
-    const b = ZEN_LANDMARK.monolithBase / 2;
-    const tb = b * ZEN_LANDMARK.monolithTaperRatio;
-    const tH = H * ZEN_LANDMARK.monolithShaftRatio;
-    const baseC: [number, number][] = [[-b, -b], [b, -b], [b, b], [-b, b]];
-    const topC: [number, number][] = [[-tb, -tb], [tb, -tb], [tb, tb], [-tb, tb]];
-    for (let i = 0; i < 4; i++) {
-      const j = (i + 1) % 4;
-      line(baseC[i][0], 0, baseC[i][1], baseC[j][0], 0, baseC[j][1]); // base square
-      line(topC[i][0], tH, topC[i][1], topC[j][0], tH, topC[j][1]); // top square
-      line(baseC[i][0], 0, baseC[i][1], topC[i][0], tH, topC[i][1]); // tapered shaft edge
-      line(topC[i][0], tH, topC[i][1], 0, H, 0); // pyramidion to the apex
+    const H = ZEN_LANDMARK.gatewayHeight;
+    const W = ZEN_LANDMARK.gatewayHalfWidth;
+    const pr = ZEN_LANDMARK.gatewayPillarRadius;
+    const rise = ZEN_LANDMARK.gatewayRise;
+    const N = ZEN_LANDMARK.archBeamSegments;
+    // Outer frame + an inner frame (0.82×) → a grand double portal.
+    for (const k of [1, 0.82]) {
+      const w = W * k;
+      const h = H * k;
+      const r = rise * k;
+      for (const sx of [-w, w]) {
+        for (const dz of [-pr, pr]) line(sx, 0, dz, sx, h, dz);
+        line(sx, h, -pr, sx, h, pr);
+      }
+      for (const dz of [-pr, pr]) {
+        let px: number = -w;
+        let py: number = h;
+        for (let i = 1; i <= N; i++) {
+          const t = i / N;
+          const x = -w + 2 * w * t;
+          const y = h + r * Math.sin(Math.PI * t);
+          line(px, py, dz, x, y, dz);
+          px = x;
+          py = y;
+        }
+      }
+    }
+    return ZenLandmarks.lineGeo(p);
+  }
+
+  /** VISTA — a raised flat-topped MESA you drive ONTO for the view: a rim circle at ground, a deck
+   *  circle at the top, radial slope lines between, and a crown ring marking the overlook. The car
+   *  rides the matching raised drivable surface (ZenLandmarkSurface). */
+  private buildVista(): THREE.BufferGeometry {
+    const p: number[] = [];
+    const R = ZEN_LANDMARK.vistaRadius;
+    const topR = ZEN_LANDMARK.vistaTopRadius;
+    const H = ZEN_LANDMARK.vistaHeight;
+    const n = ZEN_LANDMARK.vistaSegments;
+    const circle = (rad: number, y: number) => {
+      let px = rad;
+      let pz = 0;
+      for (let i = 1; i <= n; i++) {
+        const a = (i / n) * Math.PI * 2;
+        const x = Math.cos(a) * rad;
+        const z = Math.sin(a) * rad;
+        p.push(px, y, pz, x, y, z);
+        px = x;
+        pz = z;
+      }
+    };
+    circle(R, 0); // rim where the mesa meets the terrain
+    circle(topR, H); // the flat deck edge
+    circle(topR * 0.6, H); // an inner deck ring
+    circle(topR * 0.45, H + 3); // a low crown marker (the "you're up here" glow)
+    // Radial slope lines (rim → deck) every few segments.
+    for (let i = 0; i < n; i += 3) {
+      const a = (i / n) * Math.PI * 2;
+      const c = Math.cos(a);
+      const s = Math.sin(a);
+      p.push(R * c, 0, R * s, topR * c, H, topR * s);
+    }
+    return ZenLandmarks.lineGeo(p);
+  }
+
+  /** TUNNEL — a neon TUBE you descend INTO (drive along local Z): arched cross-section RIBS at
+   *  intervals (floor dipping to the centre), plus longitudinal floor edges + a ceiling apex line.
+   *  The terrain stays the roof; the car follows the lower floor (ZenLandmarkSurface). */
+  private buildTunnel(): THREE.BufferGeometry {
+    const p: number[] = [];
+    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
+      p.push(ax, ay, az, bx, by, bz);
+    const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+    const hw = ZEN_LANDMARK.tunnelHalfWidth;
+    const depth = ZEN_LANDMARK.tunnelDepth;
+    const head = ZEN_LANDMARK.tunnelHeadroom;
+    const arcN = ZEN_LANDMARK.tunnelArcSegments;
+    const step = ZEN_LANDMARK.tunnelRibSpacing;
+    // Floor depth profile (local; mirrors ZenLandmarkSurface): full depth inner half → 0 at mouths.
+    const floorY = (z: number): number => {
+      const s = Math.abs(z);
+      const f = 1 - smoothstep(halfL * 0.5, halfL, s);
+      return -depth * f;
+    };
+    // Arched cross-section at z: floor-left → ceiling arc → floor-right.
+    const ribAt = (z: number, emit: (x: number, y: number) => void) => {
+      const fy = floorY(z);
+      for (let i = 0; i <= arcN; i++) {
+        const a = Math.PI * (i / arcN); // 0..π → left to right over the top
+        emit(-Math.cos(a) * hw, fy + Math.sin(a) * head);
+      }
+    };
+    // Ribs.
+    for (let z = -halfL; z <= halfL + 1e-6; z += step) {
+      let prev: [number, number] | null = null;
+      ribAt(z, (x, y) => {
+        if (prev) line(prev[0], prev[1], z, x, y, z);
+        prev = [x, y];
+      });
+    }
+    // Longitudinal lines: the two floor edges + the ceiling apex, connecting consecutive ribs.
+    let pfL: [number, number] | null = null;
+    let pfR: [number, number] | null = null;
+    let pc: [number, number] | null = null;
+    for (let z = -halfL; z <= halfL + 1e-6; z += step) {
+      const fy = floorY(z);
+      const cL: [number, number] = [-hw, fy];
+      const cR: [number, number] = [hw, fy];
+      const ca: [number, number] = [0, fy + head];
+      if (pfL) line(pfL[0], pfL[1], z - step, cL[0], cL[1], z);
+      if (pfR) line(pfR[0], pfR[1], z - step, cR[0], cR[1], z);
+      if (pc) line(pc[0], pc[1], z - step, ca[0], ca[1], z);
+      pfL = cL;
+      pfR = cR;
+      pc = ca;
     }
     return ZenLandmarks.lineGeo(p);
   }
@@ -356,9 +463,11 @@ export class ZenLandmarks {
   }
 }
 
-/** Per-type neon colour (synthwave: arch cyan, monolith magenta, ring orange). */
+/** Per-type neon colour (synthwave: ring orange, arch cyan, gateway purple, vista green, tunnel gold). */
 const LANDMARK_COLORS: Record<LandmarkType, number> = {
-  [LANDMARK_ARCH]: ZEN_LANDMARK.archColor,
-  [LANDMARK_MONOLITH]: ZEN_LANDMARK.monolithColor,
   [LANDMARK_RING]: ZEN_LANDMARK.ringColor,
+  [LANDMARK_ARCH]: ZEN_LANDMARK.archColor,
+  [LANDMARK_GATEWAY]: ZEN_LANDMARK.gatewayColor,
+  [LANDMARK_VISTA]: ZEN_LANDMARK.vistaColor,
+  [LANDMARK_TUNNEL]: ZEN_LANDMARK.tunnelColor,
 };

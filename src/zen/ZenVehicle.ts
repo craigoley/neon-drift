@@ -110,10 +110,14 @@ export function followSurface(v: ZenVehicle, targetY: number, dt: number): ZenVe
  * AIRBORNE: a calm parabola — `vy -= airGravity·dt; y += vy·dt` — until `y` meets the
  *   terrain again, then LAND smoothly (grounded, vy 0; no crash, no speed penalty).
  *
+ * `allowAir` (default true) gates the crest-detach: on a DESIGNED drivable surface (a vista mesa /
+ * tunnel floor — see ZenLandmarkSurface) the session passes false, so the car stays glued to the
+ * surface (no crest-jumps on a platform or down a tunnel ramp) and just eases along it.
+ *
  * Pure; mutates and returns `v`. (Forward x,z motion is handled by updateZen; props are
  * not collided while airborne — the car flies over them.)
  */
-export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt: number): ZenVehicle {
+export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt: number, allowAir = true): ZenVehicle {
   if (v.airborne) {
     v.vy -= ZEN.airGravity * dt;
     v.y += v.vy * dt;
@@ -140,7 +144,7 @@ export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt
   // Small crests → small arcs, sharp peaks / ramps → bigger arcs (capped); flat, uphill and
   // mild downslopes drop slower than gravity → stay grounded + smooth. No upward-momentum
   // gate: cresting a rise should always arc, not just when you're already climbing fast.
-  if (surfaceAccel < -ZEN.airGravity) {
+  if (allowAir && surfaceAccel < -ZEN.airGravity) {
     v.airborne = true;
     v.vy = Math.min(v.vy, ZEN.maxLaunchVel); // detach with our current vertical velocity (capped)
     v.y += v.vy * dt;

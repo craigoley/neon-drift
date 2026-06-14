@@ -21,8 +21,8 @@ import { ZenShadow } from './ZenShadow';
 import { ZenStarfield } from './ZenStarfield';
 import { ZenBiomeView } from './ZenBiomeView';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
-import { heightAt, slopeAlong } from './ZenHeight';
 import { ZenLandmarks } from './ZenLandmarks';
+import { drivableSurfaceY, surfaceSlopeAlong } from './ZenLandmarkSurface';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -98,7 +98,7 @@ export class ZenRenderer {
 
   /** Resolve the car's position out of solid props AND solid landmark parts (DEFLECT/SLIDE).
    *  The sim calls this after moving the car. Both scans are bounded around (x, z). Landmark
-   *  rings are pass-through (no solid parts); arch pillars + monoliths deflect. */
+   *  rings + surface types are pass-through (no solid parts); arch + gateway pillars deflect. */
   resolve(x: number, z: number): { x: number; z: number } {
     const s = this.scenery.resolve(x, z);
     return this.landmarks.resolve(s.x, s.z);
@@ -130,7 +130,7 @@ export class ZenRenderer {
       const arc = Math.atan2(v.vy, Math.max(v.speed, 1));
       this.car.group.rotation.x = clamp(arc * ZEN.terrainTiltFactor, -ZEN.airTiltMax, ZEN.airTiltMax);
     } else {
-      const slope = slopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+      const slope = surfaceSlopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
       this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
     }
     this.car.chassis.rotation.z = -clamp(steer, -1, 1) * ZEN.leanMax;
@@ -152,7 +152,7 @@ export class ZenRenderer {
     this.stars.update(v.x, v.z);
     // Air-shadow: pin a glow spot to the terrain under the car. Airborne, the car rises but
     // the shadow stays on the ground → a visible gap (the readable "in the air" cue).
-    const groundY = heightAt(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
+    const groundY = drivableSurfaceY(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
     this.shadow.update(v.x, groundY, v.z, v.y - groundY);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not

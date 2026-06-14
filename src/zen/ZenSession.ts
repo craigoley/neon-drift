@@ -12,7 +12,8 @@
 import type { WebGLRenderer } from 'three';
 import { ZEN, type CarDef } from '../utils/constants';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
-import { heightAt, slopeAlong } from './ZenHeight';
+import { heightAt } from './ZenHeight';
+import { drivableSurfaceY, surfaceSlopeAlong, onLandmarkSurface } from './ZenLandmarkSurface';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 
@@ -102,10 +103,11 @@ export class ZenSession {
    *  throttle, then render. Called by the composition root in place of the forward sim. */
   tick(steer: number, dt: number): void {
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
-    // Slope drives the gentle speed nudge — GROUNDED only (no terrain grip in the air).
+    // Slope drives the gentle speed nudge — GROUNDED only (no terrain grip in the air). Uses the
+    // DRIVABLE surface (vista mesa / tunnel floor override where one applies, else the terrain).
     const slope = this.v.airborne
       ? 0
-      : slopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
+      : surfaceSlopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
     updateZen(this.v, steer, throttle, dt, slope);
     // Props are SOLID — but only while GROUNDED: airborne, the car flies OVER them. Push
     // the car back out of any prop circle it entered (slides around — no hard stop).
@@ -114,9 +116,13 @@ export class ZenSession {
       this.v.x = solved.x;
       this.v.z = solved.z;
     }
-    // Vertical: ride the surface, catch air off sharp crests, land smoothly (air-time).
-    const groundY = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
-    updateVertical(this.v, groundY, slope, dt);
+    // Vertical: ride the DRIVABLE surface (raised vista / lowered tunnel floor, or the terrain),
+    // catch air off sharp crests, land smoothly. On a landmark surface, SUPPRESS crest-detach
+    // (allowAir=false) so the car flows ONTO the mesa / DOWN the tunnel without crest-jumping; the
+    // override blends to terrain at the rim so the entry/exit eases (no snap).
+    const onSurface = onLandmarkSurface(ZEN.worldSeed, this.v.x, this.v.z);
+    const groundY = drivableSurfaceY(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+    updateVertical(this.v, groundY, slope, dt, !onSurface);
     this.renderer.render(this.v, steer, dt);
     // Live radar: me-centered, rotates with heading (throttled biome/ramp resample inside).
     this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);

@@ -18,13 +18,17 @@ import { chunkKey } from './ZenWorld';
 import { maskAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
 
-/** The landmark TYPES (this PR's three). Structural ids, not tuning — extend with more kinds
- *  as easy follow-ups (each just adds a mesh + any reach flavour). */
-export const LANDMARK_ARCH = 0;
-export const LANDMARK_MONOLITH = 1;
-export const LANDMARK_RING = 2;
-export const LANDMARK_TYPE_COUNT = 3;
-export type LandmarkType = 0 | 1 | 2;
+/** The landmark TYPES. Structural ids, not tuning — extend with more kinds as easy follow-ups.
+ *  RING/ARCH/GATEWAY are DRIVE-THROUGH (pass-through reward); VISTA/TUNNEL are SURFACE types that
+ *  reshape the car's drivable surface (drive ONTO / INTO) with an arrival glow. (The MONOLITH was
+ *  removed — no interaction.) */
+export const LANDMARK_RING = 0;
+export const LANDMARK_ARCH = 1;
+export const LANDMARK_GATEWAY = 2;
+export const LANDMARK_VISTA = 3;
+export const LANDMARK_TUNNEL = 4;
+export const LANDMARK_TYPE_COUNT = 5;
+export type LandmarkType = 0 | 1 | 2 | 3 | 4;
 
 export interface Landmark {
   /** Stable id (the cell key) — used to key meshes + debounce the reach moment. */
@@ -48,6 +52,25 @@ function unit(seed: number, key: number, slot: number): number {
   return (hashNoise(seed, idx) + 1) * 0.5;
 }
 
+/** Pick a landmark type by the placement WEIGHTS (tunnel/vista rarer than the drive-throughs). */
+function pickType(lseed: number, key: number): LandmarkType {
+  const w = ZEN_LANDMARK.typeWeights;
+  let total = 0;
+  for (let i = 0; i < w.length; i++) total += w[i];
+  let r = unit(lseed, key, 3) * total;
+  for (let i = 0; i < w.length; i++) {
+    if (r < w[i]) return i as LandmarkType;
+    r -= w[i];
+  }
+  return (w.length - 1) as LandmarkType;
+}
+
+/** VISTA + TUNNEL reshape the car's DRIVABLE SURFACE (drive ONTO / INTO) — see ZenLandmarkSurface.
+ *  The other types sit on the terrain. */
+export function isSurfaceType(type: LandmarkType): boolean {
+  return type === LANDMARK_VISTA || type === LANDMARK_TUNNEL;
+}
+
 /**
  * The landmark in a given cell, or null if the cell carries none (the common case — landmarks
  * are RARE). Deterministic: depends only on (seed, cellX, cellZ). Gated to gentle terrain so the
@@ -64,7 +87,7 @@ export function landmarkForCell(seed: number, cellX: number, cellZ: number): Lan
   const z = cellZ * cs + lerp(m, cs - m, unit(lseed, key, 2));
   // GENTLE, reachable ground only (no landmark buried in a mountain).
   if (maskAt(seed, x, z) > ZEN_LANDMARK.maxMask) return null;
-  const type = Math.min(LANDMARK_TYPE_COUNT - 1, Math.floor(unit(lseed, key, 3) * LANDMARK_TYPE_COUNT)) as LandmarkType;
+  const type = pickType(lseed, key);
   const rotationY = unit(lseed, key, 4) * Math.PI * 2;
   const scale = ZEN_LANDMARK.scaleMin + unit(lseed, key, 5) * (ZEN_LANDMARK.scaleMax - ZEN_LANDMARK.scaleMin);
   return { id: key, type, x, z, rotationY, scale };
@@ -97,30 +120,37 @@ export function landmarksInRadius(seed: number, carX: number, carZ: number, radi
 
 /**
  * Visit each SOLID circle (centre x/z, radius incl. the car radius) of a landmark — the parts
- * the car can't drive into. ARCH = two pillars with a clear gap between them; MONOLITH = one
- * solid trunk; RING = none (you glide straight through). No allocation (callback form).
+ * the car can't drive into. ARCH/GATEWAY = two pillars with a clear gap between them; RING +
+ * VISTA + TUNNEL = none (you glide / drive on their surface). No allocation (callback form).
  */
 export function eachSolidCircle(lm: Landmark, cb: (cx: number, cz: number, r: number) => void): void {
-  if (lm.type === LANDMARK_MONOLITH) {
-    cb(lm.x, lm.z, ZEN_LANDMARK.monolithBase * 0.5 * lm.scale + ZEN.deflectCarRadius);
-  } else if (lm.type === LANDMARK_ARCH) {
-    const half = ZEN_LANDMARK.archHalfWidth * lm.scale;
-    // Lateral axis = the mesh's local +X under a three.js Y-rotation (1,0,0)→(cosθ,0,−sinθ),
-    // so the solid pillars sit exactly where the mesh draws them (clear opening between).
-    const lx = Math.cos(lm.rotationY);
-    const lz = -Math.sin(lm.rotationY);
-    const pr = ZEN_LANDMARK.archPillarRadius * lm.scale + ZEN.deflectCarRadius;
-    cb(lm.x + lx * half, lm.z + lz * half, pr);
-    cb(lm.x - lx * half, lm.z - lz * half, pr);
+  // ARCH + GATEWAY: two pillars to either side of a clear opening. The lateral axis is the mesh's
+  // local +X under a three.js Y-rotation (1,0,0)→(cosθ,0,−sinθ), so the solid pillars sit exactly
+  // where the mesh draws them.
+  let halfWidth: number;
+  let pillarRadius: number;
+  if (lm.type === LANDMARK_ARCH) {
+    halfWidth = ZEN_LANDMARK.archHalfWidth;
+    pillarRadius = ZEN_LANDMARK.archPillarRadius;
+  } else if (lm.type === LANDMARK_GATEWAY) {
+    halfWidth = ZEN_LANDMARK.gatewayHalfWidth;
+    pillarRadius = ZEN_LANDMARK.gatewayPillarRadius;
+  } else {
+    return; // RING (free), VISTA + TUNNEL (drive on/through their surface) — no solid parts.
   }
-  // RING: pass-through — no solid parts.
+  const half = halfWidth * lm.scale;
+  const lx = Math.cos(lm.rotationY);
+  const lz = -Math.sin(lm.rotationY);
+  const pr = pillarRadius * lm.scale + ZEN.deflectCarRadius;
+  cb(lm.x + lx * half, lm.z + lz * half, pr);
+  cb(lm.x - lx * half, lm.z - lz * half, pr);
 }
 
 /** DRIVE-THROUGH types (ring, arch) — you pass through an opening, so the reward must land while
  *  the structure is still AHEAD (a front-loaded flash) + as you cross the opening (a gate ripple).
- *  The MONOLITH is a SIGHT type — you stop in front of it, so its ramp-to-peak glow stays in view. */
+ *  The ARRIVAL types (vista, tunnel) keep a ramp-to-peak glow — you are ON/IN them, so it stays in view. */
 export function isDriveThrough(type: LandmarkType): boolean {
-  return type === LANDMARK_ARCH || type === LANDMARK_RING;
+  return type === LANDMARK_ARCH || type === LANDMARK_RING || type === LANDMARK_GATEWAY;
 }
 
 /** The reach radius for a landmark (scaled with the structure). Drive-through types use a LARGER
@@ -146,8 +176,8 @@ export function reachDuration(type: LandmarkType): number {
 
 /**
  * The reach-glow envelope (0..1) at elapsed time `t` for a type:
- *  - SIGHT (monolith): sin(π·t/pulseSeconds) — ramps to peak at the MIDDLE (0.8s). Works because
- *    you stop in front of the solid structure, so it's in view the whole pulse.
+ *  - ARRIVAL (vista, tunnel): sin(π·t/pulseSeconds) — ramps to peak at the MIDDLE (0.8s). Works because
+ *    you are ON the vista / IN the tunnel, so it's in view the whole pulse.
  *  - DRIVE-THROUGH (ring, arch): FRONT-LOADED — a quick rise to peak over `flashRiseSeconds`, then
  *    a smooth decay. Peaks early (~0.12s) while the structure is still ahead + in view, instead of
  *    ~0.8s later when it's behind you.
@@ -167,12 +197,15 @@ export function reachEnvelope(type: LandmarkType, t: number): number {
 /** Opening centre height (local, pre-scale) — where the gate ripple sits on the structure. */
 export function openingHeight(type: LandmarkType): number {
   if (type === LANDMARK_RING) return ZEN_LANDMARK.ringRadius * ZEN_LANDMARK.ringCentreFactor;
+  if (type === LANDMARK_GATEWAY) return ZEN_LANDMARK.gatewayHeight * ZEN_LANDMARK.gatewayOpeningHeightRatio;
   return ZEN_LANDMARK.archHeight * ZEN_LANDMARK.archOpeningHeightRatio; // arch
 }
 
 /** Opening radius (local, pre-scale) — the clear gap you drive through, and the ripple's size. */
 export function openingRadius(type: LandmarkType): number {
-  return type === LANDMARK_RING ? ZEN_LANDMARK.ringRadius : ZEN_LANDMARK.archHalfWidth;
+  if (type === LANDMARK_RING) return ZEN_LANDMARK.ringRadius;
+  if (type === LANDMARK_GATEWAY) return ZEN_LANDMARK.gatewayHalfWidth;
+  return ZEN_LANDMARK.archHalfWidth; // arch
 }
 
 /** Signed distance of (x, z) along the structure's THROUGH-AXIS (local +Z under the Y-rotation:

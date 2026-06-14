@@ -27,7 +27,6 @@ import {
   reachEnvelope,
   isDriveThrough,
   crossedOpening,
-  openingHeight,
   openingRadius,
   type Landmark,
   type LandmarkType,
@@ -48,9 +47,10 @@ interface Active {
   /** Debounce: true while the car is within reach (so the glow fires once per visit). */
   near: boolean;
   // --- drive-through GATE ripple (ring/arch/gateway only; null for the surface types) ---
-  /** Expanding neon circle on the opening plane, shown while crossing; null for surface types. */
-  gateMesh: THREE.LineSegments | null;
-  gateMaterial: THREE.LineBasicMaterial | null;
+  /** Filled additive annulus at the opening (car height, face-on), shown + expanding while you
+   *  cross; null for surface types. (A Mesh, not a line — so the bloom pass flares it.) */
+  gateMesh: THREE.Mesh | null;
+  gateMaterial: THREE.MeshBasicMaterial | null;
   /** Gate-ripple elapsed seconds (>= gateSeconds = idle); -1 = not rippling. */
   gateT: number;
 }
@@ -62,8 +62,9 @@ export class ZenLandmarks {
   private readonly seed: number;
   /** Shared base geometry per type (built once; every instance references it). */
   private readonly geo: THREE.BufferGeometry[];
-  /** Shared unit-circle geometry (radius 1, in local XY) for the gate ripple. */
-  private readonly rippleGeo: THREE.BufferGeometry;
+  /** Shared unit ANNULUS (outer radius 1, in local XY) for the gate ripple — a filled ring you
+   *  drive through; additive + bloom make it flare. */
+  private readonly rippleGeo: THREE.RingGeometry;
   private readonly active = new Map<number, Active>();
   /** Reused resolve scratch (no per-frame allocation). */
   private readonly _resolve = { x: 0, z: 0 };
@@ -77,7 +78,8 @@ export class ZenLandmarks {
     this.seed = seed;
     // Indexed by LandmarkType (ring, arch, gateway, vista, tunnel).
     this.geo = [this.buildRing(), this.buildArch(), this.buildGateway(), this.buildVista(), this.buildTunnel()];
-    this.rippleGeo = this.buildRippleCircle();
+    // Unit annulus (outer 1) in local XY for the gate ripple.
+    this.rippleGeo = new THREE.RingGeometry(ZEN_LANDMARK.gateRippleInnerRatio, 1, ZEN_LANDMARK.gateSegments);
   }
 
   /**
@@ -215,20 +217,24 @@ export class ZenLandmarks {
     mesh.frustumCulled = false; // bounded set; avoids the from-afar cull edge case
     this.scene.add(mesh);
 
-    // Gate ripple mesh — drive-through types only (ring, arch, gateway). A unit circle on the
-    // opening plane (same colour), hidden until you cross. Vista/tunnel (arrival types) get none.
-    let gateMesh: THREE.LineSegments | null = null;
-    let gateMaterial: THREE.LineBasicMaterial | null = null;
+    // Gate ripple mesh — drive-through types only (ring, arch, gateway). A FILLED additive annulus
+    // at CAR HEIGHT, face-on to the opening (you drive THROUGH it), hidden until you cross. Additive
+    // so the bloom pass flares it. (The old version was a thin line-circle ~26u overhead, edge-on —
+    // it rendered but was unseeable. See diag/zen-reward-not-rendering.) Vista/tunnel get none.
+    let gateMesh: THREE.Mesh | null = null;
+    let gateMaterial: THREE.MeshBasicMaterial | null = null;
     if (isDriveThrough(lm.type)) {
-      gateMaterial = new THREE.LineBasicMaterial({
+      gateMaterial = new THREE.MeshBasicMaterial({
         color: colorHex,
         transparent: true,
         opacity: 0,
         fog: false,
         depthWrite: false,
+        blending: THREE.AdditiveBlending,
+        side: THREE.DoubleSide, // seen whether you approach from the front or the back
       });
-      gateMesh = new THREE.LineSegments(this.rippleGeo, gateMaterial);
-      gateMesh.position.set(lm.x, groundY + openingHeight(lm.type) * lm.scale, lm.z);
+      gateMesh = new THREE.Mesh(this.rippleGeo, gateMaterial);
+      gateMesh.position.set(lm.x, groundY + ZEN_LANDMARK.gateRippleHeight, lm.z); // car/eye level
       gateMesh.rotation.y = lm.rotationY; // local XY → faces the through-axis (the opening plane)
       gateMesh.frustumCulled = false;
       gateMesh.visible = false;
@@ -435,23 +441,6 @@ export class ZenLandmarks {
         px = x;
         py = y;
       }
-    }
-    return ZenLandmarks.lineGeo(p);
-  }
-
-  /** Unit circle (radius 1) in the local XY plane — the gate ripple, scaled + faded on a pass. */
-  private buildRippleCircle(): THREE.BufferGeometry {
-    const p: number[] = [];
-    const n = ZEN_LANDMARK.gateSegments;
-    let px = 1;
-    let py = 0;
-    for (let i = 1; i <= n; i++) {
-      const a = (i / n) * Math.PI * 2;
-      const x = Math.cos(a);
-      const y = Math.sin(a);
-      p.push(px, py, 0, x, y, 0);
-      px = x;
-      py = y;
     }
     return ZenLandmarks.lineGeo(p);
   }

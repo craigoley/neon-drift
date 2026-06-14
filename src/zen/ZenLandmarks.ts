@@ -23,6 +23,12 @@ import {
   landmarksInRadius,
   eachSolidCircle,
   reachRadius,
+  reachDuration,
+  reachEnvelope,
+  isDriveThrough,
+  crossedOpening,
+  openingHeight,
+  openingRadius,
   type Landmark,
   type LandmarkType,
   LANDMARK_ARCH,
@@ -35,10 +41,16 @@ interface Active {
   mesh: THREE.LineSegments;
   material: THREE.LineBasicMaterial;
   baseColor: THREE.Color;
-  /** Reach-pulse elapsed seconds (>= pulseSeconds = idle); -1 = not pulsing. */
+  /** Reach-glow elapsed seconds (>= the type's duration = idle); -1 = not glowing. */
   pulseT: number;
-  /** Debounce: true while the car is within reach (so the pulse fires once per visit). */
+  /** Debounce: true while the car is within reach (so the glow fires once per visit). */
   near: boolean;
+  // --- drive-through GATE ripple (ring/arch only; null for the monolith) ---
+  /** Expanding neon circle on the opening plane, shown while crossing; null for sight types. */
+  gateMesh: THREE.LineSegments | null;
+  gateMaterial: THREE.LineBasicMaterial | null;
+  /** Gate-ripple elapsed seconds (>= gateSeconds = idle); -1 = not rippling. */
+  gateT: number;
 }
 
 const _white = new THREE.Color(0xffffff);
@@ -48,14 +60,21 @@ export class ZenLandmarks {
   private readonly seed: number;
   /** Shared base geometry per type (built once; every instance references it). */
   private readonly geo: THREE.BufferGeometry[];
+  /** Shared unit-circle geometry (radius 1, in local XY) for the gate ripple. */
+  private readonly rippleGeo: THREE.BufferGeometry;
   private readonly active = new Map<number, Active>();
   /** Reused resolve scratch (no per-frame allocation). */
   private readonly _resolve = { x: 0, z: 0 };
+  /** Previous car position, for the gate plane-crossing test (set after each update). */
+  private prevCarX = 0;
+  private prevCarZ = 0;
+  private hasPrevCar = false;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.scene = scene;
     this.seed = seed;
     this.geo = [this.buildArch(), this.buildMonolith(), this.buildRing()];
+    this.rippleGeo = this.buildRippleCircle();
   }
 
   /**
@@ -79,11 +98,13 @@ export class ZenLandmarks {
       if (!found) {
         a.mesh.removeFromParent();
         a.material.dispose();
+        if (a.gateMesh) a.gateMesh.removeFromParent();
+        if (a.gateMaterial) a.gateMaterial.dispose();
         this.active.delete(id);
       }
     }
 
-    // Per-active: reach detect (debounced) + advance the pulse + distance fade.
+    // Per-active: reach detect (debounced) + advance the glow + gate ripple + distance fade.
     for (const a of this.active.values()) {
       const lm = a.landmark;
       const dx = lm.x - carX;
@@ -92,22 +113,32 @@ export class ZenLandmarks {
       const rr = reachRadius(lm);
       const within = dist2 <= rr * rr;
       if (within && !a.near) {
-        a.pulseT = 0; // entered reach → start the pulse (fires once per visit)
+        a.pulseT = 0; // entered reach → start the glow (fires once per visit)
       }
       a.near = within;
 
-      // Glow pulse envelope: sin(π·t) → brighten toward white + a gentle swell, then settle.
+      // Reach glow: SIGHT (monolith) ramps to a mid-window peak; DRIVE-THROUGH (ring, arch) is
+      // FRONT-LOADED so it flashes bright while the structure is still ahead + in view.
       let env = 0;
       if (a.pulseT >= 0) {
         a.pulseT += dt;
-        if (a.pulseT >= ZEN_LANDMARK.pulseSeconds) {
+        if (a.pulseT >= reachDuration(lm.type)) {
           a.pulseT = -1;
         } else {
-          env = Math.sin(Math.PI * (a.pulseT / ZEN_LANDMARK.pulseSeconds));
+          env = reachEnvelope(lm.type, a.pulseT);
         }
       }
       a.material.color.copy(a.baseColor).lerp(_white, env * ZEN_LANDMARK.pulseBrighten);
       a.mesh.scale.setScalar(lm.scale * (1 + env * ZEN_LANDMARK.pulseSwell));
+
+      // Gate ripple (beat 2, drive-through only): fire when the car crosses the opening plane
+      // within the opening, then expand + fade the ring you drove INTO.
+      if (a.gateMesh && a.gateMaterial) {
+        if (this.hasPrevCar && crossedOpening(lm, this.prevCarX, this.prevCarZ, carX, carZ)) {
+          a.gateT = 0; // crossed → start the ripple (debounced by the single sign-flip)
+        }
+        this.animateGate(a, dt);
+      }
 
       // Fade IN over the outer draw band (gentle emerge from the horizon, no pop).
       const dist = Math.sqrt(dist2);
@@ -117,6 +148,33 @@ export class ZenLandmarks {
         dist,
       );
     }
+
+    // Remember the car position for next frame's gate plane-crossing test.
+    this.prevCarX = carX;
+    this.prevCarZ = carZ;
+    this.hasPrevCar = true;
+  }
+
+  /** Advance an active landmark's gate ripple by `dt`: expand the circle + fade it, then idle. */
+  private animateGate(a: Active, dt: number): void {
+    const mesh = a.gateMesh!;
+    const mat = a.gateMaterial!;
+    if (a.gateT < 0) {
+      mesh.visible = false;
+      return;
+    }
+    a.gateT += dt;
+    const u = a.gateT / ZEN_LANDMARK.gateSeconds;
+    if (u >= 1) {
+      a.gateT = -1;
+      mesh.visible = false;
+      return;
+    }
+    const baseR = openingRadius(a.landmark.type) * a.landmark.scale;
+    const s = baseR * (ZEN_LANDMARK.gateStartScale + (ZEN_LANDMARK.gateEndScale - ZEN_LANDMARK.gateStartScale) * u);
+    mesh.scale.set(s, s, s);
+    mat.opacity = ZEN_LANDMARK.gateOpacity * (1 - u);
+    mesh.visible = true;
   }
 
   /** Push the car out of any landmark's SOLID parts (arch pillars / monolith trunk). Rings are
@@ -146,12 +204,34 @@ export class ZenLandmarks {
       fog: false, // a beacon — reads on the horizon through the haze
       depthWrite: false,
     });
+    const groundY = heightAt(this.seed, lm.x, lm.z);
     const mesh = new THREE.LineSegments(this.geo[lm.type], material);
-    mesh.position.set(lm.x, heightAt(this.seed, lm.x, lm.z), lm.z);
+    mesh.position.set(lm.x, groundY, lm.z);
     mesh.rotation.y = lm.rotationY;
     mesh.scale.setScalar(lm.scale);
     mesh.frustumCulled = false; // bounded set; avoids the from-afar cull edge case
     this.scene.add(mesh);
+
+    // Gate ripple mesh — drive-through types only (ring, arch). A unit circle on the opening
+    // plane (same colour), hidden until you cross. The MONOLITH (sight) gets none.
+    let gateMesh: THREE.LineSegments | null = null;
+    let gateMaterial: THREE.LineBasicMaterial | null = null;
+    if (isDriveThrough(lm.type)) {
+      gateMaterial = new THREE.LineBasicMaterial({
+        color: colorHex,
+        transparent: true,
+        opacity: 0,
+        fog: false,
+        depthWrite: false,
+      });
+      gateMesh = new THREE.LineSegments(this.rippleGeo, gateMaterial);
+      gateMesh.position.set(lm.x, groundY + openingHeight(lm.type) * lm.scale, lm.z);
+      gateMesh.rotation.y = lm.rotationY; // local XY → faces the through-axis (the opening plane)
+      gateMesh.frustumCulled = false;
+      gateMesh.visible = false;
+      this.scene.add(gateMesh);
+    }
+
     this.active.set(lm.id, {
       landmark: lm,
       mesh,
@@ -159,6 +239,9 @@ export class ZenLandmarks {
       baseColor: new THREE.Color(colorHex),
       pulseT: -1,
       near: false,
+      gateMesh,
+      gateMaterial,
+      gateT: -1,
     });
   }
 
@@ -166,9 +249,12 @@ export class ZenLandmarks {
     for (const a of this.active.values()) {
       a.mesh.removeFromParent();
       a.material.dispose();
+      if (a.gateMesh) a.gateMesh.removeFromParent();
+      if (a.gateMaterial) a.gateMaterial.dispose();
     }
     this.active.clear();
     for (const g of this.geo) g.dispose();
+    this.rippleGeo.dispose();
   }
 
   // --- geometry builders (local space, before the per-landmark scale; base sits at y=0) ---
@@ -242,6 +328,23 @@ export class ZenLandmarks {
         px = x;
         py = y;
       }
+    }
+    return ZenLandmarks.lineGeo(p);
+  }
+
+  /** Unit circle (radius 1) in the local XY plane — the gate ripple, scaled + faded on a pass. */
+  private buildRippleCircle(): THREE.BufferGeometry {
+    const p: number[] = [];
+    const n = ZEN_LANDMARK.gateSegments;
+    let px = 1;
+    let py = 0;
+    for (let i = 1; i <= n; i++) {
+      const a = (i / n) * Math.PI * 2;
+      const x = Math.cos(a);
+      const y = Math.sin(a);
+      p.push(px, py, 0, x, y, 0);
+      px = x;
+      py = y;
     }
     return ZenLandmarks.lineGeo(p);
   }

@@ -16,6 +16,7 @@ import { lerp } from '../utils/math';
 import { ZEN, ZEN_LANDMARK } from '../utils/constants';
 import { chunkKey } from './ZenWorld';
 import { maskAt } from './ZenHeight';
+import { smoothstep } from './ZenNoise';
 
 /** The landmark TYPES (this PR's three). Structural ids, not tuning — extend with more kinds
  *  as easy follow-ups (each just adds a mesh + any reach flavour). */
@@ -115,11 +116,19 @@ export function eachSolidCircle(lm: Landmark, cb: (cx: number, cz: number, r: nu
   // RING: pass-through — no solid parts.
 }
 
-/** The reach radius for a landmark (scaled with the structure). Within this horizontal distance
- *  the car has "reached" it → the gentle reach moment fires (once per visit; the renderer
- *  debounces). */
+/** DRIVE-THROUGH types (ring, arch) — you pass through an opening, so the reward must land while
+ *  the structure is still AHEAD (a front-loaded flash) + as you cross the opening (a gate ripple).
+ *  The MONOLITH is a SIGHT type — you stop in front of it, so its ramp-to-peak glow stays in view. */
+export function isDriveThrough(type: LandmarkType): boolean {
+  return type === LANDMARK_ARCH || type === LANDMARK_RING;
+}
+
+/** The reach radius for a landmark (scaled with the structure). Drive-through types use a LARGER
+ *  radius so the flash fires while the structure is clearly ahead; sight types use the close reach.
+ *  Within this horizontal distance the reach moment fires (once per visit; the renderer debounces). */
 export function reachRadius(lm: Landmark): number {
-  return ZEN_LANDMARK.reachRadius * lm.scale;
+  const base = isDriveThrough(lm.type) ? ZEN_LANDMARK.driveThroughReachRadius : ZEN_LANDMARK.reachRadius;
+  return base * lm.scale;
 }
 
 /** Whether the car (carX, carZ) is within reach of the landmark (horizontal distance). */
@@ -128,4 +137,65 @@ export function isReached(lm: Landmark, carX: number, carZ: number): boolean {
   const dz = lm.z - carZ;
   const r = reachRadius(lm);
   return dx * dx + dz * dz <= r * r;
+}
+
+/** Total seconds the reach glow runs for a type (so the renderer knows when to end the pulse). */
+export function reachDuration(type: LandmarkType): number {
+  return isDriveThrough(type) ? ZEN_LANDMARK.flashSeconds : ZEN_LANDMARK.pulseSeconds;
+}
+
+/**
+ * The reach-glow envelope (0..1) at elapsed time `t` for a type:
+ *  - SIGHT (monolith): sin(π·t/pulseSeconds) — ramps to peak at the MIDDLE (0.8s). Works because
+ *    you stop in front of the solid structure, so it's in view the whole pulse.
+ *  - DRIVE-THROUGH (ring, arch): FRONT-LOADED — a quick rise to peak over `flashRiseSeconds`, then
+ *    a smooth decay. Peaks early (~0.12s) while the structure is still ahead + in view, instead of
+ *    ~0.8s later when it's behind you.
+ */
+export function reachEnvelope(type: LandmarkType, t: number): number {
+  if (!isDriveThrough(type)) {
+    return Math.sin(Math.PI * (t / ZEN_LANDMARK.pulseSeconds));
+  }
+  const rise = ZEN_LANDMARK.flashRiseSeconds;
+  if (t < rise) return smoothstep(0, rise, t); // quick rise to the early peak
+  const u = (t - rise) / (ZEN_LANDMARK.flashSeconds - rise);
+  return 1 - smoothstep(0, 1, u); // smooth decay
+}
+
+// --- GATE pass-through (drive-through opening crossing) ---
+
+/** Opening centre height (local, pre-scale) — where the gate ripple sits on the structure. */
+export function openingHeight(type: LandmarkType): number {
+  if (type === LANDMARK_RING) return ZEN_LANDMARK.ringRadius * ZEN_LANDMARK.ringCentreFactor;
+  return ZEN_LANDMARK.archHeight * ZEN_LANDMARK.archOpeningHeightRatio; // arch
+}
+
+/** Opening radius (local, pre-scale) — the clear gap you drive through, and the ripple's size. */
+export function openingRadius(type: LandmarkType): number {
+  return type === LANDMARK_RING ? ZEN_LANDMARK.ringRadius : ZEN_LANDMARK.archHalfWidth;
+}
+
+/** Signed distance of (x, z) along the structure's THROUGH-AXIS (local +Z under the Y-rotation:
+ *  (0,0,1) → (sinθ, cosθ) in world x/z). 0 == on the opening plane; the sign flips as you cross. */
+export function signedThroughDistance(lm: Landmark, x: number, z: number): number {
+  return (x - lm.x) * Math.sin(lm.rotationY) + (z - lm.z) * Math.cos(lm.rotationY);
+}
+
+/**
+ * Did the car CROSS the opening plane (prev→curr) within the opening radius? Pure: a sign flip of
+ * the through-axis distance AND the crossing point is laterally inside the opening (so brushing
+ * past the side doesn't fire). Only meaningful for drive-through types. The renderer debounces by
+ * the sign flip itself (a straight pass crosses once).
+ */
+export function crossedOpening(lm: Landmark, prevX: number, prevZ: number, x: number, z: number): boolean {
+  if (!isDriveThrough(lm.type)) return false;
+  const sPrev = signedThroughDistance(lm, prevX, prevZ);
+  const sCurr = signedThroughDistance(lm, x, z);
+  if ((sPrev < 0) === (sCurr < 0)) return false; // same side → no crossing
+  // Lateral distance from the centre at the current point (perpendicular component).
+  const dx = x - lm.x;
+  const dz = z - lm.z;
+  const lat2 = dx * dx + dz * dz - sCurr * sCurr; // total² − along² = perpendicular²
+  const r = openingRadius(lm.type) * lm.scale;
+  return lat2 <= r * r;
 }

@@ -303,8 +303,8 @@ export class ZenLandmarks {
     const pr = ZEN_LANDMARK.gatewayPillarRadius;
     const rise = ZEN_LANDMARK.gatewayRise;
     const N = ZEN_LANDMARK.archBeamSegments;
-    // Outer frame + an inner frame (0.82×) → a grand double portal.
-    for (const k of [1, 0.82]) {
+    // Outer frame + an inner frame → a grand double portal.
+    for (const k of [1, ZEN_LANDMARK.gatewayInnerScale]) {
       const w = W * k;
       const h = H * k;
       const r = rise * k;
@@ -351,8 +351,8 @@ export class ZenLandmarks {
     };
     circle(R, 0); // rim where the mesa meets the terrain
     circle(topR, H); // the flat deck edge
-    circle(topR * 0.6, H); // an inner deck ring
-    circle(topR * 0.45, H + 3); // a low crown marker (the "you're up here" glow)
+    circle(topR * ZEN_LANDMARK.vistaInnerRingRatio, H); // an inner deck ring
+    circle(topR * ZEN_LANDMARK.vistaCrownRingRatio, H + ZEN_LANDMARK.vistaCrownRise); // a low crown marker
     // Radial slope lines (rim → deck) every few segments.
     for (let i = 0; i < n; i += 3) {
       const a = (i / n) * Math.PI * 2;
@@ -379,7 +379,7 @@ export class ZenLandmarks {
     // Floor depth profile (local; mirrors ZenLandmarkSurface): full depth inner half → 0 at mouths.
     const floorY = (z: number): number => {
       const s = Math.abs(z);
-      const f = 1 - smoothstep(halfL * 0.5, halfL, s);
+      const f = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, s);
       return -depth * f;
     };
     // Arched cross-section at z: floor-left → ceiling arc → floor-right.

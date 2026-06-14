@@ -1528,6 +1528,7 @@ export const ZEN_LANDMARK = {
   gatewayPillarRadius: 4.2,
   gatewayColor: 0xcc44ff,
   gatewayOpeningHeightRatio: 0.5,
+  gatewayInnerScale: 0.82,
   /** RING / PORTAL (drive-THROUGH, free): a big vertical neon ring you pass through — NO collision
    *  (glide straight through). Centre sits at radius × centreFactor so the bottom dips below ground
    *  (hidden) and the ground-level opening is wide. */
@@ -1550,6 +1551,10 @@ export const ZEN_LANDMARK = {
   vistaTopRadius: 20,
   vistaHeight: 14,
   vistaColor: 0x66ff99,
+  /** Inner deck ring as a fraction of topRadius; crown marker ring ratio; crown height above deck. */
+  vistaInnerRingRatio: 0.6,
+  vistaCrownRingRatio: 0.45,
+  vistaCrownRise: 3,
   /** Rings drawn on the mesa edge + a crown marker ring at the top (segments). */
   vistaSegments: 36,
   // --- TUNNEL (drive-INTO, NOVEL): an entrance you spot, descend BELOW the terrain through a neon
@@ -1564,6 +1569,10 @@ export const ZEN_LANDMARK = {
   tunnelHeadroom: 13,
   /** Dip (world units) beyond which the car counts as ENCLOSED (deep inside) — for the in-tunnel feel. */
   tunnelEnclosedDepth: 6,
+  /** Fraction of halfLength where the depth profile starts easing to 0 (the mouth ramp). */
+  tunnelDepthEaseStart: 0.5,
+  /** Fraction of halfWidth where the lateral floor starts easing up to the terrain. */
+  tunnelLateralEaseStart: 0.7,
   tunnelColor: 0xffcc33,
   /** Tube cross-section ribs + their spacing (world units) — the neon passage walls/ceiling. */
   tunnelRibSpacing: 12,

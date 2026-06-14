@@ -19,6 +19,9 @@ import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
 import { landmarksInRadius, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
 
+/** Reused scratch for surfaceUnder results (no per-frame allocation). */
+const _su = { y: 0, enclosed: false };
+
 /** The drivable surface at (x, z) under a single VISTA/TUNNEL landmark, or null if outside it. */
 function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: number; enclosed: boolean } | null {
   if (lm.type === LANDMARK_VISTA) {
@@ -32,8 +35,9 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
     const bump = d <= topR ? 1 : 1 - smoothstep(topR, R, d);
     const flatTopY = heightAt(seed, lm.x, lm.z) + ZEN_LANDMARK.vistaHeight * lm.scale;
     // Blend terrain → flat top by the bump: rim = terrain (continuous), centre = level overlook.
-    const y = heightAt(seed, x, z) * (1 - bump) + flatTopY * bump;
-    return { y, enclosed: false };
+    _su.y = heightAt(seed, x, z) * (1 - bump) + flatTopY * bump;
+    _su.enclosed = false;
+    return _su;
   }
   // TUNNEL: descend below the terrain along the through-axis, blending to terrain at the mouths
   // (along) and the walls (lateral).
@@ -47,11 +51,13 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
   const hw = ZEN_LANDMARK.tunnelHalfWidth * lm.scale;
   if (s >= halfL || lat >= hw) return null;
   // Descent profile: full depth through the inner half, easing to 0 at the mouths (entry ramps).
-  const depthF = 1 - smoothstep(halfL * 0.5, halfL, s);
+  const depthF = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, s);
   // Lateral: flat across the channel, easing up to the terrain near the walls.
-  const latF = 1 - smoothstep(hw * 0.7, hw, lat);
+  const latF = 1 - smoothstep(hw * ZEN_LANDMARK.tunnelLateralEaseStart, hw, lat);
   const dip = ZEN_LANDMARK.tunnelDepth * lm.scale * depthF * latF;
-  return { y: heightAt(seed, x, z) - dip, enclosed: dip >= ZEN_LANDMARK.tunnelEnclosedDepth };
+  _su.y = heightAt(seed, x, z) - dip;
+  _su.enclosed = dip >= ZEN_LANDMARK.tunnelEnclosedDepth;
+  return _su;
 }
 
 /** The covering VISTA/TUNNEL surface at (x, z), or null if the car is on normal terrain here. */
@@ -83,6 +89,19 @@ export function onLandmarkSurface(seed: number, x: number, z: number): boolean {
 export function inEnclosedTunnel(seed: number, x: number, z: number): boolean {
   const s = coveringSurface(seed, x, z);
   return s !== null && s.enclosed;
+}
+
+/** Reused scratch for queryDrivableSurface (no per-frame allocation). */
+const _query = { y: 0, onSurface: false };
+
+/** Combined query: drivable Y + on-surface flag in ONE coveringSurface call (the session tick needs
+ *  both at the same position — calling onLandmarkSurface + drivableSurfaceY separately would double
+ *  the landmarksInRadius scan). */
+export function queryDrivableSurface(seed: number, x: number, z: number): { y: number; onSurface: boolean } {
+  const s = coveringSurface(seed, x, z);
+  _query.y = s ? s.y : heightAt(seed, x, z);
+  _query.onSurface = s !== null;
+  return _query;
 }
 
 /** Slope (rise/run) of the DRIVABLE surface along a unit heading — the override-aware analogue of

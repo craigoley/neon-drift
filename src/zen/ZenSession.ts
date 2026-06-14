@@ -13,7 +13,7 @@ import type { WebGLRenderer } from 'three';
 import { ZEN, type CarDef } from '../utils/constants';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
-import { drivableSurfaceY, surfaceSlopeAlong, onLandmarkSurface } from './ZenLandmarkSurface';
+import { queryDrivableSurface, surfaceSlopeAlong } from './ZenLandmarkSurface';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 
@@ -120,9 +120,9 @@ export class ZenSession {
     // catch air off sharp crests, land smoothly. On a landmark surface, SUPPRESS crest-detach
     // (allowAir=false) so the car flows ONTO the mesa / DOWN the tunnel without crest-jumping; the
     // override blends to terrain at the rim so the entry/exit eases (no snap).
-    const onSurface = onLandmarkSurface(ZEN.worldSeed, this.v.x, this.v.z);
-    const groundY = drivableSurfaceY(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
-    updateVertical(this.v, groundY, slope, dt, !onSurface);
+    // Combined query: one coveringSurface scan for both Y + on-surface (not two).
+    const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
+    updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
     this.renderer.render(this.v, steer, dt);
     // Live radar: me-centered, rotates with heading (throttled biome/ramp resample inside).
     this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);

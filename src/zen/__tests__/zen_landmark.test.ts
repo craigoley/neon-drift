@@ -24,6 +24,7 @@ import {
   LANDMARK_RING,
   LANDMARK_TYPE_COUNT,
   type Landmark,
+  type LandmarkType,
 } from '../ZenLandmarkModel';
 import { rampCenterForCell, maskAt } from '../ZenHeight';
 import { deflectPoint } from '../ZenWorld';
@@ -212,7 +213,7 @@ describe('Zen landmarks — drive-through reward: FRONT-LOADED glow, monolith un
   const SAMPLE = 0.005; // fine time sampling to locate the envelope peak
 
   /** The elapsed time (s) at which a type's reach envelope peaks. */
-  function peakTime(type: number): number {
+  function peakTime(type: LandmarkType): number {
     let bestT = 0;
     let bestE = -1;
     for (let t = 0; t <= reachDuration(type) + 1e-9; t += SAMPLE) {
@@ -229,7 +230,8 @@ describe('Zen landmarks — drive-through reward: FRONT-LOADED glow, monolith un
   });
 
   it('DRIVE-THROUGH glow is FRONT-LOADED — peaks EARLY (≈ flashRise), not mid-window', () => {
-    for (const type of [LANDMARK_RING, LANDMARK_ARCH]) {
+    const driveThrough: LandmarkType[] = [LANDMARK_RING, LANDMARK_ARCH];
+    for (const type of driveThrough) {
       const tp = peakTime(type);
       expect(tp).toBeLessThan(0.25); // early flash (≈0.12s), NOT the old 0.80s ramp peak
       // Bright immediately (in view while the structure is still ahead), gone later.

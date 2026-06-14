@@ -1438,6 +1438,10 @@ export const ZEN_MINIMAP = {
    *  radius (CSS px). A hollow ring so it reads as a "go here" beacon, distinct from ramps. */
   landmarkColor: 0xffe066,
   landmarkMarkerPx: 4,
+  /** Stroke width (CSS px) of the landmark hollow-ring marker. */
+  landmarkLineWidth: 1.5,
+  /** Radius (CSS px) of the landmark centre dot. */
+  landmarkDotPx: 1,
 } as const;
 
 /**
@@ -1500,6 +1504,17 @@ export const ZEN_LANDMARK = {
   ringCentreFactor: 0.85,
   ringColor: 0xff6600,
   ringSegments: 40,
+  /** Inner ring radius as a fraction of the outer (the double-ring portal frame). */
+  ringInnerRatio: 0.9,
+  /** Query radius (world units) for landmark solid-collision — covers the biggest scaled
+   *  footprint (a scaled arch's outer pillar reaches ~30u from the centre). */
+  solidQueryRadius: 80,
+  /** Polyline segments in the arch's bowed top beam (higher = smoother curve). */
+  archBeamSegments: 12,
+  /** Monolith top half-width as a fraction of base half-width (the obelisk taper). */
+  monolithTaperRatio: 0.28,
+  /** Monolith shaft top as a fraction of total height (pyramidion apex sits above). */
+  monolithShaftRatio: 0.9,
 } as const;
 
 

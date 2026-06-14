@@ -206,12 +206,12 @@ export class ZenMinimap {
     const r = ZEN_MINIMAP.landmarkMarkerPx;
     ctx.strokeStyle = cssHex(ZEN_MINIMAP.landmarkColor);
     ctx.fillStyle = cssHex(ZEN_MINIMAP.landmarkColor);
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
     ctx.stroke();
     ctx.beginPath();
-    ctx.arc(px, py, 1, 0, Math.PI * 2);
+    ctx.arc(px, py, ZEN_MINIMAP.landmarkDotPx, 0, Math.PI * 2);
     ctx.fill();
   }
 

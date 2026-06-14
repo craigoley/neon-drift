@@ -42,8 +42,6 @@ interface Active {
 }
 
 const _white = new THREE.Color(0xffffff);
-/** Query radius (world units) for landmark solid-collision — covers the biggest scaled footprint. */
-const LANDMARK_SOLID_QUERY = 80;
 
 export class ZenLandmarks {
   private readonly scene: THREE.Scene;
@@ -72,10 +70,13 @@ export class ZenLandmarks {
       if (this.active.has(lm.id)) continue;
       this.spawn(lm);
     }
-    // Cull out-of-range landmarks.
-    const live = new Set(inRange.map((l) => l.id));
+    // Cull out-of-range landmarks (linear scan — inRange has 0–3 items; avoids Set allocation).
     for (const [id, a] of this.active) {
-      if (!live.has(id)) {
+      let found = false;
+      for (let i = 0; i < inRange.length; i++) {
+        if (inRange[i].id === id) { found = true; break; }
+      }
+      if (!found) {
         a.mesh.removeFromParent();
         a.material.dispose();
         this.active.delete(id);
@@ -123,9 +124,7 @@ export class ZenLandmarks {
   resolve(x: number, z: number): { x: number; z: number } {
     let rx = x;
     let rz = z;
-    // The biggest solid footprint (a scaled arch's outer pillar) reaches ~30u from the centre;
-    // an 80u query safely catches any landmark whose solid parts could overlap the car.
-    const near = landmarksInRadius(this.seed, x, z, LANDMARK_SOLID_QUERY);
+    const near = landmarksInRadius(this.seed, x, z, ZEN_LANDMARK.solidQueryRadius);
     for (const lm of near) {
       eachSolidCircle(lm, (cx, cz, r) => {
         const out = deflectPoint(rx, rz, cx, cz, r);
@@ -188,7 +187,7 @@ export class ZenLandmarks {
       line(sx, H, -pr, sx, H, pr); // pillar top cap
     }
     // Bowed top beam (two arcs at z = ±pr), a polyline rising `rise` at the centre.
-    const N = 12;
+    const N = ZEN_LANDMARK.archBeamSegments;
     for (const dz of [-pr, pr]) {
       let px: number = -W;
       let py: number = H;
@@ -211,8 +210,8 @@ export class ZenLandmarks {
       p.push(ax, ay, az, bx, by, bz);
     const H = ZEN_LANDMARK.monolithHeight;
     const b = ZEN_LANDMARK.monolithBase / 2;
-    const tb = b * 0.28; // top half-width
-    const tH = H * 0.9; // shaft top (apex above it)
+    const tb = b * ZEN_LANDMARK.monolithTaperRatio;
+    const tH = H * ZEN_LANDMARK.monolithShaftRatio;
     const baseC: [number, number][] = [[-b, -b], [b, -b], [b, b], [-b, b]];
     const topC: [number, number][] = [[-tb, -tb], [tb, -tb], [tb, tb], [-tb, tb]];
     for (let i = 0; i < 4; i++) {
@@ -232,7 +231,7 @@ export class ZenLandmarks {
     const R = ZEN_LANDMARK.ringRadius;
     const cy = R * ZEN_LANDMARK.ringCentreFactor;
     const n = ZEN_LANDMARK.ringSegments;
-    for (const rad of [R, R * 0.9]) {
+    for (const rad of [R, R * ZEN_LANDMARK.ringInnerRatio]) {
       let px: number = rad;
       let py: number = cy;
       for (let i = 1; i <= n; i++) {

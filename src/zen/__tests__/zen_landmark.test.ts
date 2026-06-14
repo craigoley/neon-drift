@@ -13,6 +13,12 @@ import {
   eachSolidCircle,
   isReached,
   reachRadius,
+  isDriveThrough,
+  reachDuration,
+  reachEnvelope,
+  crossedOpening,
+  signedThroughDistance,
+  openingRadius,
   LANDMARK_ARCH,
   LANDMARK_MONOLITH,
   LANDMARK_RING,
@@ -199,5 +205,104 @@ describe('Zen landmarks — appear on the minimap (kind: landmark)', () => {
     expect(landmarkMarkers.length).toBeGreaterThan(0);
     // The landmark at our position is one of them.
     expect(landmarkMarkers.some((m) => Math.hypot(m.x - lm.x, m.z - lm.z) < 1e-6)).toBe(true);
+  });
+});
+
+describe('Zen landmarks — drive-through reward: FRONT-LOADED glow, monolith unchanged', () => {
+  const SAMPLE = 0.005; // fine time sampling to locate the envelope peak
+
+  /** The elapsed time (s) at which a type's reach envelope peaks. */
+  function peakTime(type: number): number {
+    let bestT = 0;
+    let bestE = -1;
+    for (let t = 0; t <= reachDuration(type) + 1e-9; t += SAMPLE) {
+      const e = reachEnvelope(type, t);
+      if (e > bestE) { bestE = e; bestT = t; }
+    }
+    return bestT;
+  }
+
+  it('classifies types: ring + arch are drive-through, the monolith is sight', () => {
+    expect(isDriveThrough(LANDMARK_RING)).toBe(true);
+    expect(isDriveThrough(LANDMARK_ARCH)).toBe(true);
+    expect(isDriveThrough(LANDMARK_MONOLITH)).toBe(false);
+  });
+
+  it('DRIVE-THROUGH glow is FRONT-LOADED — peaks EARLY (≈ flashRise), not mid-window', () => {
+    for (const type of [LANDMARK_RING, LANDMARK_ARCH]) {
+      const tp = peakTime(type);
+      expect(tp).toBeLessThan(0.25); // early flash (≈0.12s), NOT the old 0.80s ramp peak
+      // Bright immediately (in view while the structure is still ahead), gone later.
+      expect(reachEnvelope(type, ZEN_LANDMARK.flashRiseSeconds)).toBeGreaterThan(0.95);
+      expect(reachEnvelope(type, 0.8)).toBeLessThan(reachEnvelope(type, ZEN_LANDMARK.flashRiseSeconds));
+      // Envelope stays in [0,1].
+      for (let t = 0; t <= reachDuration(type); t += 0.05) {
+        const e = reachEnvelope(type, t);
+        expect(e).toBeGreaterThanOrEqual(0);
+        expect(e).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+  });
+
+  it('SIGHT (monolith) envelope is UNCHANGED — the sin ramp peaking mid-window (~0.8s)', () => {
+    const tp = peakTime(LANDMARK_MONOLITH);
+    expect(tp).toBeGreaterThan(0.7);
+    expect(tp).toBeLessThan(0.9); // peaks at pulseSeconds/2 = 0.80s, as before
+    // Byte-for-byte the old envelope: sin(π·t/pulseSeconds).
+    for (const t of [0, 0.2, 0.4, 0.8, 1.2, 1.6]) {
+      expect(reachEnvelope(LANDMARK_MONOLITH, t)).toBeCloseTo(Math.sin(Math.PI * (t / ZEN_LANDMARK.pulseSeconds)), 12);
+    }
+    expect(reachDuration(LANDMARK_MONOLITH)).toBe(ZEN_LANDMARK.pulseSeconds);
+  });
+
+  it('drive-through reach radius is LARGER than the sight reach (fires while structure ahead)', () => {
+    const ring = { id: 1, type: LANDMARK_RING, x: 0, z: 0, rotationY: 0, scale: 1 } as Landmark;
+    const mono = { id: 2, type: LANDMARK_MONOLITH, x: 0, z: 0, rotationY: 0, scale: 1 } as Landmark;
+    expect(reachRadius(ring)).toBeGreaterThan(reachRadius(mono));
+    expect(reachRadius(ring)).toBeCloseTo(ZEN_LANDMARK.driveThroughReachRadius, 6);
+    expect(reachRadius(mono)).toBeCloseTo(ZEN_LANDMARK.reachRadius, 6);
+  });
+});
+
+describe('Zen landmarks — gate pass-through detection (crossing the opening plane)', () => {
+  /** A ring at the origin facing +z (through-axis = +z); opening radius = ringRadius·scale. */
+  const ring = (scale = 1, rot = 0): Landmark => ({ id: 9, type: LANDMARK_RING, x: 0, z: 0, rotationY: rot, scale });
+
+  it('the through-axis signed distance flips sign across the opening plane', () => {
+    const lm = ring();
+    expect(signedThroughDistance(lm, 0, 5)).toBeGreaterThan(0);
+    expect(signedThroughDistance(lm, 0, -5)).toBeLessThan(0);
+    expect(signedThroughDistance(lm, 0, 0)).toBeCloseTo(0, 9);
+  });
+
+  it('FIRES when the car crosses the plane THROUGH the opening', () => {
+    const lm = ring();
+    expect(crossedOpening(lm, 0, 5, 0, -5)).toBe(true); // straight through the centre
+    const r = openingRadius(LANDMARK_RING);
+    expect(crossedOpening(lm, r * 0.5, 3, r * 0.5, -3)).toBe(true); // inside the opening, off-centre
+  });
+
+  it('does NOT fire when crossing OUTSIDE the opening (brushing past the side)', () => {
+    const lm = ring();
+    const r = openingRadius(LANDMARK_RING);
+    expect(crossedOpening(lm, r + 10, 5, r + 10, -5)).toBe(false); // lateral beyond the opening
+  });
+
+  it('does NOT fire without a crossing (same side both frames) — single-pass debounce', () => {
+    const lm = ring();
+    expect(crossedOpening(lm, 0, 5, 0, 3)).toBe(false); // approached, didn't cross
+    expect(crossedOpening(lm, 0, -3, 0, -5)).toBe(false); // departed, already past
+  });
+
+  it('never fires for the MONOLITH (a sight type has no opening)', () => {
+    const mono = { id: 3, type: LANDMARK_MONOLITH, x: 0, z: 0, rotationY: 0, scale: 1 } as Landmark;
+    expect(crossedOpening(mono, 0, 5, 0, -5)).toBe(false);
+  });
+
+  it('respects rotation — crossing is measured along the rotated through-axis', () => {
+    // Facing +x (rotationY = π/2 → through-axis (sin,cos)=(1,0)). Now crossing is in x.
+    const lm = ring(1, Math.PI / 2);
+    expect(crossedOpening(lm, 5, 0, -5, 0)).toBe(true); // through the centre along x
+    expect(crossedOpening(lm, 5, 0, 3, 0)).toBe(false); // same side
   });
 });

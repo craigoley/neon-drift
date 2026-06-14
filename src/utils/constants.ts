@@ -1474,16 +1474,39 @@ export const ZEN_LANDMARK = {
   /** Outer band (world units) over which a landmark fades IN from the horizon as it enters the
    *  draw radius — a gentle emerge, not a pop (the neon ignores fog, so fade by opacity instead). */
   fadeBand: 450,
-  /** Horizontal distance (world units) within which the car has "reached" a landmark → fires the
-   *  gentle reach moment (scaled by the landmark's scale). Drive-through types fire as you pass the
-   *  opening; the monolith fires as you arrive. */
+  /** Horizontal distance (world units) within which the car has "reached" a SIGHT landmark
+   *  (the monolith) → fires its ramp-to-peak glow as you arrive (scaled by the landmark's scale). */
   reachRadius: 24,
+  /** Reach radius for DRIVE-THROUGH types (ring, arch) — LARGER, so the front-loaded flash
+   *  triggers while the structure is still clearly AHEAD + in view (at cruise the structure
+   *  slides behind ~0.5s after you reach it; the flash must land before that). */
+  driveThroughReachRadius: 36,
   /** Reach GLOW PULSE: a soft brighten-and-settle on the structure when reached (a calm
    *  acknowledgment — no score/UI). Duration (seconds) + how far the colour lerps toward white +
-   *  a gentle scale "breath". */
+   *  a gentle scale "breath". The SIGHT (monolith) envelope ramps to peak at the MIDDLE of this
+   *  window (sin) — it works because you stop in front of the solid structure (verified). */
   pulseSeconds: 1.6,
   pulseBrighten: 0.85,
   pulseSwell: 0.06,
+  // --- drive-through reward (ring, arch): a TWO-BEAT replacing the ramp-to-peak glow, which
+  //     peaked ~0.8s AFTER you'd passed (the structure was ~44u BEHIND the chase cam by then —
+  //     you saw nothing). Beat 1: a FRONT-LOADED flash that peaks early (while the structure is
+  //     still ahead). Beat 2: a GATE RIPPLE on the opening plane as you cross it (you drive INTO
+  //     it, looking right at it). ---
+  /** Drive-through FLASH (beat 1): total duration + the quick rise to its early peak. The flash
+   *  jumps up over `flashRiseSeconds` (peak), then decays over the rest — bright while ahead. */
+  flashSeconds: 0.7,
+  flashRiseSeconds: 0.12,
+  /** GATE RIPPLE (beat 2): an expanding neon circle on the opening plane as the car crosses it.
+   *  Duration + the ring's scale (as a fraction of the opening radius) growing start → end, and
+   *  its starting opacity (fades to 0). Cheap: one shared unit-circle line, scaled + faded. */
+  gateSeconds: 0.55,
+  gateStartScale: 0.25,
+  gateEndScale: 1.15,
+  gateOpacity: 0.9,
+  gateSegments: 32,
+  /** Arch opening centre height as a fraction of arch height (the ripple sits mid-opening). */
+  archOpeningHeightRatio: 0.5,
   // --- type geometry (world units, before the per-landmark scale) ---
   /** ARCH (drive-THROUGH): two pillars + a bowed top beam you pass under. Opening is clear; the
    *  pillars are SOLID (deflect). */

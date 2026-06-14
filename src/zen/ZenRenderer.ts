@@ -22,6 +22,7 @@ import { ZenStarfield } from './ZenStarfield';
 import { ZenBiomeView } from './ZenBiomeView';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { ZenLandmarks } from './ZenLandmarks';
+import { ZenPost } from './ZenPost';
 import { drivableSurfaceY, surfaceSlopeAlong } from './ZenLandmarkSurface';
 import type { ZenVehicle } from './ZenVehicle';
 
@@ -37,9 +38,13 @@ export class ZenRenderer {
   private readonly shadow: ZenShadow;
   private readonly stars: ZenStarfield;
   private readonly biomeView: ZenBiomeView;
+  /** Bloom post pass — makes the neon (structures, grid, the landmark reward flash) GLOW. */
+  private readonly post: ZenPost;
   /** Reused biome-state scratch sampled at the car each frame (no per-frame alloc). */
   private readonly biomeState = createZenBiomeState();
   private aspect = 0;
+  private lastW = 0;
+  private lastH = 0;
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
    *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
   private boomHeading = 0;
@@ -88,12 +93,18 @@ export class ZenRenderer {
     this.car.group.rotation.order = 'YXZ';
     this.scene.add(this.car.group);
 
+    // Bloom post pass (the neon GLOW). Built last — needs the scene + camera. The session's
+    // quality setting (setQuality) toggles it: HIGH = bloom, LOW = direct render (cheap).
+    this.post = new ZenPost(this.scene, this.camera, this.renderer);
+
     this.resize();
   }
 
-  /** Quality lever — LOW (retro FX off) swaps scenery to the plain pillars (perf). */
+  /** Quality lever — LOW (retro FX off) swaps scenery to the plain pillars AND bypasses bloom
+   *  (direct render — the guaranteed-cheap path); HIGH enables the bloom glow. */
   setQuality(high: boolean): void {
     this.scenery.setNeon(high);
+    this.post.setQuality(high);
   }
 
   /** Resolve the car's position out of solid props AND solid landmark parts (DEFLECT/SLIDE).
@@ -189,19 +200,21 @@ export class ZenRenderer {
       this.camera.updateProjectionMatrix();
     }
 
-    this.resize(); // cheap aspect check (updates only on a real size change)
-    this.renderer.render(this.scene, this.camera);
+    this.resize(); // cheap size check (updates only on a real size change)
+    this.post.render(); // bloom composer (HIGH) or direct render (LOW)
   }
 
-  /** Keep the camera aspect in sync with the (shared) renderer's drawing buffer. */
+  /** Keep the camera aspect + the bloom composer in sync with the (shared) renderer's drawing
+   *  buffer — only on a real size change (cheap compare the rest of the time). */
   private resize(): void {
     const size = this.renderer.getSize(_tmpSize);
-    const a = size.x / Math.max(1, size.y);
-    if (a !== this.aspect) {
-      this.aspect = a;
-      this.camera.aspect = a;
-      this.camera.updateProjectionMatrix();
-    }
+    if (size.x === this.lastW && size.y === this.lastH) return;
+    this.lastW = size.x;
+    this.lastH = size.y;
+    this.aspect = size.x / Math.max(1, size.y);
+    this.camera.aspect = this.aspect;
+    this.camera.updateProjectionMatrix();
+    this.post.setSize(size.x, size.y);
   }
 
   /** Free the Zen-owned geometry/materials (the shared renderer is NOT disposed). */
@@ -214,6 +227,7 @@ export class ZenRenderer {
     this.scenery.dispose();
     this.landmarks.dispose();
     this.stars.dispose();
+    this.post.dispose();
   }
 }
 

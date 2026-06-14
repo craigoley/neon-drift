@@ -1502,14 +1502,22 @@ export const ZEN_LANDMARK = {
    *  jumps up over `flashRiseSeconds` (peak), then decays over the rest — bright while ahead. */
   flashSeconds: 0.7,
   flashRiseSeconds: 0.12,
-  /** GATE RIPPLE (beat 2): an expanding neon circle on the opening plane as the car crosses it.
-   *  Duration + the ring's scale (as a fraction of the opening radius) growing start → end, and
-   *  its starting opacity (fades to 0). Cheap: one shared unit-circle line, scaled + faded. */
+  /** GATE RIPPLE (beat 2): an expanding neon ANNULUS you drive THROUGH at the opening as the car
+   *  crosses the plane. Additive (so the bloom pass flares it) + filled (an area, not a 1px line),
+   *  positioned at CAR HEIGHT face-on to your approach — so you actually SEE it (the old thin
+   *  line-circle sat ~26u overhead, edge-on, and never read). Duration + scale grows start → end +
+   *  starting opacity (fades to 0). */
   gateSeconds: 0.55,
   gateStartScale: 0.25,
   gateEndScale: 1.15,
   gateOpacity: 0.9,
   gateSegments: 32,
+  /** Ripple annulus inner radius as a fraction of the outer (a ring, not a solid disc — you drive
+   *  through the hole; it reads as a glowing ripple, not a wall of light). */
+  gateRippleInnerRatio: 0.55,
+  /** Height (world units) of the ripple above the ground at the opening — CAR/eye level, where you
+   *  actually pass, NOT the structure's centre height. */
+  gateRippleHeight: 3,
   /** Arch opening centre height as a fraction of arch height (the ripple sits mid-opening). */
   archOpeningHeightRatio: 0.5,
   // --- type geometry (world units, before the per-landmark scale) ---
@@ -1580,6 +1588,28 @@ export const ZEN_LANDMARK = {
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
    *  footprint (the tunnel half-length × max scale). */
   surfaceQueryRadius: 130,
+} as const;
+
+/**
+ * Zen BLOOM — the post pass that makes Zen's bright neon actually GLOW. Without it, everything is
+ * 1px unlit lines: the landmark reward's flash (a colour-lerp to white) + the structures + the
+ * grid all render but read as thin dim lines (the verified cause of "the reward never showed").
+ * Reuses the racing UnrealBloom recipe (RenderPass → bloom → OutputPass) at HALF resolution — the
+ * mobile-measured-safe config (racing #95-98: half-res bloom ≈ free, full-res is the GPU killer).
+ * The LOW quality tier bypasses it entirely (direct render) as the guaranteed-cheap fallback.
+ */
+export const ZEN_BLOOM = {
+  /** Glow strength. Tuned to make neon + the flash GLOW without washing out the calm scene
+   *  (a touch above racing's tamed 0.6 since Zen has no other bright HUD to protect). */
+  strength: 0.75,
+  /** Blur spread — slightly wider than racing for a soft, serene halo. */
+  radius: 0.6,
+  /** Luminance threshold — only the brighter neon cores + the white flash bloom (keeps the dark
+   *  sky + deep biomes clean, not a global haze). */
+  threshold: 0.4,
+  /** Bloom blur-target resolution scale — HALF res on ALL devices (the mobile-safe lever: a blur,
+   *  so half-res is ~visually identical at ~¼ the pixel cost). The scene stays full resolution. */
+  resolutionScale: 0.5,
 } as const;
 
 

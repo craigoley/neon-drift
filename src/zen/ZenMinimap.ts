@@ -144,10 +144,13 @@ export class ZenMinimap {
     ctx.drawImage(this.wash, -R, -R, R * 2, R * 2);
     ctx.restore();
 
-    // Markers (ramps first; extensible): project each world position into the radar frame.
+    // Markers (ramps + landmark beacons; extensible by kind): project each into the radar frame.
     for (const m of this.markers) {
       projectToRadar(m.x - carX, m.z - carZ, this.smoothedHeading, this.radarScratch);
-      this.drawRamp(c + this.radarScratch.x * this.scale, c + this.radarScratch.y * this.scale);
+      const px = c + this.radarScratch.x * this.scale;
+      const py = c + this.radarScratch.y * this.scale;
+      if (m.kind === 'landmark') this.drawLandmark(px, py);
+      else this.drawRamp(px, py);
     }
     ctx.restore(); // drop the circular clip
 
@@ -194,6 +197,22 @@ export class ZenMinimap {
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
+  }
+
+  /** A landmark beacon: a bright hollow ring with a centre dot — bigger than a ramp dot, reads
+   *  as a "destination" you navigate to. */
+  private drawLandmark(px: number, py: number): void {
+    const ctx = this.ctx;
+    const r = ZEN_MINIMAP.landmarkMarkerPx;
+    ctx.strokeStyle = cssHex(ZEN_MINIMAP.landmarkColor);
+    ctx.fillStyle = cssHex(ZEN_MINIMAP.landmarkColor);
+    ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth;
+    ctx.beginPath();
+    ctx.arc(px, py, r, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(px, py, ZEN_MINIMAP.landmarkDotPx, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   dispose(): void {

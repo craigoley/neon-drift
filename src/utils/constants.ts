@@ -1459,12 +1459,16 @@ export const ZEN_LANDMARK = {
    *  so a landmark sits roughly every ~3.5–4k units of roaming — RARER than ramps (a beacon you
    *  journey to, not a constant). */
   chance: 0.42,
-  /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint, so a
-   *  structure lives wholly inside its cell (the scan need only check one cell). */
-  edgeMargin: 60,
+  /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint (the
+   *  tunnel half-length), so a structure lives wholly inside its cell (the scan checks one cell). */
+  edgeMargin: 120,
   /** Landmarks only place where the mountain mask is at/below this (GENTLE, reachable ground) so
-   *  you can drive up to / through them — never buried in a mountain. */
+   *  you can drive up to / through / onto them — never buried in a mountain. */
   maxMask: 0.25,
+  /** Relative weight of each TYPE in the placement mix (indexed by LandmarkType: ring, arch,
+   *  gateway, vista, tunnel). Tunnel + vista are RARER (weight 1) — they're bigger "destinations";
+   *  ring/arch are the common drive-throughs. */
+  typeWeights: [3, 3, 2, 1, 1],
   /** Per-landmark uniform scale variety. */
   scaleMin: 0.85,
   scaleMax: 1.35,
@@ -1474,17 +1478,18 @@ export const ZEN_LANDMARK = {
   /** Outer band (world units) over which a landmark fades IN from the horizon as it enters the
    *  draw radius — a gentle emerge, not a pop (the neon ignores fog, so fade by opacity instead). */
   fadeBand: 450,
-  /** Horizontal distance (world units) within which the car has "reached" a SIGHT landmark
-   *  (the monolith) → fires its ramp-to-peak glow as you arrive (scaled by the landmark's scale). */
+  /** Horizontal distance (world units) within which the car has "reached" an ARRIVAL landmark
+   *  (vista, tunnel) → fires its ramp-to-peak glow as you arrive/enter (in view because you're ON
+   *  the vista / IN the tunnel). Scaled by the landmark's scale. */
   reachRadius: 24,
-  /** Reach radius for DRIVE-THROUGH types (ring, arch) — LARGER, so the front-loaded flash
+  /** Reach radius for DRIVE-THROUGH types (ring, arch, gateway) — LARGER, so the front-loaded flash
    *  triggers while the structure is still clearly AHEAD + in view (at cruise the structure
    *  slides behind ~0.5s after you reach it; the flash must land before that). */
   driveThroughReachRadius: 36,
   /** Reach GLOW PULSE: a soft brighten-and-settle on the structure when reached (a calm
    *  acknowledgment — no score/UI). Duration (seconds) + how far the colour lerps toward white +
-   *  a gentle scale "breath". The SIGHT (monolith) envelope ramps to peak at the MIDDLE of this
-   *  window (sin) — it works because you stop in front of the solid structure (verified). */
+   *  a gentle scale "breath". The ARRIVAL (vista/tunnel) envelope ramps to peak at the MIDDLE of this
+   *  window (sin) — it works because you are ON/IN the structure when it fires. */
   pulseSeconds: 1.6,
   pulseBrighten: 0.85,
   pulseSwell: 0.06,
@@ -1515,11 +1520,15 @@ export const ZEN_LANDMARK = {
   archRise: 7,
   archPillarRadius: 2.6,
   archColor: 0x00ffff,
-  /** MONOLITH (SIGHT + ambient): a tall tapered obelisk you drive up to (SOLID — deflect around).
-   *  The reach moment is the glow pulse. */
-  monolithHeight: 34,
-  monolithBase: 7,
-  monolithColor: 0xff00ff,
+  /** GATEWAY (BIGGER drive-THROUGH): a colossal arch — same proven drive-through reward (front-load
+   *  flash + gate ripple), scaled up + a double frame so it reads as a grand portal. SOLID pillars. */
+  gatewayHeight: 46,
+  gatewayHalfWidth: 34,
+  gatewayRise: 13,
+  gatewayPillarRadius: 4.2,
+  gatewayColor: 0xcc44ff,
+  gatewayOpeningHeightRatio: 0.5,
+  gatewayInnerScale: 0.82,
   /** RING / PORTAL (drive-THROUGH, free): a big vertical neon ring you pass through — NO collision
    *  (glide straight through). Centre sits at radius × centreFactor so the bottom dips below ground
    *  (hidden) and the ground-level opening is wide. */
@@ -1534,10 +1543,43 @@ export const ZEN_LANDMARK = {
   solidQueryRadius: 80,
   /** Polyline segments in the arch's bowed top beam (higher = smoother curve). */
   archBeamSegments: 12,
-  /** Monolith top half-width as a fraction of base half-width (the obelisk taper). */
-  monolithTaperRatio: 0.28,
-  /** Monolith shaft top as a fraction of total height (pyramidion apex sits above). */
-  monolithShaftRatio: 0.9,
+  // --- VISTA (drive-ONTO): a raised flat-topped mesa you ascend onto for the elevated VIEW. The
+  //     car follows a raised drivable surface (ZenLandmarkSurface) that blends to the terrain at the
+  //     rim; a gentle glow marker crowns the top. No collision — you drive up the sloped sides. ---
+  /** Outer radius (world units) where the mesa meets the terrain; flat-top radius; rise height. */
+  vistaRadius: 46,
+  vistaTopRadius: 20,
+  vistaHeight: 14,
+  vistaColor: 0x66ff99,
+  /** Inner deck ring as a fraction of topRadius; crown marker ring ratio; crown height above deck. */
+  vistaInnerRingRatio: 0.6,
+  vistaCrownRingRatio: 0.45,
+  vistaCrownRise: 3,
+  /** Rings drawn on the mesa edge + a crown marker ring at the top (segments). */
+  vistaSegments: 36,
+  // --- TUNNEL (drive-INTO, NOVEL): an entrance you spot, descend BELOW the terrain through a neon
+  //     tube, resurface the far side. The car follows a separate lower floor (ZenLandmarkSurface) —
+  //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---
+  /** Tunnel length along its through-axis; half-width of the floor; how far BELOW the terrain the
+   *  floor dips at the deepest; headroom (ceiling above the floor — must exceed the camera height so
+   *  the chase cam doesn't clip the ceiling). */
+  tunnelLength: 170,
+  tunnelHalfWidth: 13,
+  tunnelDepth: 16,
+  tunnelHeadroom: 13,
+  /** Dip (world units) beyond which the car counts as ENCLOSED (deep inside) — for the in-tunnel feel. */
+  tunnelEnclosedDepth: 6,
+  /** Fraction of halfLength where the depth profile starts easing to 0 (the mouth ramp). */
+  tunnelDepthEaseStart: 0.5,
+  /** Fraction of halfWidth where the lateral floor starts easing up to the terrain. */
+  tunnelLateralEaseStart: 0.7,
+  tunnelColor: 0xffcc33,
+  /** Tube cross-section ribs + their spacing (world units) — the neon passage walls/ceiling. */
+  tunnelRibSpacing: 12,
+  tunnelArcSegments: 10,
+  /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
+   *  footprint (the tunnel half-length × max scale). */
+  surfaceQueryRadius: 130,
 } as const;
 
 

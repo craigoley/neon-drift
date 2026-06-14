@@ -22,6 +22,7 @@ import { ZenStarfield } from './ZenStarfield';
 import { ZenBiomeView } from './ZenBiomeView';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { heightAt, slopeAlong } from './ZenHeight';
+import { ZenLandmarks } from './ZenLandmarks';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -32,6 +33,7 @@ export class ZenRenderer {
   private readonly backdrop: ZenBackdrop;
   private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
+  private readonly landmarks: ZenLandmarks;
   private readonly shadow: ZenShadow;
   private readonly stars: ZenStarfield;
   private readonly biomeView: ZenBiomeView;
@@ -69,6 +71,9 @@ export class ZenRenderer {
     // Chunk-streamed scenery (the populated world the car drives through), on the terrain.
     this.scenery = new ZenScenery(this.scene);
 
+    // Rare neon LANDMARKS — beacons you spot from afar + journey to (streamed + reach pulses).
+    this.landmarks = new ZenLandmarks(this.scene, ZEN.worldSeed);
+
     // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
     this.shadow = new ZenShadow(this.scene);
 
@@ -91,10 +96,12 @@ export class ZenRenderer {
     this.scenery.setNeon(high);
   }
 
-  /** Resolve the car's position out of solid props (DEFLECT/SLIDE). The sim calls this
-   *  after moving the car. (Props live in the scenery's chunk field; the scan is bounded.) */
+  /** Resolve the car's position out of solid props AND solid landmark parts (DEFLECT/SLIDE).
+   *  The sim calls this after moving the car. Both scans are bounded around (x, z). Landmark
+   *  rings are pass-through (no solid parts); arch pillars + monoliths deflect. */
   resolve(x: number, z: number): { x: number; z: number } {
-    return this.scenery.resolve(x, z);
+    const s = this.scenery.resolve(x, z);
+    return this.landmarks.resolve(s.x, s.z);
   }
 
   /** Apply a car's cosmetic colours (selected car + its paint). */
@@ -132,6 +139,8 @@ export class ZenRenderer {
     // only on chunk crossings — cheap the rest of the time).
     this.terrain.update(v.x, v.z);
     this.scenery.update(v.x, v.z);
+    // Landmarks: stream the rare beacons + advance their reach pulses (dt-paced).
+    this.landmarks.update(v.x, v.z, dt);
     // Backdrop: horizon-lock the sunset sky/sun/mountains to the car so they stay on the
     // far horizon as you drive (cheap — just a group translate).
     this.backdrop.update(v.x, v.z);
@@ -203,6 +212,7 @@ export class ZenRenderer {
     this.shadow.dispose();
     this.terrain.dispose();
     this.scenery.dispose();
+    this.landmarks.dispose();
     this.stars.dispose();
   }
 }

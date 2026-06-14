@@ -1434,7 +1434,74 @@ export const ZEN_MINIMAP = {
   northTickWidth: 2,
   /** Alpha of the biome wash layer (slightly transparent so the backdrop bleeds through). */
   washAlpha: 0.9,
+  /** LANDMARK marker (a destination beacon — bigger + brighter than a ramp dot) colour +
+   *  radius (CSS px). A hollow ring so it reads as a "go here" beacon, distinct from ramps. */
+  landmarkColor: 0xffe066,
+  landmarkMarkerPx: 4,
 } as const;
+
+/**
+ * Zen LANDMARKS — distinctive neon STRUCTURES you spot from afar + journey to (the payoff of
+ * the minimap markers). RARE + SPECIAL on purpose: a beacon you sight + travel to, never
+ * litter. Position-deterministic (a low-freq cell hash, like ramps but much rarer), placed on
+ * the terrain (heightAt), themed neon + calm/grand. Three types this PR (the system is built
+ * to extend — more types are easy follow-ups). Craig dials "how rare" + sizes/effects here.
+ */
+export const ZEN_LANDMARK = {
+  /** Side length (world units) of a landmark-placement cell — BIG, so landmarks are sparse.
+   *  At most one landmark per cell. */
+  cellSize: 2600,
+  /** Probability (0..1) a cell carries a landmark, before the terrain gate. Tuned with cellSize
+   *  so a landmark sits roughly every ~3.5–4k units of roaming — RARER than ramps (a beacon you
+   *  journey to, not a constant). */
+  chance: 0.42,
+  /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint, so a
+   *  structure lives wholly inside its cell (the scan need only check one cell). */
+  edgeMargin: 60,
+  /** Landmarks only place where the mountain mask is at/below this (GENTLE, reachable ground) so
+   *  you can drive up to / through them — never buried in a mountain. */
+  maxMask: 0.25,
+  /** Per-landmark uniform scale variety. */
+  scaleMin: 0.85,
+  scaleMax: 1.35,
+  /** Radius (world units) the renderer keeps landmark meshes loaded — LARGE (they're beacons
+   *  seen from afar; their neon ignores fog so they read on the horizon). Culled beyond it. */
+  drawRadius: 2600,
+  /** Outer band (world units) over which a landmark fades IN from the horizon as it enters the
+   *  draw radius — a gentle emerge, not a pop (the neon ignores fog, so fade by opacity instead). */
+  fadeBand: 450,
+  /** Horizontal distance (world units) within which the car has "reached" a landmark → fires the
+   *  gentle reach moment (scaled by the landmark's scale). Drive-through types fire as you pass the
+   *  opening; the monolith fires as you arrive. */
+  reachRadius: 24,
+  /** Reach GLOW PULSE: a soft brighten-and-settle on the structure when reached (a calm
+   *  acknowledgment — no score/UI). Duration (seconds) + how far the colour lerps toward white +
+   *  a gentle scale "breath". */
+  pulseSeconds: 1.6,
+  pulseBrighten: 0.85,
+  pulseSwell: 0.06,
+  // --- type geometry (world units, before the per-landmark scale) ---
+  /** ARCH (drive-THROUGH): two pillars + a bowed top beam you pass under. Opening is clear; the
+   *  pillars are SOLID (deflect). */
+  archHeight: 26,
+  archHalfWidth: 20,
+  archRise: 7,
+  archPillarRadius: 2.6,
+  archColor: 0x00ffff,
+  /** MONOLITH (SIGHT + ambient): a tall tapered obelisk you drive up to (SOLID — deflect around).
+   *  The reach moment is the glow pulse. */
+  monolithHeight: 34,
+  monolithBase: 7,
+  monolithColor: 0xff00ff,
+  /** RING / PORTAL (drive-THROUGH, free): a big vertical neon ring you pass through — NO collision
+   *  (glide straight through). Centre sits at radius × centreFactor so the bottom dips below ground
+   *  (hidden) and the ground-level opening is wide. */
+  ringRadius: 24,
+  ringCentreFactor: 0.85,
+  ringColor: 0xff6600,
+  ringSegments: 40,
+} as const;
+
 
 /** Star-field backdrop (procedural points high in the night sky). Brightness is
  *  biome-driven (BiomeDef.starIntensity); positions are seeded + static. */

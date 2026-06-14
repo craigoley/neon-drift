@@ -13,14 +13,15 @@ import { ZEN, ZEN_MINIMAP, ZEN_BIOMES } from '../utils/constants';
 import { mixHex } from '../utils/math';
 import { biomeAt, createZenBiomeState, type ZenBiomeState } from './ZenBiome';
 import { rampCenterForCell } from './ZenHeight';
+import { landmarksInRadius } from './ZenLandmarkModel';
 
-/** A point of interest the radar marks. EXTENSIBLE: ramps are the first kind; landmarks /
- *  discoveries become additional `kind`s drawn by the same marker pipeline. */
+/** A point of interest the radar marks. EXTENSIBLE: ramps + landmarks so far; discoveries
+ *  become additional `kind`s drawn by the same marker pipeline. */
 export interface MinimapMarker {
   /** World position. */
   x: number;
   z: number;
-  kind: 'ramp';
+  kind: 'ramp' | 'landmark';
 }
 
 /** A radar offset from the centre, in WORLD units, canvas convention (+x right, +y DOWN).
@@ -56,15 +57,16 @@ export function biomeRadarColor(seed: number, x: number, z: number, scratch?: Ze
 }
 
 /**
- * Gather the markers within `radius` of the car (live — no stored map). Currently the ramp
- * domes: scan the ramp CELLS overlapping the radar box, take each gated centre, keep those
- * inside the radar CIRCLE. Pushing into one array keeps it extensible — later marker kinds
- * append here. Bounded: the cell span is ~(2·radius / rampCellSize)² (a small constant).
+ * Gather the markers within `radius` of the car (live — no stored map). Scans the ramp CELLS for
+ * ramp domes AND the (much rarer) LANDMARK cells for beacons, keeping those inside the radar
+ * CIRCLE. One array keeps it extensible — later marker kinds append here. Bounded: each cell span
+ * is ~(2·radius / cellSize)² (small constants).
  */
 export function gatherMarkers(seed: number, carX: number, carZ: number, radius: number): MinimapMarker[] {
   const out: MinimapMarker[] = [];
-  const cs = ZEN.rampCellSize;
   const r2 = radius * radius;
+  // Ramps (the dense, common markers).
+  const cs = ZEN.rampCellSize;
   const minCellX = Math.floor((carX - radius) / cs);
   const maxCellX = Math.floor((carX + radius) / cs);
   const minCellZ = Math.floor((carZ - radius) / cs);
@@ -77,6 +79,10 @@ export function gatherMarkers(seed: number, carX: number, carZ: number, radius: 
       const dz = c.z - carZ;
       if (dx * dx + dz * dz <= r2) out.push({ x: c.x, z: c.z, kind: 'ramp' });
     }
+  }
+  // Landmarks (the rare beacons you navigate TO — the payoff of the marker pipeline).
+  for (const lm of landmarksInRadius(seed, carX, carZ, radius)) {
+    out.push({ x: lm.x, z: lm.z, kind: 'landmark' });
   }
   return out;
 }

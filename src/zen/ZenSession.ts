@@ -10,10 +10,19 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import { ZEN, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SECRET, type CarDef } from '../utils/constants';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
 import { queryDrivableSurface, surfaceSlopeAlong } from './ZenLandmarkSurface';
+import {
+  snapshot,
+  restore,
+  arrivalPose,
+  findReturnPortal,
+  crossedAnyGateway,
+  type VehicleSnapshot,
+} from './ZenSecret';
+import type { Landmark } from './ZenLandmarkModel';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 
@@ -44,6 +53,23 @@ export class ZenSession {
   private readonly overlay: HTMLElement;
   private readonly minimap: ZenMinimap;
   private readonly opts: ZenSessionOptions;
+
+  // --- SECRET-AREA warp (PR1 slice): cross a gateway → fade → teleport to a far secret region →
+  //     fade back; cross a gateway in the secret region → fade → restore your exact prior spot. ---
+  /** Full-screen fade overlay (the whiteout that hides the teleport + one-frame chunk reload). */
+  private readonly fader: HTMLElement;
+  /** The fixed secret region's arrival + RETURN portal (the gateway nearest the far coord). */
+  private readonly returnPortal: Landmark;
+  /** Previous car position, for the gateway plane-crossing trigger. */
+  private prevX = 0;
+  private prevZ = 0;
+  /** Warp state machine: none = driving; out = fading to opaque; in = fading back after teleport. */
+  private warpPhase: 'none' | 'out' | 'in' = 'none';
+  private warpT = 0;
+  /** True while in the secret area (forces the secret palette + flips the return behaviour). */
+  private inSecret = false;
+  /** The main-world position saved on entry, restored on return. */
+  private saved: VehicleSnapshot | null = null;
 
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
   private fwd = false;
@@ -87,6 +113,17 @@ export class ZenSession {
     // Live navigation radar in the top-right corner (the other corners hold EXIT + GAS/BRAKE).
     this.minimap = new ZenMinimap(this.overlay);
 
+    // Secret-area warp: the full-screen fade overlay (appended LAST → on top of all overlay UI),
+    // and the fixed secret region's return portal (deterministic — computed once).
+    this.fader = document.createElement('div');
+    this.fader.className = 'zen-fader';
+    this.fader.style.cssText =
+      `position:absolute;inset:0;background:${ZEN_SECRET.fadeColor};opacity:0;pointer-events:none;`;
+    this.overlay.appendChild(this.fader);
+    this.returnPortal = findReturnPortal(ZEN.worldSeed);
+    this.prevX = this.v.x;
+    this.prevZ = this.v.z;
+
     opts.parent.appendChild(this.overlay);
 
     // Keyboard throttle (steering stays on the shared Controls: arrows / A-D / drag).
@@ -102,6 +139,15 @@ export class ZenSession {
   /** Advance one frame: drive the movement model with the shared `steer` + the Zen
    *  throttle, then render. Called by the composition root in place of the forward sim. */
   tick(steer: number, dt: number): void {
+    if (this.warpPhase !== 'none') {
+      // WARPING: the car is frozen; just run the fade machine (the teleport fires at the opaque
+      // midpoint). Render with no steer so the camera doesn't bank under the fade.
+      this.advanceWarp(dt);
+      this.renderer.render(this.v, 0, dt);
+      this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);
+      return;
+    }
+
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
     // Slope drives the gentle speed nudge — GROUNDED only (no terrain grip in the air). Uses the
     // DRIVABLE surface (vista mesa / tunnel floor override where one applies, else the terrain).
@@ -123,9 +169,64 @@ export class ZenSession {
     // Combined query: one coveringSurface scan for both Y + on-surface (not two).
     const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
     updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
+
+    // PORTAL TRIGGER: crossing a gateway's opening starts the warp (into / out of the secret area).
+    if (crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+      this.warpPhase = 'out';
+      this.warpT = 0;
+      this.v.speed = 0; // freeze the coast during the fade
+    }
+    this.prevX = this.v.x;
+    this.prevZ = this.v.z;
+
     this.renderer.render(this.v, steer, dt);
     // Live radar: me-centered, rotates with heading (throttled biome/ramp resample inside).
     this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);
+  }
+
+  /** Advance the warp fade; at the opaque midpoint, do the teleport (hidden by the fade). */
+  private advanceWarp(dt: number): void {
+    this.warpT += dt;
+    if (this.warpPhase === 'out') {
+      this.fader.style.opacity = String(Math.min(1, this.warpT / ZEN_SECRET.fadeOutSeconds));
+      if (this.warpT >= ZEN_SECRET.fadeOutSeconds) {
+        this.doTeleport();
+        this.warpPhase = 'in';
+        this.warpT = 0;
+      }
+    } else {
+      this.fader.style.opacity = String(Math.max(0, 1 - this.warpT / ZEN_SECRET.fadeInSeconds));
+      if (this.warpT >= ZEN_SECRET.fadeInSeconds) {
+        this.fader.style.opacity = '0';
+        this.warpPhase = 'none';
+      }
+    }
+  }
+
+  /** The teleport itself (at the opaque fade midpoint): ENTER saves state + warps to the secret
+   *  region in front of its return portal; RETURN restores the exact saved spot. Snaps the camera
+   *  and resets the crossing tracker so the teleport jump doesn't false-trigger another warp. */
+  private doTeleport(): void {
+    if (!this.inSecret) {
+      this.saved = snapshot(this.v);
+      const pose = arrivalPose(this.returnPortal);
+      this.v.x = pose.x;
+      this.v.z = pose.z;
+      this.v.heading = pose.heading;
+      this.v.speed = 0;
+      this.v.vy = 0;
+      this.v.airborne = false;
+      this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+      this.inSecret = true;
+      this.renderer.setSecret(true);
+    } else {
+      if (this.saved) restore(this.v, this.saved);
+      this.inSecret = false;
+      this.renderer.setSecret(false);
+    }
+    this.renderer.snapCamera(this.v);
+    this.prevX = this.v.x;
+    this.prevZ = this.v.z;
   }
 
   /** Tear down: listeners, overlay, and the Zen-owned scene objects. */

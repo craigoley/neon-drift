@@ -1297,6 +1297,54 @@ export const ZEN_BIOMES: readonly BiomeDef[] = [
 ] as const;
 
 /**
+ * Zen SECRET-AREA palette — a distinct, dreamlike VIOLET VOID look forced while you're inside a
+ * secret area (NOT part of the cycling ZEN_BIOMES, so it doesn't affect region selection). PR1's
+ * "you can SEE you're somewhere else": the same world streams around you, but tinted to this
+ * ethereal palette so the secret region reads as a place apart. Same BiomeDef shape as ZEN_BIOMES.
+ */
+export const ZEN_SECRET_BIOME: BiomeDef = {
+  id: 'secret-void',
+  displayName: 'Secret Void',
+  gradient: [
+    { at: 0.0, color: '#f3ecff' },
+    { at: 0.3, color: '#cbb8ff' },
+    { at: 0.58, color: '#9d8aff' },
+    { at: 0.82, color: '#5a4a9a' },
+    { at: 1.0, color: '#0a0420' },
+  ],
+  gridCenter: 0xe0d0ff,
+  gridLine: 0xb0a0ff,
+  fog: 0x100a2a,
+  mountain: 0x9080d0,
+  starIntensity: 0.95, // a dreamy full sky
+  accent: 0xd0c0ff,
+  audioTone: 0.6,
+};
+
+/**
+ * Zen SECRET AREAS (PR1 vertical slice). Reaching a portal (a GATEWAY) TELEPORTS the car to a far,
+ * deterministic coordinate band — the infinite position-deterministic world simply regenerates
+ * around you (existing streaming) — hidden under a FADE so there's no in-world transition to
+ * mis-render (the #127 tunnel-camera lesson). The only world state is the ZenVehicle, so save/
+ * restore is ~7 numbers. PR1 = ONE fixed region (placeholder palette); beauty/variety come later.
+ */
+export const ZEN_SECRET = {
+  /** Far base coordinate the secret region sits near — well beyond normal roam (its nearest
+   *  GATEWAY becomes the arrival + return portal). Fixed for the slice. */
+  regionX: 640000,
+  regionZ: -480000,
+  /** Distance (world units) in FRONT of the return portal the car arrives, so driving forward
+   *  takes you back through it. */
+  arrivalApproach: 60,
+  /** Fade-to-opaque (entering the warp) + fade-back (arriving) durations (seconds). The teleport +
+   *  one-frame chunk reload happen at the opaque midpoint, fully hidden. */
+  fadeOutSeconds: 0.35,
+  fadeInSeconds: 0.55,
+  /** Fade overlay colour (a soft luminous white — a gentle whiteout, not a harsh cut). */
+  fadeColor: '#f3ecff',
+} as const;
+
+/**
  * Per-biome TERRAIN CHARACTER params (indexed parallel to ZEN_BIOMES). heightAt blends
  * these by the SAME biomeAt weight that drives the look, so the world FEELS different to
  * drive per region — not just looks different. PRONOUNCED contrast (really flat plains vs
@@ -1565,6 +1613,13 @@ export const ZEN_LANDMARK = {
   vistaCrownRise: 3,
   /** Rings drawn on the mesa edge + a crown marker ring at the top (segments). */
   vistaSegments: 36,
+  /** SUSTAINED overlook glow: while the car is ON a vista (within reach), the structure glows with a
+   *  gentle BREATHING pulse — a calm "you're up here" acknowledgment that PERSISTS while parked (not
+   *  the one-shot arrival flash). Base level + breath amplitude (each 0..1 of pulseBrighten) + breath
+   *  rate (radians/s). Applies to the arrival types (vista, tunnel). */
+  vistaSustainBase: 0.3,
+  vistaSustainAmp: 0.22,
+  vistaSustainRate: 2.2,
   // --- TUNNEL (drive-INTO, NOVEL): an entrance you spot, descend BELOW the terrain through a neon
   //     tube, resurface the far side. The car follows a separate lower floor (ZenLandmarkSurface) —
   //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---

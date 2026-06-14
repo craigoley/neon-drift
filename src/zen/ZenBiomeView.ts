@@ -19,12 +19,16 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_BIOMES, ZEN_BIOME, cssHex } from '../utils/constants';
+import { ZEN_BIOMES, ZEN_BIOME, ZEN_SECRET_BIOME, cssHex, type BiomeDef } from '../utils/constants';
 import { lerp, mixHex } from '../utils/math';
 import type { ZenBiomeState } from './ZenBiome';
 import type { ZenBackdrop } from './ZenBackdrop';
 import type { ZenStarfield } from './ZenStarfield';
 import type { ZenScenery } from './ZenScenery';
+
+/** Sentinel `lastFrom` marking that the SECRET palette is currently applied — distinct from any
+ *  real biome index (0..n) and the initial -1, so the next normal apply() detects the change. */
+const SECRET_APPLIED = -2;
 
 export class ZenBiomeView {
   private readonly scene: THREE.Scene;
@@ -34,6 +38,8 @@ export class ZenBiomeView {
 
   /** Per-biome sun gradient colours pre-parsed to ints once (strings → numbers). */
   private readonly gradHex: number[][];
+  /** Secret-area sun gradient pre-parsed to ints (the forced secret palette). */
+  private readonly secretGrad: number[];
 
   // Reused scratch — no per-apply allocation.
   private readonly stops: { at: number; color: string }[];
@@ -51,6 +57,7 @@ export class ZenBiomeView {
     this.stars = stars;
     this.scenery = scenery;
     this.gradHex = ZEN_BIOMES.map((b) => b.gradient.map((s) => parseInt(s.color.slice(1), 16)));
+    this.secretGrad = ZEN_SECRET_BIOME.gradient.map((s) => parseInt(s.color.slice(1), 16));
     // Scratch stops mirror biome 0's `at` positions (shared across all biomes).
     this.stops = ZEN_BIOMES[0].gradient.map((s) => ({ at: s.at, color: s.color }));
   }
@@ -62,18 +69,28 @@ export class ZenBiomeView {
       biome.to !== this.lastTo ||
       Math.abs(biome.blend - this.lastBlend) >= ZEN_BIOME.repaintBlendStep;
     if (!changed) return;
+    this.paint(ZEN_BIOMES[biome.from], ZEN_BIOMES[biome.to], biome.blend, this.gradHex[biome.from], this.gradHex[biome.to]);
+    this.lastFrom = biome.from;
+    this.lastTo = biome.to;
+    this.lastBlend = biome.blend;
+  }
 
-    const a = ZEN_BIOMES[biome.from];
-    const b = ZEN_BIOMES[biome.to];
-    const t = biome.blend;
-    const ga = this.gradHex[biome.from];
-    const gb = this.gradHex[biome.to];
+  /** Force the SECRET-area palette (a single def, no blend) while inside a secret area. Throttled:
+   *  repaints once on entering secret; the next normal apply() detects the change and resumes. */
+  applySecret(): void {
+    if (this.lastFrom === SECRET_APPLIED) return;
+    this.paint(ZEN_SECRET_BIOME, ZEN_SECRET_BIOME, 0, this.secretGrad, this.secretGrad);
+    this.lastFrom = SECRET_APPLIED;
+    this.lastTo = SECRET_APPLIED;
+    this.lastBlend = 0;
+  }
 
+  /** Paint the scene to a blended palette (a → b by t): sun gradient, fog/sky, star dome, prop tint. */
+  private paint(a: BiomeDef, b: BiomeDef, t: number, ga: number[], gb: number[]): void {
     // Blended sun gradient (top → base) for the retrosun repaint.
     for (let i = 0; i < this.stops.length; i++) {
       this.stops[i].color = cssHex(mixHex(ga[i], gb[i], t));
     }
-
     // Fog/horizon = blended biome fog; the sky's top is a darker shade of it, so each
     // biome gets a natural overhead-dark → horizon-lit sky derived from one colour.
     const fog = mixHex(a.fog, b.fog, t);
@@ -92,9 +109,5 @@ export class ZenBiomeView {
     const accent = mixHex(a.accent, b.accent, t);
     this.cTint.setHex(mixHex(0xffffff, accent, ZEN_BIOME.accentTintStrength));
     this.scenery.setTint(this.cTint);
-
-    this.lastFrom = biome.from;
-    this.lastTo = biome.to;
-    this.lastBlend = biome.blend;
   }
 }

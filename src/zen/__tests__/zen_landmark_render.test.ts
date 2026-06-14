@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ZenLandmarks } from '../ZenLandmarks';
 import { heightAt } from '../ZenHeight';
-import { landmarkForCell, reachRadius, LANDMARK_RING } from '../ZenLandmarkModel';
+import { landmarkForCell, reachRadius, LANDMARK_RING, LANDMARK_VISTA } from '../ZenLandmarkModel';
 import { ZEN, ZEN_LANDMARK, ZEN_BLOOM } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
@@ -111,5 +111,40 @@ describe('Zen bloom — mobile-safe config is present (the glow that makes neon 
     expect(ZEN_BLOOM.threshold).toBeGreaterThan(0);
     expect(ZEN_BLOOM.threshold).toBeLessThan(1);
     expect(ZEN_BLOOM.radius).toBeGreaterThan(0);
+  });
+});
+
+describe('Zen landmark reward — VISTA sustained glow (parking on it keeps glowing, not one-shot)', () => {
+  function findVista() {
+    for (let cz = 0; cz < 200; cz++) for (let cx = 0; cx < 200; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm && lm.type === LANDMARK_VISTA) return lm;
+    }
+    throw new Error('no vista');
+  }
+
+  it('the vista keeps glowing while parked on top (long past the one-shot pulse), dark when away', () => {
+    const vista = findVista();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const active = (lms as any).active as Map<number, any>;
+    const base = ZEN_LANDMARK.vistaColor.toString(16).padStart(6, '0');
+
+    // Park ON the vista (centre, within reach) and tick well past the one-shot pulse (1.6s ≈ 96f).
+    for (let i = 0; i < 300; i++) lms.update(vista.x, vista.z, 1 / 60);
+    const onTop = active.get(vista.id);
+    expect(onTop).toBeDefined();
+    expect(onTop.material.color.getHexString()).not.toBe(base); // STILL glowing (sustained, not faded)
+    expect(onTop.sustainT).toBeGreaterThan(1.6); // the sustain has been running the whole time
+
+    // Drive far away (off the vista) → the glow returns to the base colour (no phantom glow).
+    for (let i = 0; i < 30; i++) lms.update(vista.x + 4000, vista.z + 4000, 1 / 60);
+    // The vista is culled at that distance, so re-approach to read its resting colour.
+    for (let i = 0; i < 5; i++) lms.update(vista.x + ZEN_LANDMARK.drawRadius - 50, vista.z, 1 / 60);
+    const away = active.get(vista.id);
+    if (away) {
+      expect(away.material.color.getHexString()).toBe(base); // not near → base colour, no sustain
+    }
   });
 });

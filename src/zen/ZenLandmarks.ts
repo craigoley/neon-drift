@@ -46,6 +46,8 @@ interface Active {
   pulseT: number;
   /** Debounce: true while the car is within reach (so the glow fires once per visit). */
   near: boolean;
+  /** Elapsed seconds of the SUSTAINED overlook breath (arrival types), reset when you leave reach. */
+  sustainT: number;
   // --- drive-through GATE ripple (ring/arch/gateway only; null for the surface types) ---
   /** Filled additive annulus at the opening (car height, face-on), shown + expanding while you
    *  cross; null for surface types. (A Mesh, not a line — so the bloom pass flares it.) */
@@ -133,8 +135,21 @@ export class ZenLandmarks {
           env = reachEnvelope(lm.type, a.pulseT);
         }
       }
-      a.material.color.copy(a.baseColor).lerp(_white, env * ZEN_LANDMARK.pulseBrighten);
-      a.mesh.scale.setScalar(lm.scale * (1 + env * ZEN_LANDMARK.pulseSwell));
+      // SUSTAINED overlook glow (arrival types — vista/tunnel): while the car is ON it (within
+      // reach), a gentle BREATHING glow PERSISTS (a calm "you're up here" that doesn't vanish when
+      // parked) — fixes the vista reward being a one-shot arrival pulse you'd miss. Bloom (#128)
+      // makes it read. The structure's glow is the MAX of the one-shot pulse + this sustain.
+      let sustain = 0;
+      if (a.near && !isDriveThrough(lm.type)) {
+        a.sustainT += dt;
+        const breath = 0.5 + 0.5 * Math.sin(a.sustainT * ZEN_LANDMARK.vistaSustainRate);
+        sustain = ZEN_LANDMARK.vistaSustainBase + ZEN_LANDMARK.vistaSustainAmp * breath;
+      } else {
+        a.sustainT = 0;
+      }
+      const glow = Math.max(env, sustain);
+      a.material.color.copy(a.baseColor).lerp(_white, glow * ZEN_LANDMARK.pulseBrighten);
+      a.mesh.scale.setScalar(lm.scale * (1 + glow * ZEN_LANDMARK.pulseSwell));
 
       // Gate ripple (beat 2, drive-through only): fire when the car crosses the opening plane
       // within the opening, then expand + fade the ring you drove INTO.
@@ -248,6 +263,7 @@ export class ZenLandmarks {
       baseColor: new THREE.Color(colorHex),
       pulseT: -1,
       near: false,
+      sustainT: 0,
       gateMesh,
       gateMaterial,
       gateT: -1,

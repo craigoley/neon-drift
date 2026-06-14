@@ -48,13 +48,15 @@ export class ZenRenderer {
   /** Eased "boom" heading — the camera swings behind the car's facing as it TURNS, so
    *  turns glide rather than snap. Decoupled from forward motion (no speed lag). */
   private boomHeading = 0;
+  /** True while the car is inside a secret area → the secret palette is forced. */
+  private secretActive = false;
   /** Eased speed factor (0..1) driving the gentle distance/FOV swing; smoothed so brief
    *  throttle changes don't pump the framing. */
   private speedFactor = 0;
   /** Eased look-at target height — tracks the car's Y at the SAME rate as position.y, so the
    *  rig moves as one smooth unit. Easing this (vs aiming at the raw v.y) absorbs any v.y
    *  discontinuity (e.g. a landing settle) instead of whipping the whole view. */
-  private lookY = ZEN.camLookAtHeight;
+  private lookY: number = ZEN.camLookAtHeight;
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
@@ -125,6 +127,28 @@ export class ZenRenderer {
     this.car.setGlowOverride(hex);
   }
 
+  /** Toggle the SECRET-area look — forces the secret palette (vs the coord-derived biome) while
+   *  the car is inside a secret area. */
+  setSecret(active: boolean): void {
+    this.secretActive = active;
+  }
+
+  /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a
+   *  secret-area WARP so the rig doesn't ease across the teleport distance (it would slew for
+   *  seconds). Mirrors the resting framing the per-frame ease converges to. */
+  snapCamera(v: ZenVehicle): void {
+    this.boomHeading = v.heading;
+    this.speedFactor = 0;
+    const { distance } = zenFraming(0);
+    this.camera.position.set(
+      v.x - Math.sin(v.heading) * distance,
+      v.y + ZEN.camHeight,
+      v.z + Math.cos(v.heading) * distance,
+    );
+    this.lookY = v.y + ZEN.camLookAtHeight;
+    this.camera.lookAt(v.x, this.lookY, v.z);
+  }
+
   /**
    * Mirror the pure Zen vehicle onto the scene + ease the chase camera, then draw.
    * `steer` drives a gentle visual bank; `dt` paces the camera smoothing.
@@ -157,9 +181,13 @@ export class ZenRenderer {
     this.backdrop.update(v.x, v.z);
     // Biome region: resolve the look at the car's position and apply it (throttled inside
     // — repaints fire a bounded number of times per transition, none at rest); keep the
-    // star dome centred on the car.
-    biomeAt(ZEN.worldSeed, v.x, v.z, this.biomeState);
-    this.biomeView.apply(this.biomeState);
+    // star dome centred on the car. Inside a SECRET area, force the secret palette instead.
+    if (this.secretActive) {
+      this.biomeView.applySecret();
+    } else {
+      biomeAt(ZEN.worldSeed, v.x, v.z, this.biomeState);
+      this.biomeView.apply(this.biomeState);
+    }
     this.stars.update(v.x, v.z);
     // Air-shadow: pin a glow spot to the terrain under the car. Airborne, the car rises but
     // the shadow stays on the ground → a visible gap (the readable "in the air" cue).

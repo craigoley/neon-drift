@@ -24,6 +24,8 @@ import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { ZenLandmarks } from './ZenLandmarks';
 import { ZenPost } from './ZenPost';
 import { drivableSurfaceY, surfaceSlopeAlong } from './ZenLandmarkSurface';
+import { buildSlideMesh, disposeSlideMesh } from './ZenSkySlide';
+import { ZenSlidePath } from './ZenSlidePath';
 import type { ZenVehicle } from './ZenVehicle';
 
 export class ZenRenderer {
@@ -57,6 +59,8 @@ export class ZenRenderer {
    *  rig moves as one smooth unit. Easing this (vs aiming at the raw v.y) absorbs any v.y
    *  discontinuity (e.g. a landing settle) instead of whipping the whole view. */
   private lookY: number = ZEN.camLookAtHeight;
+  /** The Sky-Slide tube mesh while a slide is active (null otherwise). */
+  private slideMesh: THREE.Group | null = null;
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
@@ -265,8 +269,23 @@ export class ZenRenderer {
     this.post.setSize(size.x, size.y);
   }
 
-  /** Free the Zen-owned geometry/materials (the shared renderer is NOT disposed). */
+  /** Show the Sky-Slide tube (built once on launch from the pure path); replaces any prior one. */
+  showSlide(path: ZenSlidePath): void {
+    this.hideSlide();
+    this.slideMesh = buildSlideMesh(path);
+    this.scene.add(this.slideMesh);
+  }
+
+  /** Remove + dispose the Sky-Slide tube (on landing / session teardown). Safe to call when absent. */
+  hideSlide(): void {
+    if (!this.slideMesh) return;
+    this.scene.remove(this.slideMesh);
+    disposeSlideMesh(this.slideMesh);
+    this.slideMesh = null;
+  }
+
   dispose(): void {
+    this.hideSlide();
     this.scene.remove(this.car.group);
     this.car.dispose();
     this.backdrop.dispose();

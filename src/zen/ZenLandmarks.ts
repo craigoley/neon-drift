@@ -436,6 +436,25 @@ export class ZenLandmarks {
       pfR = cR;
       pc = ca;
     }
+    // ENTRANCE BEACON at each mouth (z = ±halfL, where the floor is at ground level): a tall portal
+    // frame + downward chevrons, so the tunnel ANNOUNCES itself from afar (bloom-lit) and reads as
+    // "drive DOWN here" — the distinctive bit (the descent) is below ground, this stands above it.
+    const bh = ZEN_LANDMARK.tunnelBeaconHeight;
+    const span = hw * ZEN_LANDMARK.tunnelBeaconChevronSpan;
+    const dip = ZEN_LANDMARK.tunnelBeaconChevronDip;
+    const nChev = ZEN_LANDMARK.tunnelBeaconChevrons;
+    for (const mz of [-halfL, halfL]) {
+      // Portal frame: two posts + a top beam, at the mouth plane (floor is 0 here).
+      line(-hw, 0, mz, -hw, bh, mz);
+      line(hw, 0, mz, hw, bh, mz);
+      line(-hw, bh, mz, hw, bh, mz);
+      // Downward chevrons stacked in the frame (V's pointing down → "descend").
+      for (let k = 0; k < nChev; k++) {
+        const y = bh * (ZEN_LANDMARK.tunnelBeaconChevronStartFrac - k * ZEN_LANDMARK.tunnelBeaconChevronStepFrac);
+        line(-span, y, mz, 0, y - dip, mz);
+        line(0, y - dip, mz, span, y, mz);
+      }
+    }
     return ZenLandmarks.lineGeo(p);
   }
 

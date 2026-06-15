@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ZenLandmarks } from '../ZenLandmarks';
 import { heightAt } from '../ZenHeight';
-import { landmarkForCell, reachRadius, LANDMARK_RING, LANDMARK_VISTA } from '../ZenLandmarkModel';
+import { landmarkForCell, reachRadius, LANDMARK_RING, LANDMARK_VISTA, LANDMARK_TUNNEL } from '../ZenLandmarkModel';
 import { ZEN, ZEN_LANDMARK, ZEN_BLOOM } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
@@ -146,5 +146,20 @@ describe('Zen landmark reward — VISTA sustained glow (parking on it keeps glow
     if (away) {
       expect(away.material.color.getHexString()).toBe(base); // not near → base colour, no sustain
     }
+  });
+});
+
+describe('Zen tunnel — the ENTRANCE BEACON makes it spottable from afar (was a below-ground hole)', () => {
+  it('the tunnel mesh now stands in the beacon height range (a tall portal, not a ~13u mouth)', () => {
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const geo = (lms as any).geo as THREE.BufferGeometry[];
+    const posAttr = geo[LANDMARK_TUNNEL].getAttribute('position') as THREE.BufferAttribute;
+    let maxY = -Infinity;
+    for (let i = 0; i < posAttr.count; i++) maxY = Math.max(maxY, posAttr.getY(i));
+    // Before the fix the tunnel topped out at the headroom (~13u) — below the 14-46u beacon range.
+    expect(maxY).toBeGreaterThanOrEqual(ZEN_LANDMARK.tunnelBeaconHeight - 1e-3); // now a tall beacon
+    expect(maxY).toBeGreaterThan(ZEN_LANDMARK.tunnelHeadroom + 10); // clearly taller than the old mouth
   });
 });

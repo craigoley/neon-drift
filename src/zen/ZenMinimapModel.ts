@@ -13,7 +13,7 @@ import { ZEN, ZEN_MINIMAP, ZEN_BIOMES } from '../utils/constants';
 import { mixHex } from '../utils/math';
 import { biomeAt, createZenBiomeState, type ZenBiomeState } from './ZenBiome';
 import { rampCenterForCell } from './ZenHeight';
-import { landmarksInRadius } from './ZenLandmarkModel';
+import { landmarksInRadius, type LandmarkType } from './ZenLandmarkModel';
 
 /** A point of interest the radar marks. EXTENSIBLE: ramps + landmarks so far; discoveries
  *  become additional `kind`s drawn by the same marker pipeline. */
@@ -22,6 +22,9 @@ export interface MinimapMarker {
   x: number;
   z: number;
   kind: 'ramp' | 'landmark';
+  /** For `kind: 'landmark'`, the LandmarkType — so the radar can draw a type distinctly (e.g. a
+   *  tunnel's down-chevron) instead of one generic dot. Undefined for ramps. */
+  landmarkType?: LandmarkType;
 }
 
 /** A radar offset from the centre, in WORLD units, canvas convention (+x right, +y DOWN).
@@ -80,9 +83,10 @@ export function gatherMarkers(seed: number, carX: number, carZ: number, radius: 
       if (dx * dx + dz * dz <= r2) out.push({ x: c.x, z: c.z, kind: 'ramp' });
     }
   }
-  // Landmarks (the rare beacons you navigate TO — the payoff of the marker pipeline).
+  // Landmarks (the rare beacons you navigate TO — the payoff of the marker pipeline). Carry the
+  // TYPE so the radar can draw tunnels (etc.) distinctly, not all as one generic dot.
   for (const lm of landmarksInRadius(seed, carX, carZ, radius)) {
-    out.push({ x: lm.x, z: lm.z, kind: 'landmark' });
+    out.push({ x: lm.x, z: lm.z, kind: 'landmark', landmarkType: lm.type });
   }
   return out;
 }

@@ -25,6 +25,7 @@ import { test, expect, type Page } from '@playwright/test';
 import { trackErrors } from './_helpers';
 import { ZEN } from '../src/utils/constants';
 import { landmarksInRadius, LANDMARK_GATEWAY, LANDMARK_TUNNEL } from '../src/zen/ZenLandmarkModel';
+import { maxActiveChunks } from '../src/zen/ZenWorld';
 import { findReturnPortal } from '../src/zen/ZenSecret';
 
 // --- expected-warning allowlist (recon §4): benign sources that must NOT read as findings ---
@@ -52,6 +53,7 @@ interface ZenDbg {
 interface Dbg { mode: string; frame: number; seed: number; zen?: ZenDbg }
 
 const SEED = ZEN.worldSeed;
+const PROP_BUDGET = maxActiveChunks(ZEN.chunkRadius) * ZEN.propsPerChunk;
 const log = (s: string) => console.log(`[VALIDATION] entering state=${s}`);
 
 const readDbg = (page: Page) => page.evaluate(() => (window as unknown as { __neonDebug?: Dbg }).__neonDebug ?? null);
@@ -68,7 +70,7 @@ function checkSample(z: ZenDbg, where: string): void {
   for (const v of [z.pos.x, z.pos.y, z.pos.z, z.cam.x, z.cam.y, z.cam.z, z.heading, z.speed]) {
     expect(Number.isFinite(v), `${where}: finite (pos/cam/heading/speed) — snapshot ${JSON.stringify(z)}`).toBe(true);
   }
-  expect(z.counts.props, `${where}: props within the streamed cap`).toBeLessThanOrEqual(324);
+  expect(z.counts.props, `${where}: props within the streamed cap`).toBeLessThanOrEqual(PROP_BUDGET);
   expect(['none', 'out', 'in'], `${where}: warpPhase valid`).toContain(z.warpPhase);
   // The impossible state the #130 secret-warp bug would produce: inside the secret with no saved
   // main-world spot to return to.
@@ -266,7 +268,7 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
     // Bounded growth: nothing climbs without bound over the soak (a cull/dispose regression would).
     const maxOf = (k: keyof ZenDbg['counts']) => Math.max(...all.map((z) => z.counts[k]));
     const firstOf = (k: keyof ZenDbg['counts']) => all[0].counts[k];
-    expect(maxOf('props'), 'props bounded by the streamed cap').toBeLessThanOrEqual(324);
+    expect(maxOf('props'), 'props bounded by the streamed cap').toBeLessThanOrEqual(PROP_BUDGET);
     for (const k of ['terrainVerts', 'landmarks', 'sceneChildren'] as const) {
       expect(maxOf(k), `${k} bounded (not climbing) — first=${firstOf(k)} max=${maxOf(k)}`).toBeLessThanOrEqual(firstOf(k) * 2 + 64);
     }

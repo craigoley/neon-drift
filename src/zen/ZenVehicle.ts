@@ -108,7 +108,8 @@ function landCatchupRate(v: ZenVehicle, slope: number, dt: number): number {
 
 /**
  * Vertical update with AIR-TIME. `groundY` = heightAt(x, z) + ride height (the surface the
- * car is over now); `slope` = rise/run along the heading (0 while airborne).
+ * car is over now); `slope` = rise/run along the heading (the REAL surface slope, even while
+ * airborne — the landing catch-up uses it to ride up a rising far-side at its own rate).
  *
  * GROUNDED: ease onto the surface (followSurface) and carry the surface vertical velocity
  *   `vy = slope × speed`. DETACH when the surface falls away FASTER than gravity could pull

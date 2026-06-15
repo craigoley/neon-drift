@@ -10,6 +10,7 @@ import {
   projectToRadar,
   biomeRadarColor,
   gatherMarkers,
+  nearestTunnel,
   radarScale,
 } from '../ZenMinimapModel';
 import { biomeAt, createZenBiomeState } from '../ZenBiome';
@@ -101,8 +102,9 @@ describe('Zen minimap — ramp markers: live-found in range, correctly placed', 
     const carX = 800;
     const carZ = -1200;
     const R = ZEN_MINIMAP.worldRadius;
-    const markers = gatherMarkers(SEED, carX, carZ, R);
-    expect(markers.length).toBeGreaterThan(0); // ramps exist in a 1500u reach (they're sparse but present)
+    // The radar gathers ramps AND landmarks; here we check the ramp markers specifically.
+    const markers = gatherMarkers(SEED, carX, carZ, R).filter((m) => m.kind === 'ramp');
+    expect(markers.length).toBeGreaterThan(0); // ramps are sparse but present in a radar reach
     for (const m of markers) {
       expect(m.kind).toBe('ramp');
       // Inside the radar circle…
@@ -186,7 +188,7 @@ describe('Zen minimap — landmark markers carry TYPE so tunnels draw distinctly
     expect(here?.landmarkType).toBe(LANDMARK_TUNNEL); // navigable: the radar knows this dot is a tunnel
   });
 
-  it('generation/rarity is UNCHANGED — tunnels are still ~10% of landmarks (this fix is recognition only)', () => {
+  it('tunnels were BUMPED to ~25% of landmarks (typeWeights [3,3,2,1,3]) — deliberately less rare', () => {
     const counts = [0, 0, 0, 0, 0];
     let total = 0;
     for (let cz = 0; cz < 200; cz++) for (let cx = 0; cx < 200; cx++) {
@@ -194,7 +196,76 @@ describe('Zen minimap — landmark markers carry TYPE so tunnels draw distinctly
       if (lm) { counts[lm.type]++; total++; }
     }
     const tunnelFrac = counts[LANDMARK_TUNNEL] / total;
-    expect(tunnelFrac).toBeGreaterThan(0.08);
-    expect(tunnelFrac).toBeLessThan(0.13); // ~10% (typeWeights [3,3,2,1,1] unchanged)
+    // weight 3 of total 12 = 25% (the terrain gate is type-independent, so share ≈ weight share).
+    expect(tunnelFrac).toBeGreaterThan(0.20);
+    expect(tunnelFrac).toBeLessThan(0.30);
+  });
+});
+
+describe('Zen minimap — tunnel ENCOUNTER SPACING (the spatial property #131 tests missed)', () => {
+  // The prior PR asserted "a tunnel shape exists" but never the SPATIAL frequency — so "exists but
+  // unfindable" shipped. These assert the thing that actually makes tunnels findable: they're close
+  // enough together to come across.
+  function countTunnels(cellsPerSide: number): number {
+    let tunnels = 0;
+    for (let cz = 0; cz < cellsPerSide; cz++) for (let cx = 0; cx < cellsPerSide; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm && lm.type === LANDMARK_TUNNEL) tunnels++;
+    }
+    return tunnels;
+  }
+
+  it('mean tunnel spacing is well under the pre-bump ~14.6km (the bump made them denser)', () => {
+    const N = 220;
+    const tunnels = countTunnels(N);
+    const cs = ZEN_LANDMARK.cellSize;
+    const spacing = Math.sqrt((N * cs) ** 2 / tunnels); // ≈ sqrt(area per tunnel)
+    expect(spacing).toBeGreaterThan(0);
+    expect(spacing).toBeLessThan(12000); // was ~14.6km at weight 1; weight 3 → ~9.3km
+  });
+
+  it('a tunnel is expected within the radar at the bumped density (no longer a needle in a haystack)', () => {
+    const N = 220;
+    const cs = ZEN_LANDMARK.cellSize;
+    const density = countTunnels(N) / (N * cs) ** 2;
+    const expectedInRadar = density * Math.PI * ZEN_MINIMAP.worldRadius ** 2;
+    expect(expectedInRadar).toBeGreaterThan(0.08); // ~3× the old ~0.03 (denser tunnels + wider radar)
+  });
+});
+
+describe('Zen minimap — nearest-tunnel COMPASS (the directional cue: points at a REAL tunnel)', () => {
+  it('finds the actually-nearest deterministic tunnel + the correct distance', () => {
+    const carX = 5000;
+    const carZ = -8000;
+    const n = nearestTunnel(SEED, carX, carZ);
+    expect(n).not.toBeNull();
+    // It really is a tunnel at that cell, and the distance matches.
+    const cs = ZEN_LANDMARK.cellSize;
+    const cell = landmarkForCell(SEED, Math.floor(n!.x / cs), Math.floor(n!.z / cs));
+    expect(cell?.type).toBe(LANDMARK_TUNNEL);
+    expect(close(n!.dist, Math.hypot(n!.x - carX, n!.z - carZ), 1e-6)).toBe(true);
+    // Brute-force every tunnel in a wide span — none is closer than the one the compass returned.
+    let bruteBest = Infinity;
+    for (let cz = -20; cz <= 20; cz++) for (let cx = -20; cx <= 20; cx++) {
+      const lm = landmarkForCell(SEED, Math.floor(carX / cs) + cx, Math.floor(carZ / cs) + cz);
+      if (lm && lm.type === LANDMARK_TUNNEL) bruteBest = Math.min(bruteBest, Math.hypot(lm.x - carX, lm.z - carZ));
+    }
+    expect(close(n!.dist, bruteBest, 1e-6)).toBe(true); // GLOBAL nearest, not just a nearby one
+  });
+
+  it('the compass bearing points the right way relative to heading (forward tunnel → up)', () => {
+    const n = nearestTunnel(SEED, 0, 0);
+    expect(n).not.toBeNull();
+    // Face straight AT the tunnel: forward (sin h, −cos h) aligns with (n.x, n.z).
+    const heading = Math.atan2(n!.x, -n!.z);
+    const o = projectToRadar(n!.x, n!.z, heading);
+    expect(close(o.x, 0, 1e-6)).toBe(true); // dead ahead → centred horizontally
+    expect(o.y).toBeLessThan(0); // ahead → up
+  });
+
+  it('is deterministic (same point → same nearest tunnel)', () => {
+    const a = nearestTunnel(SEED, 1234, -5678);
+    const b = nearestTunnel(SEED, 1234, -5678);
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
   });
 });

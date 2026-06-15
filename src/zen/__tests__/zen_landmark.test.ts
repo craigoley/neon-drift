@@ -111,14 +111,19 @@ describe('Zen landmarks — placement is deterministic, rare, and on reachable t
     expect(seen.has(LANDMARK_TUNNEL)).toBe(true);
   });
 
-  it('tunnel + vista are RARER than the drive-through types (bigger destinations)', () => {
+  it('VISTA is the rarest destination; TUNNEL was bumped to ~ the common types (findability)', () => {
+    // typeWeights [3,3,2,1,3]: ring/arch/tunnel = 3 (common), gateway = 2, vista = 1 (rarest).
+    // Tunnel was raised 1→3 (diagnosed unfindable from pure spatial rarity) so it's now as common
+    // as the drive-throughs; vista remains the rare "destination".
     const counts = [0, 0, 0, 0, 0];
     for (const lm of allLandmarks(80)) counts[lm.type]++;
-    // Drive-throughs (ring/arch) outnumber the surface destinations (vista/tunnel).
-    expect(counts[LANDMARK_VISTA]).toBeLessThan(counts[LANDMARK_RING]);
-    expect(counts[LANDMARK_TUNNEL]).toBeLessThan(counts[LANDMARK_ARCH]);
-    expect(counts[LANDMARK_VISTA]).toBeGreaterThan(0);
+    expect(counts[LANDMARK_VISTA]).toBeGreaterThan(0); // no type vanishes
     expect(counts[LANDMARK_TUNNEL]).toBeGreaterThan(0);
+    // Vista (weight 1) is rarer than every weight-≥2 type, including the bumped tunnel.
+    expect(counts[LANDMARK_VISTA]).toBeLessThan(counts[LANDMARK_RING]);
+    expect(counts[LANDMARK_VISTA]).toBeLessThan(counts[LANDMARK_TUNNEL]);
+    // Tunnel now sits with the common drive-throughs (within ~25% of ring's count, not a rare 1/10).
+    expect(counts[LANDMARK_TUNNEL]).toBeGreaterThan(counts[LANDMARK_RING] * 0.75);
   });
 });
 

@@ -92,11 +92,31 @@ import {
 // the pure src/game/ layer): `window.__READY__` is flipped true once the first
 // frame has actually been drawn, so an automated browser smoke test can wait for
 // a real rendered scene before asserting/screenshotting.
+//
+// `window.__neonDebug` is a READ-ONLY per-frame state mirror for the live-validation
+// sweep (a Playwright soak reads it via page.evaluate). It is gated OFF in normal prod
+// boots — only populated under a dev build or `?debug=1` (see NEON_DEBUG below) — and
+// exposes NO setters / NO commands, so it can never alter behaviour.
+interface NeonDebug {
+  mode: 'menu' | 'playing' | 'paused' | 'crashed' | 'zen';
+  frame: number; // strictly increases per rendered frame — the stall canary
+  seed: number;
+  distance: number;
+  vehicle: { lateral: number; speed: number };
+  zen?: import('./zen/ZenSession').ZenDebugSnapshot;
+}
 declare global {
   interface Window {
     __READY__?: boolean;
+    __neonDebug?: NeonDebug;
   }
 }
+
+// Gate: present only in a dev build OR with ?debug=1 (the same flag DebugOverlay uses).
+// In a normal prod boot this is false → window.__neonDebug is never assigned.
+const NEON_DEBUG =
+  import.meta.env.DEV || new URLSearchParams(window.location.search).get('debug') === '1';
+let neonFrame = 0; // monotonic rendered-frame counter (the liveness/stall canary)
 
 const app = document.querySelector<HTMLDivElement>('#app');
 if (!app) throw new Error('Missing #app mount point');
@@ -644,6 +664,17 @@ function frame(now: number): void {
   if (zen) {
     zen.tick(controls.intent.steer, realDt);
     controls.endFrame();
+    neonFrame++;
+    if (NEON_DEBUG) {
+      window.__neonDebug = {
+        mode: 'zen',
+        frame: neonFrame,
+        seed: game.seed,
+        distance: game.distance,
+        vehicle: { lateral: game.vehicle.lateral, speed: game.vehicle.speed },
+        zen: zen.debugSnapshot(),
+      };
+    }
     requestAnimationFrame(frame);
     return;
   }
@@ -989,6 +1020,16 @@ function frame(now: number): void {
   if (!ready) {
     ready = true;
     window.__READY__ = true;
+  }
+  neonFrame++;
+  if (NEON_DEBUG) {
+    window.__neonDebug = {
+      mode: game.phase, // 'menu' | 'playing' | 'paused' | 'crashed'
+      frame: neonFrame,
+      seed: game.seed,
+      distance: game.distance,
+      vehicle: { lateral: game.vehicle.lateral, speed: game.vehicle.speed },
+    };
   }
   requestAnimationFrame(frame);
 }

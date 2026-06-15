@@ -450,7 +450,7 @@ export class ZenLandmarks {
       line(-hw, bh, mz, hw, bh, mz);
       // Downward chevrons stacked in the frame (V's pointing down → "descend").
       for (let k = 0; k < nChev; k++) {
-        const y = bh * (0.75 - k * 0.22); // from near the top, stepping down
+        const y = bh * (ZEN_LANDMARK.tunnelBeaconChevronStartFrac - k * ZEN_LANDMARK.tunnelBeaconChevronStepFrac);
         line(-span, y, mz, 0, y - dip, mz);
         line(0, y - dip, mz, span, y, mz);
       }

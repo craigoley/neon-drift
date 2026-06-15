@@ -226,12 +226,12 @@ export class ZenMinimap {
     const ctx = this.ctx;
     const r = ZEN_MINIMAP.tunnelMarkerPx;
     ctx.strokeStyle = cssHex(ZEN_MINIMAP.tunnelMarkerColor);
-    ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth + 0.5;
+    ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth + ZEN_MINIMAP.tunnelMarkerLineWidthBoost;
     ctx.beginPath();
-    // A down-chevron (V pointing down): (−r, −r·0.6) → (0, r) → (r, −r·0.6).
-    ctx.moveTo(px - r, py - r * 0.6);
+    const yOff = r * ZEN_MINIMAP.tunnelChevronYRatio;
+    ctx.moveTo(px - r, py - yOff);
     ctx.lineTo(px, py + r);
-    ctx.lineTo(px + r, py - r * 0.6);
+    ctx.lineTo(px + r, py - yOff);
     ctx.stroke();
   }
 

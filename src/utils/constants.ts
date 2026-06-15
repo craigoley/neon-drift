@@ -1493,6 +1493,11 @@ export const ZEN_MINIMAP = {
    *  radar, not one more identical landmark dot — the diagnosed reason tunnels were never found). */
   tunnelMarkerColor: 0xffcc33,
   tunnelMarkerPx: 4,
+  /** Extra stroke width (CSS px) added to tunnel chevron markers beyond the base landmarkLineWidth. */
+  tunnelMarkerLineWidthBoost: 0.5,
+  /** Vertical offset ratio of the tunnel chevron (the V's arm endpoints sit at ±r × this fraction
+   *  above the centre). */
+  tunnelChevronYRatio: 0.6,
   /** Stroke width (CSS px) of the landmark hollow-ring marker. */
   landmarkLineWidth: 1.5,
   /** Radius (CSS px) of the landmark centre dot. */
@@ -1659,6 +1664,10 @@ export const ZEN_LANDMARK = {
   tunnelBeaconChevrons: 3,
   tunnelBeaconChevronDip: 5,
   tunnelBeaconChevronSpan: 0.7,
+  /** Where the top chevron sits inside the portal frame (fraction of beacon height from the top)
+   *  and how far apart consecutive chevrons are spaced (fraction of beacon height). */
+  tunnelBeaconChevronStartFrac: 0.75,
+  tunnelBeaconChevronStepFrac: 0.22,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
    *  footprint (the tunnel half-length × max scale). */
   surfaceQueryRadius: 130,

@@ -28,6 +28,7 @@ import {
   isDriveThrough,
   crossedOpening,
   openingRadius,
+  tunnelBendShape,
   type Landmark,
   type LandmarkType,
   LANDMARK_RING,
@@ -444,19 +445,24 @@ export class ZenLandmarks {
     const arcN = ZEN_LANDMARK.tunnelArcSegments;
     const step = ZEN_LANDMARK.tunnelRibSpacing;
     const floorY = (z: number) => ZenLandmarks.tunnelFloorY(z, halfL);
+    // Lateral CURVE: the centreline sweeps sideways by bend(z) (zero + tangent at the mouths). The
+    // whole cross-section (floor + arch) is centred on it, so the tube bends as a unit.
+    const bend = (z: number) => ZEN_LANDMARK.tunnelBendAmplitude * tunnelBendShape(z / halfL);
     // Ceiling height at z: tapers from ~0 at the mouths to full headroom deep inside (tracks the
     // depth ease), so the arch grows AS you sink — no protruding pipe-end at the surface.
     const archH = (z: number): number => {
       const grow = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, Math.abs(z));
       return head * (ZEN_LANDMARK.tunnelMouthArchFloor + (1 - ZEN_LANDMARK.tunnelMouthArchFloor) * grow);
     };
-    // Arched cross-section at z: floor-left → ceiling arc → floor-right (height tapered near mouths).
+    // Arched cross-section at z: floor-left → ceiling arc → floor-right (height tapered near mouths,
+    // centred on the curving centreline bend(z)).
     const ribAt = (z: number, emit: (x: number, y: number) => void) => {
       const fy = floorY(z);
       const h = archH(z);
+      const cx = bend(z);
       for (let i = 0; i <= arcN; i++) {
         const a = Math.PI * (i / arcN); // 0..π → left to right over the top
-        emit(-Math.cos(a) * hw, fy + Math.sin(a) * h);
+        emit(cx - Math.cos(a) * hw, fy + Math.sin(a) * h);
       }
     };
     // Ribs.
@@ -470,7 +476,7 @@ export class ZenLandmarks {
     // Longitudinal ceiling apex line, connecting consecutive ribs (the floor lines live in the road mesh).
     let pc: [number, number] | null = null;
     for (let z = -halfL; z <= halfL + 1e-6; z += step) {
-      const ca: [number, number] = [0, floorY(z) + archH(z)];
+      const ca: [number, number] = [bend(z), floorY(z) + archH(z)];
       if (pc) line(pc[0], pc[1], z - step, ca[0], ca[1], z);
       pc = ca;
     }
@@ -508,19 +514,22 @@ export class ZenLandmarks {
     const hw = ZEN_LANDMARK.tunnelHalfWidth;
     const rung = ZEN_LANDMARK.tunnelFloorRungSpacing;
     const floorY = (z: number) => ZenLandmarks.tunnelFloorY(z, halfL);
-    // Three longitudinal rails (left edge x=−hw, centre x=0, right edge x=+hw) connecting consecutive
-    // steps at the (descending) floor Y, plus a lateral rung at each step (the road "ladder").
-    let prevFy: number | null = null;
+    const bend = (z: number) => ZEN_LANDMARK.tunnelBendAmplitude * tunnelBendShape(z / halfL);
+    // Three longitudinal rails (left edge, centre, right edge) tracking the CURVING centreline bend(z)
+    // at the descending floor Y, plus a lateral rung at each step (the road "ladder").
+    let prev: { l: number; m: number; r: number; y: number } | null = null;
     for (let z = -halfL; z <= halfL + 1e-6; z += rung) {
       const fy = floorY(z);
-      if (prevFy !== null) {
+      const cx = bend(z);
+      const l = cx - hw, m = cx, r = cx + hw;
+      if (prev) {
         const pz = z - rung;
-        line(-hw, prevFy, pz, -hw, fy, z); // left rail
-        line(0, prevFy, pz, 0, fy, z); // centre line
-        line(hw, prevFy, pz, hw, fy, z); // right rail
+        line(prev.l, prev.y, pz, l, fy, z); // left rail
+        line(prev.m, prev.y, pz, m, fy, z); // centre line
+        line(prev.r, prev.y, pz, r, fy, z); // right rail
       }
-      line(-hw, fy, z, hw, fy, z); // lateral rung across the channel
-      prevFy = fy;
+      line(l, fy, z, r, fy, z); // lateral rung across the channel
+      prev = { l, m, r, y: fy };
     }
     return ZenLandmarks.lineGeo(p);
   }

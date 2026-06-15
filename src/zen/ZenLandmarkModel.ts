@@ -72,6 +72,23 @@ export function isSurfaceType(type: LandmarkType): boolean {
 }
 
 /**
+ * The tunnel's LATERAL CURVE, as a unit shape over the axial fraction `t` (= localZ / halfLength,
+ * −1..1). Returns the centreline's sideways offset in units of `tunnelBendAmplitude` — multiply by
+ * the amplitude (and the landmark scale, in world space) to get the actual offset. Expressing the
+ * curve as a lateral offset in the STRAIGHT-axis frame (not an arc-length reparameterisation) lets
+ * the rendered tube/floor (ZenLandmarks) and the pure drivable surface (ZenLandmarkSurface) share
+ * ONE definition — so the car always sits on the floor it sees, through every bend.
+ *
+ * A gentle sweeping sine, WINDOWED by the same ease as the descent (the `tunnelDepthEaseStart`
+ * smoothstep) so the bend is zero AND tangent at the mouths — the tunnel runs straight into the
+ * surface, then curves as it deepens (no kink at the entrance). Calm by design, not technical.
+ */
+export function tunnelBendShape(t: number): number {
+  const window = 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(t));
+  return window * Math.sin(Math.PI * ZEN_LANDMARK.tunnelBendWaves * t);
+}
+
+/**
  * The landmark in a given cell, or null if the cell carries none (the common case — landmarks
  * are RARE). Deterministic: depends only on (seed, cellX, cellZ). Gated to gentle terrain so the
  * structure is reachable (you can drive up to / through it).

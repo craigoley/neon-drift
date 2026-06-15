@@ -20,6 +20,7 @@ import {
   signedThroughDistance,
   openingRadius,
   isSurfaceType,
+  tunnelBendShape,
   LANDMARK_RING,
   LANDMARK_ARCH,
   LANDMARK_GATEWAY,
@@ -363,6 +364,15 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     throw new Error(`no landmark of type ${type} found`);
   }
 
+  /** A world point on the tunnel's CURVED centreline at axial offset `along` (the realistic path —
+   *  the car steers to follow the bend; it's not on rails). Mirrors tunnelBend in the surface. */
+  function tunnelCentreline(t: Landmark, along: number): { x: number; z: number } {
+    const tx = Math.sin(t.rotationY), tz = Math.cos(t.rotationY);
+    const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
+    const b = ZEN_LANDMARK.tunnelBendAmplitude * t.scale * tunnelBendShape(along / halfL);
+    return { x: t.x + tx * along + -tz * b, z: t.z + tz * along + tx * b };
+  }
+
   it('off any landmark, the drivable surface IS the terrain (no override elsewhere)', () => {
     // A point far from any landmark cell centre.
     const x = 137.5;
@@ -405,79 +415,69 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     expect(drivableSurfaceY(SEED, mouthX, mouthZ)).toBe(heightAt(SEED, mouthX, mouthZ));
   });
 
-  it('descending into a tunnel is SMOOTH — the eased follow never snaps (≤ maxLandStep/frame)', () => {
+  it('the tunnel PATH CURVES — the channel sweeps laterally off the straight axis (not a straight tube)', () => {
     const t = findType(LANDMARK_TUNNEL);
-    const tx = Math.sin(t.rotationY);
-    const tz = Math.cos(t.rotationY);
+    const tx = Math.sin(t.rotationY), tz = Math.cos(t.rotationY);
     const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
-    const car = createZenVehicle();
-    // Start a bit before the mouth, on the surface, moving along the tunnel axis at cruise.
-    car.x = t.x - tx * (halfL + 30);
-    car.z = t.z - tz * (halfL + 30);
-    car.y = drivableSurfaceY(SEED, car.x, car.z);
-    const dt = 1 / 60;
-    let maxStep = 0;
-    for (let i = 0; i < 240; i++) {
-      car.x += tx * ZEN.maxSpeed * dt;
-      car.z += tz * ZEN.maxSpeed * dt;
-      const onSurf = onLandmarkSurface(SEED, car.x, car.z);
-      const groundY = drivableSurfaceY(SEED, car.x, car.z) + ZEN.rideHeight;
-      const before = car.y;
-      updateVertical(car, groundY, 0, dt, !onSurf);
-      maxStep = Math.max(maxStep, Math.abs(car.y - before));
-    }
-    expect(maxStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // no teleport into/out of the tunnel
+    // Pick the axial position where the bend peaks (|shape| max, ~half-length in).
+    const along = halfL * 0.5;
+    const bWorld = ZEN_LANDMARK.tunnelBendAmplitude * t.scale * tunnelBendShape(along / halfL);
+    expect(Math.abs(bWorld)).toBeGreaterThan(ZEN_LANDMARK.tunnelHalfWidth * t.scale); // bends beyond a half-width
+    // On the STRAIGHT axis at this depth → OFF the channel (the tunnel curved away from the straight line).
+    const axisX = t.x + tx * along, axisZ = t.z + tz * along;
+    expect(onLandmarkSurface(SEED, axisX, axisZ)).toBe(false);
+    // On the CURVED centreline at the same axial position → ON the channel, still deep.
+    const c = tunnelCentreline(t, along);
+    expect(onLandmarkSurface(SEED, c.x, c.z)).toBe(true);
+    expect(heightAt(SEED, c.x, c.z) - drivableSurfaceY(SEED, c.x, c.z)).toBeGreaterThan(ZEN_LANDMARK.tunnelDepth * t.scale * 0.7);
   });
 
   it('the passage is LONG — a real underground journey, not a 1-2s blink', () => {
     const t = findType(LANDMARK_TUNNEL);
-    const tx = Math.sin(t.rotationY);
-    const tz = Math.cos(t.rotationY);
-    // Walk the full through-axis and measure how far you're ON the tunnel surface, and how far ENCLOSED.
+    // Walk the full CURVED centreline and measure how far you're ON the tunnel surface + ENCLOSED.
     const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
     let onSpan = 0, enclosedSpan = 0;
     const stepU = 1; // 1u samples
     for (let s = -halfL - 10; s <= halfL + 10; s += stepU) {
-      const x = t.x + tx * s;
-      const z = t.z + tz * s;
-      if (onLandmarkSurface(SEED, x, z)) onSpan += stepU;
-      if (inEnclosedTunnel(SEED, x, z)) enclosedSpan += stepU;
+      const c = tunnelCentreline(t, s);
+      if (onLandmarkSurface(SEED, c.x, c.z)) onSpan += stepU;
+      if (inEnclosedTunnel(SEED, c.x, c.z)) enclosedSpan += stepU;
     }
-    // The drivable span ≈ the full tunnel length (much longer than the old ~170u), enclosed a big chunk.
+    // The drivable span ≈ the full (much longer) tunnel length, enclosed for most of it.
     expect(onSpan).toBeGreaterThan(ZEN_LANDMARK.tunnelLength * t.scale * 0.9);
-    expect(onSpan).toBeGreaterThan(300); // > the old whole-tunnel length (170) — a longer passage
-    // At cruise (96u/s) the enclosed stretch alone lasts a couple of seconds.
-    expect(enclosedSpan / ZEN.maxSpeed).toBeGreaterThan(1.5); // seconds enclosed
+    expect(onSpan).toBeGreaterThan(900); // MUCH longer than the old 380u passage
+    // At cruise (96u/s) the enclosed stretch alone lasts many seconds — a real journey.
+    expect(enclosedSpan / ZEN.maxSpeed).toBeGreaterThan(6); // seconds enclosed
   });
 
-  it('a FULL traverse (descend → enclosed → ascend → resurface) never snaps, both ends', () => {
+  it('a FULL traverse following the CURVE (descend → enclosed → ascend → resurface) never snaps', () => {
     const t = findType(LANDMARK_TUNNEL);
-    const tx = Math.sin(t.rotationY);
-    const tz = Math.cos(t.rotationY);
     const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
-    const car = createZenVehicle();
-    car.x = t.x - tx * (halfL + 40); // start before the near mouth
-    car.z = t.z - tz * (halfL + 40);
-    car.y = drivableSurfaceY(SEED, car.x, car.z);
     const dt = 1 / 60;
-    let maxStep = 0;
-    let wentEnclosed = false;
-    let resurfaced = false;
-    // Drive all the way through and out the far side (length + both mouth ramps + margins).
-    const frames = Math.ceil((2 * halfL + 120) / (ZEN.maxSpeed * dt));
-    for (let i = 0; i < frames; i++) {
-      car.x += tx * ZEN.maxSpeed * dt;
-      car.z += tz * ZEN.maxSpeed * dt;
+    const car = createZenVehicle();
+    const start = tunnelCentreline(t, -(halfL + 40)); // start before the near mouth, on the centreline
+    car.x = start.x;
+    car.z = start.z;
+    car.y = drivableSurfaceY(SEED, car.x, car.z);
+    let maxStep = 0, wentEnclosed = false, resurfaced = false, onCurveDeep = true;
+    const stepLen = ZEN.maxSpeed * dt;
+    // Advance the AXIAL position at cruise, steering onto the curved centreline each frame.
+    for (let along = -(halfL + 40); along <= halfL + 80; along += stepLen) {
+      const c = tunnelCentreline(t, along);
+      car.x = c.x;
+      car.z = c.z;
       const onSurf = onLandmarkSurface(SEED, car.x, car.z);
       const groundY = drivableSurfaceY(SEED, car.x, car.z) + ZEN.rideHeight;
       const before = car.y;
       updateVertical(car, groundY, 0, dt, !onSurf);
       maxStep = Math.max(maxStep, Math.abs(car.y - before));
       if (inEnclosedTunnel(SEED, car.x, car.z)) wentEnclosed = true;
-      // After being enclosed, reaching the far side back on plain terrain = resurfaced.
-      if (wentEnclosed && !onSurf) resurfaced = true;
+      // While inside the deep zone, following the curve keeps us ON the surface (sits on the floor).
+      if (Math.abs(along) < halfL * 0.4 && !onSurf) onCurveDeep = false;
+      if (wentEnclosed && !onSurf && Math.abs(along) > halfL) resurfaced = true;
     }
     expect(wentEnclosed).toBe(true); // actually went deep
+    expect(onCurveDeep).toBe(true); // stayed on the floor through the curved deep section
     expect(resurfaced).toBe(true); // and came back out the far mouth
     expect(maxStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // eased the whole way — no teleport
   });

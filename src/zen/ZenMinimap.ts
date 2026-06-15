@@ -15,10 +15,8 @@ import {
   projectToRadar,
   biomeRadarColor,
   gatherMarkers,
-  nearestTunnel,
   radarScale,
   type MinimapMarker,
-  type NearestTunnel,
   type RadarOffset,
 } from './ZenMinimapModel';
 import { createZenBiomeState } from './ZenBiome';
@@ -37,10 +35,6 @@ export class ZenMinimap {
 
   /** Cached markers (world positions) from the last resample. */
   private markers: MinimapMarker[] = [];
-  /** Nearest tunnel from the last resample — the compass needle's target (null = none in range). */
-  private nearest: NearestTunnel | null = null;
-  /** Elapsed seconds, for the compass needle's gentle pulse. */
-  private pulseT = 0;
   /** Reused biome-state scratch for the wash sampling (no per-sample allocation). */
   private readonly biomeScratch = createZenBiomeState();
   /** Reused scratch for projectToRadar calls in the per-frame draw (no hot-loop allocation). */
@@ -87,7 +81,6 @@ export class ZenMinimap {
     } else {
       this.smoothedHeading += (heading - this.smoothedHeading) * smoothFollow(ZEN_MINIMAP.headingLerp, dt);
     }
-    this.pulseT += dt; // drives the compass needle's gentle breathing
 
     if (this.framesSinceResample >= ZEN_MINIMAP.resampleInterval) {
       this.resample(carX, carZ);
@@ -121,9 +114,6 @@ export class ZenMinimap {
     }
     this.washCtx.putImageData(img, 0, 0);
     this.markers = gatherMarkers(ZEN.worldSeed, carX, carZ, R);
-    // Nearest tunnel for the compass needle (wider search than the radar — it points BEYOND the
-    // scope). Throttled here with the rest of the heavy live-sampling.
-    this.nearest = nearestTunnel(ZEN.worldSeed, carX, carZ);
   }
 
   /** Redraw the scope: rotated biome wash, markers, north tick, ring, and the centred car. */
@@ -195,11 +185,6 @@ export class ZenMinimap {
     ctx.lineTo(c + s * 0.7, c + s * 0.8);
     ctx.closePath();
     ctx.fill();
-
-    // Nearest-tunnel COMPASS: a bearing needle on the ring + a range readout, pointing the way to
-    // the nearest tunnel while it's still BEYOND the scope (once it enters the radar the gold
-    // chevron marker takes over — no redundant double-cue).
-    this.drawTunnelCompass(carX, carZ, c, R);
   }
 
   /** A ramp marker: a small magenta-pink diamond (matches the in-world ramp-dune tint). */
@@ -248,74 +233,6 @@ export class ZenMinimap {
     ctx.lineTo(px, py + r);
     ctx.lineTo(px + r, py - yOff);
     ctx.stroke();
-  }
-
-  /**
-   * The nearest-tunnel COMPASS — the directional cue that turns wandering into directed travel.
-   * Shown only while the nearest tunnel is OUTSIDE the radar (dist > worldRadius); inside it, the
-   * on-map gold chevron already marks it, so the compass hands off and hides. A gold bearing
-   * needle sits on the ring pointing the tunnel's way (rotated with heading like everything else),
-   * with a "TUNNEL  N.N km" range readout below the centre. Gentle pulse so it's noticed, not noisy.
-   */
-  private drawTunnelCompass(carX: number, carZ: number, c: number, R: number): void {
-    const t = this.nearest;
-    if (!t || t.dist <= ZEN_MINIMAP.worldRadius) return; // none, or already on the radar (chevron)
-
-    // Bearing in the rotating radar frame (same projection the markers use), normalised.
-    projectToRadar(t.x - carX, t.z - carZ, this.smoothedHeading, this.radarScratch);
-    const len = Math.hypot(this.radarScratch.x, this.radarScratch.y) || 1;
-    const ux = this.radarScratch.x / len;
-    const uy = this.radarScratch.y / len;
-
-    const ctx = this.ctx;
-    const pulse = ZEN_MINIMAP.tunnelCompassPulseMin +
-      (ZEN_MINIMAP.tunnelCompassPulseMax - ZEN_MINIMAP.tunnelCompassPulseMin) *
-      (0.5 + 0.5 * Math.sin(this.pulseT * ZEN_MINIMAP.tunnelCompassPulseRate));
-
-    // Needle: a triangle just inside the ring, tip pointing OUT along the bearing.
-    const tipR = R - ZEN_MINIMAP.tunnelCompassInsetPx;
-    const tipX = c + ux * tipR;
-    const tipY = c + uy * tipR;
-    const al = ZEN_MINIMAP.tunnelCompassArrowLenPx;
-    const ah = ZEN_MINIMAP.tunnelCompassArrowHalfPx;
-    const bx = tipX - ux * al; // base centre (back from the tip)
-    const by = tipY - uy * al;
-    const px = -uy; // perpendicular
-    const py = ux;
-    ctx.globalAlpha = pulse;
-    ctx.fillStyle = cssHex(ZEN_MINIMAP.tunnelCompassColor);
-    ctx.beginPath();
-    ctx.moveTo(tipX, tipY);
-    ctx.lineTo(bx + px * ah, by + py * ah);
-    ctx.lineTo(bx - px * ah, by - py * ah);
-    ctx.closePath();
-    ctx.fill();
-    ctx.globalAlpha = 1;
-
-    // Range readout — instrument-style monospace, on a dark pill for contrast over the wash.
-    const km = (t.dist / ZEN_MINIMAP.tunnelCompassUnitsPerKm).toFixed(1);
-    const label = `TUNNEL  ${km} km`;
-    const fs = ZEN_MINIMAP.tunnelCompassLabelPx;
-    ctx.font = `${fs}px ui-monospace, "SFMono-Regular", Menlo, monospace`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    const ly = c + R * ZEN_MINIMAP.tunnelCompassLabelDropRatio;
-    const w = ctx.measureText(label).width;
-    const pad = ZEN_MINIMAP.tunnelCompassPillPadPx;
-    ctx.fillStyle = cssHex(ZEN_MINIMAP.backdropColor);
-    ctx.globalAlpha = ZEN_MINIMAP.tunnelCompassPillAlpha;
-    ctx.beginPath();
-    ctx.roundRect(
-      c - w / 2 - pad, ly - fs * ZEN_MINIMAP.tunnelCompassPillYOffsetRatio,
-      w + pad * 2, fs * ZEN_MINIMAP.tunnelCompassPillHeightRatio,
-      fs * ZEN_MINIMAP.tunnelCompassPillRadiusRatio,
-    );
-    ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = cssHex(ZEN_MINIMAP.tunnelCompassColor);
-    ctx.fillText(label, c, ly);
-    ctx.textAlign = 'start';
-    ctx.textBaseline = 'alphabetic';
   }
 
   dispose(): void {

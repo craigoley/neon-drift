@@ -1505,40 +1505,6 @@ export const ZEN_MINIMAP = {
   landmarkLineWidth: 1.5,
   /** Radius (CSS px) of the landmark centre dot. */
   landmarkDotPx: 1,
-
-  // --- nearest-tunnel COMPASS (the directional cue: "TUNNEL ▲ N.N km") ---
-  // Tunnels are the rarest landmark + the most-missed (even post-#131 they're in beacon range
-  // only ~10% of roaming time). A persistent bearing needle to the NEAREST deterministic tunnel
-  // turns wandering into directed travel — point the car at it and drive. Hands off to the on-map
-  // chevron once the tunnel enters the radar (no redundant double-cue).
-  /** Cells (Chebyshev radius) to search outward for the nearest tunnel. cellSize ~2600u, so this
-   *  covers ~20km — well past the post-bump mean spacing, so a tunnel is almost always found.
-   *  Bounded + throttled (computed on the radar's resample, not every frame). */
-  tunnelCompassMaxCells: 8,
-  /** World units shown as one kilometre on the range readout (1000u = 1km — friendly numbers). */
-  tunnelCompassUnitsPerKm: 1000,
-  /** Compass colour (the tunnel gold, matching the in-world beacon + the on-map chevron). */
-  tunnelCompassColor: 0xffcc33,
-  /** Bearing-needle size (CSS px): the triangle length + half-width. */
-  tunnelCompassArrowLenPx: 9,
-  tunnelCompassArrowHalfPx: 5,
-  /** How far inside the scope ring the needle TIP sits (CSS px). */
-  tunnelCompassInsetPx: 4,
-  /** Range-readout font size (CSS px) + its drop below the scope centre (as a fraction of radius). */
-  tunnelCompassLabelPx: 11,
-  tunnelCompassLabelDropRatio: 0.52,
-  /** Gentle pulse rate (rad/s) so the needle breathes (draws the eye, stays calm). */
-  tunnelCompassPulseRate: 2.4,
-  /** Min/max needle alpha across the pulse. */
-  tunnelCompassPulseMin: 0.55,
-  tunnelCompassPulseMax: 1,
-  /** Range-readout backdrop pill: alpha, horizontal padding (CSS px), and font-relative ratios
-   *  for the vertical offset, height, and corner radius (all scaled from tunnelCompassLabelPx). */
-  tunnelCompassPillAlpha: 0.72,
-  tunnelCompassPillPadPx: 5,
-  tunnelCompassPillYOffsetRatio: 0.72,
-  tunnelCompassPillHeightRatio: 1.5,
-  tunnelCompassPillRadiusRatio: 0.5,
 } as const;
 
 /**
@@ -1557,9 +1523,9 @@ export const ZEN_LANDMARK = {
    *  journey to, not a constant). */
   chance: 0.42,
   /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint (the
-   *  tunnel half-length, now ~257u at max scale), so a structure lives wholly inside its cell (the
-   *  scan checks one cell). RAISED with the longer tunnel. */
-  edgeMargin: 280,
+   *  curved tunnel reaches ~810u along + ~53u laterally at max scale ≈ 812u), so a structure lives
+   *  wholly inside its cell (the scan checks one cell). RAISED with the longer, curved tunnel. */
+  edgeMargin: 840,
   /** Landmarks only place where the mountain mask is at/below this (GENTLE, reachable ground) so
    *  you can drive up to / through / onto them — never buried in a mountain. */
   maxMask: 0.25,
@@ -1677,13 +1643,18 @@ export const ZEN_LANDMARK = {
   //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---
   /** Tunnel length along its through-axis; half-width of the floor; how far BELOW the terrain the
    *  floor dips at the deepest; headroom (ceiling above the floor — must exceed the camera height so
-   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 170→380 so the enclosed descent is a real
-   *  ~4s underground JOURNEY (was a ~1.8s blink); the descent/ascent ramps lengthen with it, so the
-   *  entry is gentler too. (edgeMargin + surfaceQueryRadius co-scaled to the longer half-length.) */
-  tunnelLength: 380,
+   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 380→1200 — a MUCH longer underground
+   *  JOURNEY (~10s enclosed at cruise). The descent/ascent ramps lengthen with it (gentler entry);
+   *  it also CURVES (tunnelBend*). (edgeMargin + surfaceQueryRadius co-scaled to the longer footprint.) */
+  tunnelLength: 1200,
   tunnelHalfWidth: 13,
   tunnelDepth: 16,
   tunnelHeadroom: 13,
+  /** The tunnel's gentle LATERAL CURVE: peak sideways offset of the centreline (world units, pre-scale)
+   *  + how many sine half-bends span the length. A calm sweeping S (waves 1), windowed to be straight +
+   *  tangent at the mouths (see tunnelBendShape). The tube, floor, and drivable surface all follow it. */
+  tunnelBendAmplitude: 26,
+  tunnelBendWaves: 1,
   /** Dip (world units) beyond which the car counts as ENCLOSED (deep inside) — for the in-tunnel feel. */
   tunnelEnclosedDepth: 6,
   /** Fraction of halfLength where the depth profile starts easing to 0 (the mouth ramp). */
@@ -1726,9 +1697,9 @@ export const ZEN_LANDMARK = {
   tunnelBeaconChevronStartFrac: 0.75,
   tunnelBeaconChevronStepFrac: 0.22,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
-   *  footprint (the tunnel half-length × max scale ≈ 257u). RAISED with the longer tunnel so the
-   *  override is still found at the far mouth. */
-  surfaceQueryRadius: 280,
+   *  footprint (the curved tunnel reaches ~812u from centre at max scale). RAISED with the longer,
+   *  curved tunnel so the override is still found from the far mouth. */
+  surfaceQueryRadius: 840,
 } as const;
 
 /**

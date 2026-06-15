@@ -14,10 +14,25 @@ import {
   findReturnPortal,
   crossedAnyGateway,
 } from '../ZenSecret';
-import { createZenVehicle } from '../ZenVehicle';
+import { createZenVehicle, updateZen, updateVertical } from '../ZenVehicle';
 import { heightAt } from '../ZenHeight';
+import { surfaceSlopeAlong } from '../ZenLandmarkSurface';
 import { landmarkForCell, LANDMARK_GATEWAY } from '../ZenLandmarkModel';
 import { ZEN, ZEN_SECRET, ZEN_LANDMARK } from '../../utils/constants';
+
+const TICK = 1 / 60;
+/** Drive the car forward `frames` ticks at full throttle (no steer) from its current pose. */
+function driveForward(v: ReturnType<typeof createZenVehicle>, frames: number, onStep?: (px: number, pz: number) => void) {
+  for (let i = 0; i < frames; i++) {
+    const px = v.x;
+    const pz = v.z;
+    const slope = surfaceSlopeAlong(SEED, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+    updateZen(v, 0, 1, TICK, slope);
+    const gy = heightAt(SEED, v.x, v.z) + ZEN.rideHeight;
+    updateVertical(v, gy, slope, TICK, true);
+    if (onStep) onStep(px, pz);
+  }
+}
 
 const SEED = ZEN.worldSeed;
 
@@ -50,19 +65,23 @@ describe('Zen secret — the return portal is a real, DETERMINISTIC gateway', ()
   });
 });
 
-describe('Zen secret — arrival sits IN FRONT of the portal, facing it (drive forward = return)', () => {
-  it('places the car arrivalApproach units along the through-axis, heading back toward the portal', () => {
+describe('Zen secret — arrival sits OFF the portal, facing AWAY (drive forward = explore, not return)', () => {
+  it('places the car arrivalApproach units along the through-axis, heading INTO the region', () => {
     const portal = findReturnPortal(SEED);
     const pose = arrivalPose(portal);
     const tax = Math.sin(portal.rotationY);
     const taz = Math.cos(portal.rotationY);
     // Distance from the portal centre == arrivalApproach, along the through-axis.
     expect(Math.hypot(pose.x - portal.x, pose.z - portal.z)).toBeCloseTo(ZEN_SECRET.arrivalApproach, 4);
-    // The car's forward (sin h, −cos h) points back toward the portal (−through-axis).
+    // The car's forward (sin h, −cos h) points AWAY from the portal (+through-axis) → deeper in.
     const fx = Math.sin(pose.heading);
     const fz = -Math.cos(pose.heading);
-    expect(fx).toBeCloseTo(-tax, 6);
-    expect(fz).toBeCloseTo(-taz, 6);
+    expect(fx).toBeCloseTo(tax, 6);
+    expect(fz).toBeCloseTo(taz, 6);
+    // The portal is BEHIND the arrival (forward · (portal − arrival) < 0).
+    const toPortalX = portal.x - pose.x;
+    const toPortalZ = portal.z - pose.z;
+    expect(fx * toPortalX + fz * toPortalZ).toBeLessThan(0);
   });
 
   it('the secret region is FAR from the origin (a place apart, reached only by warp)', () => {
@@ -114,5 +133,36 @@ describe('Zen secret — ENTER → RETURN restores the exact main-world position
     expect(v.z).toBe(home.z);
     expect(v.heading).toBe(home.heading);
     expect(v.speed).toBe(home.speed);
+  });
+});
+
+describe('Zen secret — FIX: arrival faces INTO the region (no instant bounce)', () => {
+  it('driving forward from arrival goes DEEPER, and does NOT re-cross the return portal', () => {
+    const portal = findReturnPortal(SEED);
+    const pose = arrivalPose(portal);
+    const v = createZenVehicle();
+    v.x = pose.x; v.z = pose.z; v.heading = pose.heading; v.speed = 0;
+    v.y = heightAt(SEED, v.x, v.z) + ZEN.rideHeight;
+    const startDist = Math.hypot(v.x - portal.x, v.z - portal.z);
+    let crossedPortal = false;
+    driveForward(v, 240, (px, pz) => { // 4s forward
+      if (crossedAnyGateway(SEED, px, pz, v.x, v.z) && Math.hypot(v.x - portal.x, v.z - portal.z) < 120) {
+        crossedPortal = true;
+      }
+    });
+    const endDist = Math.hypot(v.x - portal.x, v.z - portal.z);
+    expect(endDist).toBeGreaterThan(startDist + 100); // went DEEPER, away from the portal
+    expect(crossedPortal).toBe(false); // never re-crossed the return portal (the bounce is gone)
+  });
+
+  it('turning around and driving back DOES cross the return portal (the deliberate return)', () => {
+    const portal = findReturnPortal(SEED);
+    const pose = arrivalPose(portal);
+    const v = createZenVehicle();
+    v.x = pose.x; v.z = pose.z; v.heading = pose.heading + Math.PI; v.speed = 0; // 180° → back toward the portal
+    v.y = heightAt(SEED, v.x, v.z) + ZEN.rideHeight;
+    let crossed = false;
+    driveForward(v, 240, (px, pz) => { if (crossedAnyGateway(SEED, px, pz, v.x, v.z)) crossed = true; });
+    expect(crossed).toBe(true); // turn around → drive back → cross the portal → return home
   });
 });

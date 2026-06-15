@@ -65,15 +65,18 @@ export function findReturnPortal(seed: number): Landmark {
   throw new Error('no gateway found near the secret region');
 }
 
-/** Where the car arrives in the secret area: `arrivalApproach` units in FRONT of the portal along
- *  its through-axis, FACING it — so driving forward takes you back through it (the return). */
+/** Where the car arrives in the secret area: `arrivalApproach` units off the portal along its
+ *  through-axis, FACING AWAY from it (forward points INTO the region) — so driving forward takes
+ *  you DEEPER to explore; the portal sits BEHIND you, and you return by turning around + going back
+ *  through it. (The old version faced the portal → driving forward instantly bounced you home.) */
 export function arrivalPose(portal: Landmark): { x: number; z: number; heading: number } {
   const tax = Math.sin(portal.rotationY); // through-axis (local +Z under the Y-rotation)
   const taz = Math.cos(portal.rotationY);
   return {
     x: portal.x + tax * ZEN_SECRET.arrivalApproach,
     z: portal.z + taz * ZEN_SECRET.arrivalApproach,
-    heading: -portal.rotationY, // forward (sin h, −cos h) = −through-axis → drives toward the portal
+    // forward (sin h, −cos h) = +through-axis (h = π − rot) → AWAY from the portal, into the region.
+    heading: Math.PI - portal.rotationY,
   };
 }
 

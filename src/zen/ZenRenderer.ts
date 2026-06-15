@@ -131,6 +131,7 @@ export class ZenRenderer {
    *  the car is inside a secret area. */
   setSecret(active: boolean): void {
     this.secretActive = active;
+    this.terrain.setSecret(active); // force the GRID floor violet too (not just the backdrop)
   }
 
   /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a

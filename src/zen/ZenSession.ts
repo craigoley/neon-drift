@@ -70,6 +70,11 @@ export class ZenSession {
   private inSecret = false;
   /** The main-world position saved on entry, restored on return. */
   private saved: VehicleSnapshot | null = null;
+  /** Bounce guard: after a warp, gateway crossings are ignored until the car has travelled
+   *  returnGuardDistance from where it arrived (so you can't instantly re-cross the portal). */
+  private guardX = 0;
+  private guardZ = 0;
+  private guardActive = false;
 
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
   private fwd = false;
@@ -170,8 +175,17 @@ export class ZenSession {
     const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
     updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
 
+    // BOUNCE GUARD: after a warp, re-arm crossings only once we've travelled clear of the portal
+    // we arrived at, so holding gas can't instantly re-cross it (the diagnosed instant-bounce).
+    if (this.guardActive) {
+      const gdx = this.v.x - this.guardX;
+      const gdz = this.v.z - this.guardZ;
+      if (gdx * gdx + gdz * gdz >= ZEN_SECRET.returnGuardDistance * ZEN_SECRET.returnGuardDistance) {
+        this.guardActive = false;
+      }
+    }
     // PORTAL TRIGGER: crossing a gateway's opening starts the warp (into / out of the secret area).
-    if (crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+    if (!this.guardActive && crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
       this.warpPhase = 'out';
       this.warpT = 0;
       this.v.speed = 0; // freeze the coast during the fade
@@ -227,6 +241,10 @@ export class ZenSession {
     this.renderer.snapCamera(this.v);
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
+    // Arm the bounce guard from the arrival point — crossings re-enable only after driving clear.
+    this.guardX = this.v.x;
+    this.guardZ = this.v.z;
+    this.guardActive = true;
   }
 
   /** Tear down: listeners, overlay, and the Zen-owned scene objects. */

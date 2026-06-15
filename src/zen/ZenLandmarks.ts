@@ -55,6 +55,10 @@ interface Active {
   gateMaterial: THREE.MeshBasicMaterial | null;
   /** Gate-ripple elapsed seconds (>= gateSeconds = idle); -1 = not rippling. */
   gateT: number;
+  // --- tunnel ROAD (tunnel only; null otherwise): the cyan floor mesh the car drives on, fading
+  //     in with distance alongside the gold tube. ---
+  floorMesh: THREE.LineSegments | null;
+  floorMaterial: THREE.LineBasicMaterial | null;
 }
 
 const _white = new THREE.Color(0xffffff);
@@ -67,6 +71,8 @@ export class ZenLandmarks {
   /** Shared unit ANNULUS (outer radius 1, in local XY) for the gate ripple — a filled ring you
    *  drive through; additive + bloom make it flare. */
   private readonly rippleGeo: THREE.RingGeometry;
+  /** Shared TUNNEL FLOOR geometry (the cyan road) — built once, referenced by every tunnel instance. */
+  private readonly tunnelFloorGeo: THREE.BufferGeometry;
   private readonly active = new Map<number, Active>();
   /** Reused resolve scratch (no per-frame allocation). */
   private readonly _resolve = { x: 0, z: 0 };
@@ -82,6 +88,8 @@ export class ZenLandmarks {
     this.geo = [this.buildRing(), this.buildArch(), this.buildGateway(), this.buildVista(), this.buildTunnel()];
     // Unit annulus (outer 1) in local XY for the gate ripple.
     this.rippleGeo = new THREE.RingGeometry(ZEN_LANDMARK.gateRippleInnerRatio, 1, ZEN_LANDMARK.gateSegments);
+    // The cyan tunnel road (shared across tunnel instances).
+    this.tunnelFloorGeo = this.buildTunnelFloor();
   }
 
   /**
@@ -107,6 +115,8 @@ export class ZenLandmarks {
         a.material.dispose();
         if (a.gateMesh) a.gateMesh.removeFromParent();
         if (a.gateMaterial) a.gateMaterial.dispose();
+        if (a.floorMesh) a.floorMesh.removeFromParent();
+        if (a.floorMaterial) a.floorMaterial.dispose();
         this.active.delete(id);
       }
     }
@@ -167,6 +177,8 @@ export class ZenLandmarks {
         ZEN_LANDMARK.drawRadius,
         dist,
       );
+      // The tunnel road fades with the tube (same distance emerge).
+      if (a.floorMaterial) a.floorMaterial.opacity = a.material.opacity;
     }
 
     // Remember the car position for next frame's gate plane-crossing test.
@@ -256,6 +268,26 @@ export class ZenLandmarks {
       this.scene.add(gateMesh);
     }
 
+    // Tunnel ROAD — the cyan floor mesh (tunnel only). Same transform as the gold tube, its own
+    // colour + material so it reads as a distinct road; fades in with distance alongside the tube.
+    let floorMesh: THREE.LineSegments | null = null;
+    let floorMaterial: THREE.LineBasicMaterial | null = null;
+    if (lm.type === LANDMARK_TUNNEL) {
+      floorMaterial = new THREE.LineBasicMaterial({
+        color: ZEN_LANDMARK.tunnelFloorColor,
+        transparent: true,
+        opacity: 1,
+        fog: false,
+        depthWrite: false,
+      });
+      floorMesh = new THREE.LineSegments(this.tunnelFloorGeo, floorMaterial);
+      floorMesh.position.set(lm.x, groundY, lm.z);
+      floorMesh.rotation.y = lm.rotationY;
+      floorMesh.scale.setScalar(lm.scale);
+      floorMesh.frustumCulled = false;
+      this.scene.add(floorMesh);
+    }
+
     this.active.set(lm.id, {
       landmark: lm,
       mesh,
@@ -267,6 +299,8 @@ export class ZenLandmarks {
       gateMesh,
       gateMaterial,
       gateT: -1,
+      floorMesh,
+      floorMaterial,
     });
   }
 
@@ -276,10 +310,13 @@ export class ZenLandmarks {
       a.material.dispose();
       if (a.gateMesh) a.gateMesh.removeFromParent();
       if (a.gateMaterial) a.gateMaterial.dispose();
+      if (a.floorMesh) a.floorMesh.removeFromParent();
+      if (a.floorMaterial) a.floorMaterial.dispose();
     }
     this.active.clear();
     for (const g of this.geo) g.dispose();
     this.rippleGeo.dispose();
+    this.tunnelFloorGeo.dispose();
   }
 
   // --- geometry builders (local space, before the per-landmark scale; base sits at y=0) ---
@@ -385,31 +422,41 @@ export class ZenLandmarks {
     return ZenLandmarks.lineGeo(p);
   }
 
+  /** Local floor depth at axial position z (mirrors ZenLandmarkSurface): full depth through the inner
+   *  half, easing to 0 at the mouths (the descent/ascent ramps). Shared by the tube + the floor road. */
+  private static tunnelFloorY(z: number, halfL: number): number {
+    const f = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, Math.abs(z));
+    return -ZEN_LANDMARK.tunnelDepth * f;
+  }
+
   /** TUNNEL — a neon TUBE you descend INTO (drive along local Z): arched cross-section RIBS at
-   *  intervals (floor dipping to the centre), plus longitudinal floor edges + a ceiling apex line.
-   *  The terrain stays the roof; the car follows the lower floor (ZenLandmarkSurface). */
+   *  intervals + a ceiling apex line. The ceiling height TAPERS to ~0 at the mouths (tracking the
+   *  floor's depth ease) so the tube doesn't protrude an awkward arch above flat ground — the mouth
+   *  reads as a clean descending slot under the beacon. The ROAD (floor) is a separate cyan mesh
+   *  (buildTunnelFloor). The terrain stays the roof; the car follows the lower floor (ZenLandmarkSurface). */
   private buildTunnel(): THREE.BufferGeometry {
     const p: number[] = [];
     const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
       p.push(ax, ay, az, bx, by, bz);
     const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
     const hw = ZEN_LANDMARK.tunnelHalfWidth;
-    const depth = ZEN_LANDMARK.tunnelDepth;
     const head = ZEN_LANDMARK.tunnelHeadroom;
     const arcN = ZEN_LANDMARK.tunnelArcSegments;
     const step = ZEN_LANDMARK.tunnelRibSpacing;
-    // Floor depth profile (local; mirrors ZenLandmarkSurface): full depth inner half → 0 at mouths.
-    const floorY = (z: number): number => {
-      const s = Math.abs(z);
-      const f = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, s);
-      return -depth * f;
+    const floorY = (z: number) => ZenLandmarks.tunnelFloorY(z, halfL);
+    // Ceiling height at z: tapers from ~0 at the mouths to full headroom deep inside (tracks the
+    // depth ease), so the arch grows AS you sink — no protruding pipe-end at the surface.
+    const archH = (z: number): number => {
+      const grow = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, Math.abs(z));
+      return head * (ZEN_LANDMARK.tunnelMouthArchFloor + (1 - ZEN_LANDMARK.tunnelMouthArchFloor) * grow);
     };
-    // Arched cross-section at z: floor-left → ceiling arc → floor-right.
+    // Arched cross-section at z: floor-left → ceiling arc → floor-right (height tapered near mouths).
     const ribAt = (z: number, emit: (x: number, y: number) => void) => {
       const fy = floorY(z);
+      const h = archH(z);
       for (let i = 0; i <= arcN; i++) {
         const a = Math.PI * (i / arcN); // 0..π → left to right over the top
-        emit(-Math.cos(a) * hw, fy + Math.sin(a) * head);
+        emit(-Math.cos(a) * hw, fy + Math.sin(a) * h);
       }
     };
     // Ribs.
@@ -420,20 +467,11 @@ export class ZenLandmarks {
         prev = [x, y];
       });
     }
-    // Longitudinal lines: the two floor edges + the ceiling apex, connecting consecutive ribs.
-    let pfL: [number, number] | null = null;
-    let pfR: [number, number] | null = null;
+    // Longitudinal ceiling apex line, connecting consecutive ribs (the floor lines live in the road mesh).
     let pc: [number, number] | null = null;
     for (let z = -halfL; z <= halfL + 1e-6; z += step) {
-      const fy = floorY(z);
-      const cL: [number, number] = [-hw, fy];
-      const cR: [number, number] = [hw, fy];
-      const ca: [number, number] = [0, fy + head];
-      if (pfL) line(pfL[0], pfL[1], z - step, cL[0], cL[1], z);
-      if (pfR) line(pfR[0], pfR[1], z - step, cR[0], cR[1], z);
+      const ca: [number, number] = [0, floorY(z) + archH(z)];
       if (pc) line(pc[0], pc[1], z - step, ca[0], ca[1], z);
-      pfL = cL;
-      pfR = cR;
       pc = ca;
     }
     // ENTRANCE BEACON at each mouth (z = ±halfL, where the floor is at ground level): a tall portal
@@ -454,6 +492,35 @@ export class ZenLandmarks {
         line(-span, y, mz, 0, y - dip, mz);
         line(0, y - dip, mz, span, y, mz);
       }
+    }
+    return ZenLandmarks.lineGeo(p);
+  }
+
+  /** TUNNEL FLOOR — the cyan neon ROAD the car drives on (a separate mesh/colour from the gold tube).
+   *  A centre line + two side rails along the full length at the drivable-surface Y, plus dense lateral
+   *  RUNGS — so the descent reads as a real road underfoot, not a void. Descends + flattens + ascends
+   *  with the floor profile (matches ZenLandmarkSurface at the centreline). */
+  private buildTunnelFloor(): THREE.BufferGeometry {
+    const p: number[] = [];
+    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
+      p.push(ax, ay, az, bx, by, bz);
+    const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+    const hw = ZEN_LANDMARK.tunnelHalfWidth;
+    const rung = ZEN_LANDMARK.tunnelFloorRungSpacing;
+    const floorY = (z: number) => ZenLandmarks.tunnelFloorY(z, halfL);
+    // Three longitudinal rails (left edge x=−hw, centre x=0, right edge x=+hw) connecting consecutive
+    // steps at the (descending) floor Y, plus a lateral rung at each step (the road "ladder").
+    let prevFy: number | null = null;
+    for (let z = -halfL; z <= halfL + 1e-6; z += rung) {
+      const fy = floorY(z);
+      if (prevFy !== null) {
+        const pz = z - rung;
+        line(-hw, prevFy, pz, -hw, fy, z); // left rail
+        line(0, prevFy, pz, 0, fy, z); // centre line
+        line(hw, prevFy, pz, hw, fy, z); // right rail
+      }
+      line(-hw, fy, z, hw, fy, z); // lateral rung across the channel
+      prevFy = fy;
     }
     return ZenLandmarks.lineGeo(p);
   }

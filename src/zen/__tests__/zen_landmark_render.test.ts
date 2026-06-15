@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import * as THREE from 'three';
 import { ZenLandmarks } from '../ZenLandmarks';
 import { heightAt } from '../ZenHeight';
+import { drivableSurfaceY } from '../ZenLandmarkSurface';
 import { landmarkForCell, reachRadius, LANDMARK_RING, LANDMARK_VISTA, LANDMARK_TUNNEL } from '../ZenLandmarkModel';
 import { ZEN, ZEN_LANDMARK, ZEN_BLOOM } from '../../utils/constants';
 
@@ -161,5 +162,69 @@ describe('Zen tunnel — the ENTRANCE BEACON makes it spottable from afar (was a
     // Before the fix the tunnel topped out at the headroom (~13u) — below the 14-46u beacon range.
     expect(maxY).toBeGreaterThanOrEqual(ZEN_LANDMARK.tunnelBeaconHeight - 1e-3); // now a tall beacon
     expect(maxY).toBeGreaterThan(ZEN_LANDMARK.tunnelHeadroom + 10); // clearly taller than the old mouth
+  });
+});
+
+describe('Zen tunnel — the FLOOR is a visible neon ROAD (was a void under the car)', () => {
+  function findTunnel() {
+    for (let cz = 0; cz < 200; cz++) for (let cx = 0; cx < 200; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm && lm.type === LANDMARK_TUNNEL) return lm;
+    }
+    throw new Error('no tunnel found');
+  }
+
+  /** Spawn the tunnel into a scene by driving the streamer onto it. */
+  function spawnTunnel() {
+    const tunnel = findTunnel();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    lms.update(tunnel.x, tunnel.z, TICK);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = (lms as any).active.get(tunnel.id);
+    return { tunnel, scene, lms, a };
+  }
+
+  it('a tunnel spawns a SEPARATE cyan floor mesh, added to the scene (the road you drive on)', () => {
+    const { scene, a } = spawnTunnel();
+    expect(a.floorMesh).toBeInstanceOf(THREE.LineSegments);
+    expect(a.floorMaterial).toBeInstanceOf(THREE.LineBasicMaterial);
+    expect(a.floorMaterial.color.getHex()).toBe(ZEN_LANDMARK.tunnelFloorColor); // cyan road, not gold tube
+    expect(scene.children).toContain(a.floorMesh); // actually in the scene graph
+    expect(a.floorMaterial.color.getHex()).not.toBe(a.material.color.getHex()); // distinct from the tube
+  });
+
+  it('the road sits AT the drivable surface (car drives ON it) and runs the FULL length', () => {
+    const { tunnel, a } = spawnTunnel();
+    a.floorMesh.updateMatrixWorld(true);
+    const pos = a.floorMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const v = new THREE.Vector3();
+    let minY = Infinity, maxAxial = 0;
+    const tx = Math.sin(tunnel.rotationY), tz = Math.cos(tunnel.rotationY);
+    for (let i = 0; i < pos.count; i++) {
+      v.fromBufferAttribute(pos, i).applyMatrix4(a.floorMesh.matrixWorld);
+      minY = Math.min(minY, v.y);
+      maxAxial = Math.max(maxAxial, Math.abs((v.x - tunnel.x) * tx + (v.z - tunnel.z) * tz));
+    }
+    // The deepest road point matches the car's drivable surface at the tunnel centre (sits ON the road).
+    const carY = drivableSurfaceY(SEED, tunnel.x, tunnel.z);
+    expect(Math.abs(minY - carY)).toBeLessThan(2); // road bottom ≈ where the car rides (no float/gap)
+    // The road spans (about) the full tunnel half-length on each side — a long passage, not a patch.
+    const halfL = ZEN_LANDMARK.tunnelLength * tunnel.scale * 0.5;
+    expect(maxAxial).toBeGreaterThan(halfL * 0.9);
+  });
+
+  it('the road descends with the floor — it is not flat (a real dip you drive down into)', () => {
+    const { a } = spawnTunnel();
+    const pos = a.floorMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    let minLocalY = Infinity, maxLocalY = -Infinity;
+    for (let i = 0; i < pos.count; i++) {
+      const y = pos.getY(i);
+      minLocalY = Math.min(minLocalY, y);
+      maxLocalY = Math.max(maxLocalY, y);
+    }
+    // Local floor Y runs from ~0 at the mouths to ~−tunnelDepth at the deepest.
+    expect(maxLocalY).toBeCloseTo(0, 1);
+    expect(minLocalY).toBeLessThan(-ZEN_LANDMARK.tunnelDepth * 0.85);
   });
 });

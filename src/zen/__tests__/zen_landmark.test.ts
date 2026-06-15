@@ -429,6 +429,59 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     expect(maxStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // no teleport into/out of the tunnel
   });
 
+  it('the passage is LONG — a real underground journey, not a 1-2s blink', () => {
+    const t = findType(LANDMARK_TUNNEL);
+    const tx = Math.sin(t.rotationY);
+    const tz = Math.cos(t.rotationY);
+    // Walk the full through-axis and measure how far you're ON the tunnel surface, and how far ENCLOSED.
+    const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
+    let onSpan = 0, enclosedSpan = 0;
+    const stepU = 1; // 1u samples
+    for (let s = -halfL - 10; s <= halfL + 10; s += stepU) {
+      const x = t.x + tx * s;
+      const z = t.z + tz * s;
+      if (onLandmarkSurface(SEED, x, z)) onSpan += stepU;
+      if (inEnclosedTunnel(SEED, x, z)) enclosedSpan += stepU;
+    }
+    // The drivable span ≈ the full tunnel length (much longer than the old ~170u), enclosed a big chunk.
+    expect(onSpan).toBeGreaterThan(ZEN_LANDMARK.tunnelLength * t.scale * 0.9);
+    expect(onSpan).toBeGreaterThan(300); // > the old whole-tunnel length (170) — a longer passage
+    // At cruise (96u/s) the enclosed stretch alone lasts a couple of seconds.
+    expect(enclosedSpan / ZEN.maxSpeed).toBeGreaterThan(1.5); // seconds enclosed
+  });
+
+  it('a FULL traverse (descend → enclosed → ascend → resurface) never snaps, both ends', () => {
+    const t = findType(LANDMARK_TUNNEL);
+    const tx = Math.sin(t.rotationY);
+    const tz = Math.cos(t.rotationY);
+    const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
+    const car = createZenVehicle();
+    car.x = t.x - tx * (halfL + 40); // start before the near mouth
+    car.z = t.z - tz * (halfL + 40);
+    car.y = drivableSurfaceY(SEED, car.x, car.z);
+    const dt = 1 / 60;
+    let maxStep = 0;
+    let wentEnclosed = false;
+    let resurfaced = false;
+    // Drive all the way through and out the far side (length + both mouth ramps + margins).
+    const frames = Math.ceil((2 * halfL + 120) / (ZEN.maxSpeed * dt));
+    for (let i = 0; i < frames; i++) {
+      car.x += tx * ZEN.maxSpeed * dt;
+      car.z += tz * ZEN.maxSpeed * dt;
+      const onSurf = onLandmarkSurface(SEED, car.x, car.z);
+      const groundY = drivableSurfaceY(SEED, car.x, car.z) + ZEN.rideHeight;
+      const before = car.y;
+      updateVertical(car, groundY, 0, dt, !onSurf);
+      maxStep = Math.max(maxStep, Math.abs(car.y - before));
+      if (inEnclosedTunnel(SEED, car.x, car.z)) wentEnclosed = true;
+      // After being enclosed, reaching the far side back on plain terrain = resurfaced.
+      if (wentEnclosed && !onSurf) resurfaced = true;
+    }
+    expect(wentEnclosed).toBe(true); // actually went deep
+    expect(resurfaced).toBe(true); // and came back out the far mouth
+    expect(maxStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // eased the whole way — no teleport
+  });
+
   it('crest-detach is SUPPRESSED on a landmark surface (allowAir=false never goes airborne)', () => {
     const dt = 1 / 60;
     // A steep downward surface motion that WOULD detach with air allowed.

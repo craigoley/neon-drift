@@ -1557,8 +1557,9 @@ export const ZEN_LANDMARK = {
    *  journey to, not a constant). */
   chance: 0.42,
   /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint (the
-   *  tunnel half-length), so a structure lives wholly inside its cell (the scan checks one cell). */
-  edgeMargin: 120,
+   *  tunnel half-length, now ~257u at max scale), so a structure lives wholly inside its cell (the
+   *  scan checks one cell). RAISED with the longer tunnel. */
+  edgeMargin: 280,
   /** Landmarks only place where the mountain mask is at/below this (GENTLE, reachable ground) so
    *  you can drive up to / through / onto them — never buried in a mountain. */
   maxMask: 0.25,
@@ -1676,8 +1677,10 @@ export const ZEN_LANDMARK = {
   //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---
   /** Tunnel length along its through-axis; half-width of the floor; how far BELOW the terrain the
    *  floor dips at the deepest; headroom (ceiling above the floor — must exceed the camera height so
-   *  the chase cam doesn't clip the ceiling). */
-  tunnelLength: 170,
+   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 170→380 so the enclosed descent is a real
+   *  ~4s underground JOURNEY (was a ~1.8s blink); the descent/ascent ramps lengthen with it, so the
+   *  entry is gentler too. (edgeMargin + surfaceQueryRadius co-scaled to the longer half-length.) */
+  tunnelLength: 380,
   tunnelHalfWidth: 13,
   tunnelDepth: 16,
   tunnelHeadroom: 13,
@@ -1691,6 +1694,21 @@ export const ZEN_LANDMARK = {
   /** Tube cross-section ribs + their spacing (world units) — the neon passage walls/ceiling. */
   tunnelRibSpacing: 12,
   tunnelArcSegments: 10,
+  // --- FLOOR (the ROAD you drive on): the tube was a ceiling arch with edge lines at the walls but
+  //     NOTHING under the car — so you drove on your glow-disc over a void. A visible CYAN neon road
+  //     at the drivable-surface Y (a centre line + side rails + lateral rungs) runs the full length,
+  //     descending with the floor. Cyan contrasts the gold tube → reads instantly as "drive here". ---
+  /** Road colour — cyan (the palette's #00ffff), distinct from the gold tube walls. */
+  tunnelFloorColor: 0x00ffff,
+  /** Spacing (world units) of the floor's lateral RUNGS — tighter than the wall ribs so the road
+   *  reads as a dense, fast-moving track underfoot. */
+  tunnelFloorRungSpacing: 9,
+  // --- MOUTH arch taper: the ceiling height eases to 0 at the mouths (tracking the floor's depth
+  //     ease) so the tube does NOT poke an awkward ~headroom-tall arch above flat ground — the
+  //     entrance reads as a clean descending SLOT under the beacon, the tube forming as you sink. ---
+  /** Fraction of full headroom the ceiling keeps at the very mouth (0 = flush slot; small = a hint
+   *  of arch). The arch grows to full headroom as the floor descends. */
+  tunnelMouthArchFloor: 0,
   // --- ENTRANCE BEACON: the tunnel is a BELOW-ground depression (its mouths only poke ~headroom
   //     up) — invisible from afar, so it was never FOUND. A TALL glowing portal-frame at each mouth,
   //     with downward CHEVRONS reading "drive DOWN here", makes it a spottable beacon like the other
@@ -1708,8 +1726,9 @@ export const ZEN_LANDMARK = {
   tunnelBeaconChevronStartFrac: 0.75,
   tunnelBeaconChevronStepFrac: 0.22,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
-   *  footprint (the tunnel half-length × max scale). */
-  surfaceQueryRadius: 130,
+   *  footprint (the tunnel half-length × max scale ≈ 257u). RAISED with the longer tunnel so the
+   *  override is still found at the far mouth. */
+  surfaceQueryRadius: 280,
 } as const;
 
 /**

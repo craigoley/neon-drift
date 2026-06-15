@@ -9,11 +9,11 @@
  * The drawing layer (ZenMinimap) is a thin canvas renderer over this.
  */
 
-import { ZEN, ZEN_MINIMAP, ZEN_LANDMARK, ZEN_BIOMES } from '../utils/constants';
+import { ZEN, ZEN_MINIMAP, ZEN_BIOMES } from '../utils/constants';
 import { mixHex } from '../utils/math';
 import { biomeAt, createZenBiomeState, type ZenBiomeState } from './ZenBiome';
 import { rampCenterForCell } from './ZenHeight';
-import { landmarkForCell, landmarksInRadius, LANDMARK_TUNNEL, type LandmarkType } from './ZenLandmarkModel';
+import { landmarksInRadius, type LandmarkType } from './ZenLandmarkModel';
 
 /** A point of interest the radar marks. EXTENSIBLE: ramps + landmarks so far; discoveries
  *  become additional `kind`s drawn by the same marker pipeline. */
@@ -94,56 +94,4 @@ export function gatherMarkers(seed: number, carX: number, carZ: number, radius: 
 /** Pixel scale: world units → radar pixels (radarPixelRadius / worldRadius). */
 export function radarScale(radarPixelRadius: number): number {
   return radarPixelRadius / ZEN_MINIMAP.worldRadius;
-}
-
-/** The nearest tunnel to a point: its world position + straight-line distance. */
-export interface NearestTunnel {
-  x: number;
-  z: number;
-  dist: number;
-}
-
-/**
- * The NEAREST deterministic TUNNEL landmark to (carX, carZ), or null if none within the search
- * bound. Tunnels are position-deterministic (a cell hash), so this points at a REAL tunnel that's
- * actually there when you arrive — the data behind the on-radar compass needle.
- *
- * Searches landmark cells outward in expanding Chebyshev RINGS from the car's cell, up to
- * `maxCells`, tracking the closest tunnel. Early-out: a ring at Chebyshev radius r can't contain a
- * cell nearer than (r−1)·cellSize (the car sits inside its own cell), so once we hold a candidate
- * at distance D we stop as soon as (r−1)·cellSize ≥ D. Bounded by (2·maxCells+1)² cells, and the
- * caller throttles it (the radar resample, not every frame).
- */
-export function nearestTunnel(
-  seed: number,
-  carX: number,
-  carZ: number,
-  maxCells: number = ZEN_MINIMAP.tunnelCompassMaxCells,
-): NearestTunnel | null {
-  const cs = ZEN_LANDMARK.cellSize;
-  const ccx = Math.floor(carX / cs);
-  const ccz = Math.floor(carZ / cs);
-  let best: NearestTunnel | null = null;
-  let bestD2 = Infinity;
-  for (let r = 0; r <= maxCells; r++) {
-    // The nearest any ring-r cell can be is (r−1)·cs (conservative) — once that exceeds the best
-    // distance found, no closer tunnel can exist further out.
-    if (best && (r - 1) * cs >= best.dist) break;
-    for (let cz = ccz - r; cz <= ccz + r; cz++) {
-      for (let cx = ccx - r; cx <= ccx + r; cx++) {
-        // Perimeter of ring r only (interior cells were scanned in earlier, nearer rings).
-        if (Math.max(Math.abs(cx - ccx), Math.abs(cz - ccz)) !== r) continue;
-        const lm = landmarkForCell(seed, cx, cz);
-        if (!lm || lm.type !== LANDMARK_TUNNEL) continue;
-        const dx = lm.x - carX;
-        const dz = lm.z - carZ;
-        const d2 = dx * dx + dz * dz;
-        if (d2 < bestD2) {
-          bestD2 = d2;
-          best = { x: lm.x, z: lm.z, dist: Math.sqrt(d2) };
-        }
-      }
-    }
-  }
-  return best;
 }

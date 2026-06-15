@@ -17,7 +17,7 @@
 import { ZEN, ZEN_LANDMARK } from '../utils/constants';
 import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
-import { landmarksInRadius, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
+import { landmarksInRadius, tunnelBendShape, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
 
 /** Reused scratch for surfaceUnder results (no per-frame allocation). */
 const _su = { y: 0, enclosed: false };
@@ -40,15 +40,19 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
     return _su;
   }
   // TUNNEL: descend below the terrain along the through-axis, blending to terrain at the mouths
-  // (along) and the walls (lateral).
+  // (along) and the walls (lateral). The centreline CURVES sideways by bendOff (matches the rendered
+  // tube/floor — same tunnelBendShape), so the lateral distance is measured from the curved centre.
   const tx = Math.sin(lm.rotationY);
   const tz = Math.cos(lm.rotationY);
   const dx = x - lm.x;
   const dz = z - lm.z;
-  const s = Math.abs(dx * tx + dz * tz); // distance along the tunnel axis from the centre
-  const lat = Math.abs(-dx * tz + dz * tx); // perpendicular (lateral) distance from the centreline
+  const along = dx * tx + dz * tz; // signed distance along the tunnel axis from the centre
+  const perp = -dx * tz + dz * tx; // signed perpendicular distance from the straight axis
+  const s = Math.abs(along);
   const halfL = (ZEN_LANDMARK.tunnelLength * lm.scale) * 0.5;
   const hw = ZEN_LANDMARK.tunnelHalfWidth * lm.scale;
+  const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale * tunnelBendShape(along / halfL);
+  const lat = Math.abs(perp - bendOff); // lateral distance from the CURVED centreline
   if (s >= halfL || lat >= hw) return null;
   // Descent profile: full depth through the inner half, easing to 0 at the mouths (entry ramps).
   const depthF = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, s);

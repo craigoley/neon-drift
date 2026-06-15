@@ -1333,9 +1333,12 @@ export const ZEN_SECRET = {
    *  GATEWAY becomes the arrival + return portal). Fixed for the slice. */
   regionX: 640000,
   regionZ: -480000,
-  /** Distance (world units) in FRONT of the return portal the car arrives, so driving forward
-   *  takes you back through it. */
-  arrivalApproach: 60,
+  /** Distance (world units) the car arrives OFF the portal (it faces AWAY, into the region, so you
+   *  drive deeper to explore — the portal is behind you). */
+  arrivalApproach: 80,
+  /** After a warp, ignore gateway crossings until the car has travelled this far from where it
+   *  arrived — so you can't instantly re-cross the portal you just used (the bounce guard). */
+  returnGuardDistance: 130,
   /** Fade-to-opaque (entering the warp) + fade-back (arriving) durations (seconds). The teleport +
    *  one-frame chunk reload happen at the opaque midpoint, fully hidden. */
   fadeOutSeconds: 0.35,

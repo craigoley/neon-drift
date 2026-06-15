@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN, ZEN_BIOMES } from '../utils/constants';
+import { ZEN, ZEN_BIOMES, ZEN_SECRET_BIOME } from '../utils/constants';
 import { clamp, mixHex } from '../utils/math';
 import { worldToChunk } from './ZenWorld';
 import { heightAt, rampContribution } from './ZenHeight';
@@ -43,6 +43,9 @@ export class ZenTerrain {
   private readonly segSize: number;
   private carCx = NaN;
   private carCz = NaN;
+  /** Inside a SECRET area: force the grid floor to the secret-void gridLine (the dominant visual
+   *  must change, not just the backdrop) — so the place reads as the violet void floor-to-sky. */
+  private secret = false;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.seed = seed;
@@ -73,6 +76,15 @@ export class ZenTerrain {
     // (it's bounded around the camera and fades into fog at the edge).
     this.mesh.frustumCulled = false;
     scene.add(this.mesh);
+  }
+
+  /** Enter / leave a SECRET area — forces the grid floor colour to (or off) the secret void.
+   *  Invalidates the cached chunk so the NEXT update() rebuilds with the new colours (the secret
+   *  warp teleports far → a chunk crossing rebuilds anyway, but this guarantees the recolour). */
+  setSecret(active: boolean): void {
+    if (active === this.secret) return;
+    this.secret = active;
+    this.carCx = NaN; // force a recolour rebuild on the next update
   }
 
   /** Recenter + rebuild the surface when the car crosses into a new chunk (cheap rest of
@@ -108,8 +120,14 @@ export class ZenTerrain {
         const idx = j * stride + i;
         h[idx] = heightAt(this.seed, wx, wz);
         ra[idx] = clamp(rampContribution(this.seed, wx, wz) / ZEN.rampHeight, 0, 1);
-        biomeAt(this.seed, wx, wz, this.bstate);
-        const c = mixHex(glh[this.bstate.from], glh[this.bstate.to], this.bstate.blend);
+        // Secret area: the whole floor is the secret-void colour; else the blended biome gridLine.
+        let c: number;
+        if (this.secret) {
+          c = ZEN_SECRET_BIOME.gridLine;
+        } else {
+          biomeAt(this.seed, wx, wz, this.bstate);
+          c = mixHex(glh[this.bstate.from], glh[this.bstate.to], this.bstate.blend);
+        }
         grgb[idx * 3] = ((c >> 16) & 0xff) / 255;
         grgb[idx * 3 + 1] = ((c >> 8) & 0xff) / 255;
         grgb[idx * 3 + 2] = (c & 0xff) / 255;

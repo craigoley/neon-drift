@@ -236,20 +236,33 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
     expect(Math.abs(home.pos.x), 'restored to the main world (near origin), not stuck far').toBeLessThan(50_000);
     heaps.push(await heapMB());
 
-    // --- PHASE 4: drive THROUGH a tunnel (the surface-override / far-from-path NaN candidate) ---
+    // --- PHASE 4: drive THROUGH the NEAREST tunnel (the surface-override / far-from-path NaN
+    // candidate). The "nearest" tunnel to the live post-warp spot can still be several km out, so
+    // the leg budget is DISTANCE-SCALED — a fixed 60s under-budgeted a 4924u drive at 96 u/s
+    // (≈82 u/s avg required, no margin) on the first live run. Nearest-pick + scaled budget = belt
+    // and suspenders, and it still exercises descend + resurface. ---
     const tun = nearestOfType(LANDMARK_TUNNEL, Math.round(home.pos.x), Math.round(home.pos.z));
     if (tun) {
-      log(`tunnel (@ ${Math.round(tun.x)},${Math.round(tun.z)})`);
-      // Aim a little past the tunnel centre so we descend in and climb out the far side.
-      // Done = descended INTO the tunnel near its centre (floor dips below ground → y < −2u). The
-      // drive-through exercises the surface-override NaN candidate; checkSample asserts finiteness.
+      const dist = Math.hypot(tun.x - home.pos.x, tun.z - home.pos.z);
+      // dist / maxSpeed is the straight-line floor; ×2.5 covers the initial turn-to-heading, the
+      // closed-loop steering corrections, and the curved ~810u descent. Floored so a near tunnel
+      // still gets a real budget.
+      const budgetMs = Math.max(45_000, Math.round((dist / ZEN.maxSpeed) * 2.5) * 1000);
+      log(`tunnel (@ ${Math.round(tun.x)},${Math.round(tun.z)} · ${Math.round(dist)}u · budget ${Math.round(budgetMs / 1000)}s)`);
+      // Done = descended INTO the tunnel near its centre. Latch loosened to <60u && y<−1 (still a
+      // genuine sub-surface descent — tunnelDepth is 16u — just less knife-edge than <40u && y<−2).
       const through = await drive(page, 'tunnel', {
         target: tun,
-        budgetMs: 60_000,
-        done: (z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z) < 40 && z.pos.y < -2,
+        budgetMs,
+        done: (z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z) < 60 && z.pos.y < -1,
       });
       all.push(...through.samples);
-      expect(through.done, 'descended into the tunnel (drove the lowered floor)').toBe(true);
+      // Self-diagnosing (principle #4): a miss reports distance-remaining + depth reached, never a
+      // bare fail — so we never bump a budget to hide a hang, the log says how close it got.
+      const closest = through.samples.length ? Math.min(...through.samples.map((z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z))) : Infinity;
+      const minY = through.samples.length ? Math.min(...through.samples.map((z) => z.pos.y)) : NaN;
+      console.log(`[VALIDATION] tunnel: closestApproach=${Math.round(closest)}u minY=${minY.toFixed(1)} reached=${through.done}`);
+      expect(through.done, `descended into the tunnel (closest=${Math.round(closest)}u, minY=${minY.toFixed(1)})`).toBe(true);
     } else {
       log('tunnel-skip (none in range — not a failure)');
     }

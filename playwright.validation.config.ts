@@ -18,11 +18,12 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: 0, // a soak failure is a finding to investigate, not to paper over with a retry
   workers: 1,
-  // The Zen soak runs the real RAF loop for a sustained stretch (~60-120s) plus the flow walk —
-  // well past the smoke's 90s. This is the soak's budget, kept OUT of the smoke config so it
-  // never relaxes the smoke timeout. (Per recon principle #4: diagnose a hang via the per-state
-  // "[VALIDATION] entering state=X" logs BEFORE blaming this budget.)
-  timeout: 240_000,
+  // The Zen soak runs the real RAF loop for a sustained stretch (cruise + warp round-trip + a
+  // DISTANCE-SCALED tunnel leg that can reach ~128s for a far "nearest" tunnel) plus the flow
+  // walk — well past the smoke's 90s. This is the soak's budget, kept OUT of the smoke config so
+  // it never relaxes the smoke timeout. (Per recon principle #4: diagnose a hang via the per-state
+  // "[VALIDATION] entering state=X" + the tunnel closestApproach/minY logs BEFORE blaming this.)
+  timeout: 300_000,
   reporter: [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]],
   use: {
     baseURL: 'http://localhost:4173',

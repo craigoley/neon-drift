@@ -20,6 +20,7 @@ import {
   type RadarOffset,
 } from './ZenMinimapModel';
 import { createZenBiomeState } from './ZenBiome';
+import { LANDMARK_TUNNEL } from './ZenLandmarkModel';
 
 export class ZenMinimap {
   readonly canvas: HTMLCanvasElement;
@@ -149,8 +150,12 @@ export class ZenMinimap {
       projectToRadar(m.x - carX, m.z - carZ, this.smoothedHeading, this.radarScratch);
       const px = c + this.radarScratch.x * this.scale;
       const py = c + this.radarScratch.y * this.scale;
-      if (m.kind === 'landmark') this.drawLandmark(px, py);
-      else this.drawRamp(px, py);
+      if (m.kind === 'landmark') {
+        // Tunnels get a DISTINCT marker (a down-chevron in their gold) so you can navigate to one
+        // specifically — the diagnosed reason they were never found (all landmarks looked identical).
+        if (m.landmarkType === LANDMARK_TUNNEL) this.drawTunnelMarker(px, py);
+        else this.drawLandmark(px, py);
+      } else this.drawRamp(px, py);
     }
     ctx.restore(); // drop the circular clip
 
@@ -213,6 +218,21 @@ export class ZenMinimap {
     ctx.beginPath();
     ctx.arc(px, py, ZEN_MINIMAP.landmarkDotPx, 0, Math.PI * 2);
     ctx.fill();
+  }
+
+  /** A TUNNEL beacon: a downward chevron in the tunnel gold — distinct from the generic landmark
+   *  ring, so a tunnel reads as "drive down here" on the radar and can be navigated to. */
+  private drawTunnelMarker(px: number, py: number): void {
+    const ctx = this.ctx;
+    const r = ZEN_MINIMAP.tunnelMarkerPx;
+    ctx.strokeStyle = cssHex(ZEN_MINIMAP.tunnelMarkerColor);
+    ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth + 0.5;
+    ctx.beginPath();
+    // A down-chevron (V pointing down): (−r, −r·0.6) → (0, r) → (r, −r·0.6).
+    ctx.moveTo(px - r, py - r * 0.6);
+    ctx.lineTo(px, py + r);
+    ctx.lineTo(px + r, py - r * 0.6);
+    ctx.stroke();
   }
 
   dispose(): void {

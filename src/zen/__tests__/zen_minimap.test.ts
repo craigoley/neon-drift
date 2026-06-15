@@ -13,8 +13,9 @@ import {
   radarScale,
 } from '../ZenMinimapModel';
 import { biomeAt, createZenBiomeState } from '../ZenBiome';
+import { landmarkForCell, LANDMARK_TUNNEL } from '../ZenLandmarkModel';
 import { rampCenterForCell, rampContribution } from '../ZenHeight';
-import { ZEN, ZEN_BIOMES, ZEN_MINIMAP } from '../../utils/constants';
+import { ZEN, ZEN_BIOMES, ZEN_MINIMAP, ZEN_LANDMARK } from '../../utils/constants';
 import { mixHex } from '../../utils/math';
 
 const SEED = ZEN.worldSeed;
@@ -164,5 +165,36 @@ describe('Zen minimap — rampCenterForCell matches rampContribution placement (
     }
     expect(withRamp).toBeGreaterThan(0);
     expect(without).toBeGreaterThan(0);
+  });
+});
+
+describe('Zen minimap — landmark markers carry TYPE so tunnels draw distinctly (findable)', () => {
+  it('gatherMarkers tags each landmark with its landmarkType (was dropped → all identical dots)', () => {
+    // Find a region with a tunnel landmark, gather markers there, and confirm the type is carried.
+    let tunnel: ReturnType<typeof landmarkForCell> = null;
+    outer: for (let cz = 0; cz < 400; cz++) for (let cx = 0; cx < 400; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm && lm.type === LANDMARK_TUNNEL) { tunnel = lm; break outer; }
+    }
+    if (!tunnel) throw new Error('no tunnel found'); // narrows non-null + asserts existence
+    const markers = gatherMarkers(SEED, tunnel.x, tunnel.z, ZEN_LANDMARK.drawRadius);
+    const lmMarkers = markers.filter((m) => m.kind === 'landmark');
+    expect(lmMarkers.length).toBeGreaterThan(0);
+    // Every landmark marker carries a type (not undefined), and OUR tunnel is tagged TUNNEL.
+    for (const m of lmMarkers) expect(m.landmarkType).toBeTypeOf('number');
+    const here = lmMarkers.find((m) => Math.hypot(m.x - tunnel.x, m.z - tunnel.z) < 1e-6);
+    expect(here?.landmarkType).toBe(LANDMARK_TUNNEL); // navigable: the radar knows this dot is a tunnel
+  });
+
+  it('generation/rarity is UNCHANGED — tunnels are still ~10% of landmarks (this fix is recognition only)', () => {
+    const counts = [0, 0, 0, 0, 0];
+    let total = 0;
+    for (let cz = 0; cz < 200; cz++) for (let cx = 0; cx < 200; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm) { counts[lm.type]++; total++; }
+    }
+    const tunnelFrac = counts[LANDMARK_TUNNEL] / total;
+    expect(tunnelFrac).toBeGreaterThan(0.08);
+    expect(tunnelFrac).toBeLessThan(0.13); // ~10% (typeWeights [3,3,2,1,1] unchanged)
   });
 });

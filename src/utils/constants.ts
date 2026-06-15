@@ -1489,6 +1489,10 @@ export const ZEN_MINIMAP = {
    *  radius (CSS px). A hollow ring so it reads as a "go here" beacon, distinct from ramps. */
   landmarkColor: 0xffe066,
   landmarkMarkerPx: 4,
+  /** TUNNEL marker — a DISTINCT down-chevron in the tunnel gold (so a tunnel is navigable-to on the
+   *  radar, not one more identical landmark dot — the diagnosed reason tunnels were never found). */
+  tunnelMarkerColor: 0xffcc33,
+  tunnelMarkerPx: 4,
   /** Stroke width (CSS px) of the landmark hollow-ring marker. */
   landmarkLineWidth: 1.5,
   /** Radius (CSS px) of the landmark centre dot. */
@@ -1643,6 +1647,18 @@ export const ZEN_LANDMARK = {
   /** Tube cross-section ribs + their spacing (world units) — the neon passage walls/ceiling. */
   tunnelRibSpacing: 12,
   tunnelArcSegments: 10,
+  // --- ENTRANCE BEACON: the tunnel is a BELOW-ground depression (its mouths only poke ~headroom
+  //     up) — invisible from afar, so it was never FOUND. A TALL glowing portal-frame at each mouth,
+  //     with downward CHEVRONS reading "drive DOWN here", makes it a spottable beacon like the other
+  //     (14–46u tall) types — and a distinct silhouette (no other type has down-arrows). ---
+  /** Height (world units) the entrance portal rises above the mouth — in the beacon range so it
+   *  reads from a distance (bloom-lit, #128). */
+  tunnelBeaconHeight: 30,
+  /** Number of downward chevrons stacked inside the portal frame (the "descend" cue) + how far each
+   *  V dips (world units) + its half-span as a fraction of the tunnel half-width. */
+  tunnelBeaconChevrons: 3,
+  tunnelBeaconChevronDip: 5,
+  tunnelBeaconChevronSpan: 0.7,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
    *  footprint (the tunnel half-length × max scale). */
   surfaceQueryRadius: 130,

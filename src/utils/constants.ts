@@ -1705,6 +1705,64 @@ export const ZEN_LANDMARK = {
 } as const;
 
 /**
+ * Zen VISTA SKY-SLIDE — driving onto a vista deck AUTO-CATAPULTS the car up into an enclosed neon
+ * sky-tunnel that twists + descends like a playful slide, depositing you back on the ground near the
+ * vista. A GUIDED PARAMETRIC RIDE on an ABSOLUTE-Y path (the surface override is ground-relative and
+ * the ballistic launch caps at ~5u apex — both proven unusable in the recon; see
+ * docs/vista-sky-slide-recon.md). The catapult is the scripted ASCENDING FIRST SEGMENT of the path.
+ * Craig's calls: BIG (a real climb) + TWISTY (more bends than the tunnel's single S), every vista.
+ * Tuned to be DIALABLE — the feel gate is Craig's phone; these are the levers.
+ */
+export const ZEN_SLIDE = {
+  // --- TRIGGER ---
+  /** On the vista flat top within this fraction of the top radius → launch (every vista launches). */
+  deckTriggerRadiusFrac: 0.92,
+  /** The catapult imparts at least this forward speed so the ride always proceeds (even from a crawl). */
+  launchSpeed: 78,
+  // --- PATH GEOMETRY (local to the launch vista; absolute-Y) — BIG + TWISTY, all eased (C¹ at seams) ---
+  /** Apex height above the vista deck — the big vertical soar. */
+  climbHeight: 190,
+  /** Horizontal distance from the vista to the landing (eased out + in). */
+  forwardReach: 380,
+  /** Fraction of the path the catapult climb owns (the rest twists + descends). */
+  ascentFrac: 0.16,
+  /** How far BELOW the deck the path ends (≈ down to the ground at the vista base; the #118 soft
+   *  landing absorbs the residual gap to the real terrain). */
+  descentDrop: 24,
+  /** Lateral twist amplitude (the big sideways swing of the slide centreline). */
+  bendAmplitude: 74,
+  /** TWISTY: half-bend count along the slide (the tunnel uses 1 — this snakes several times). */
+  bendWaves: 3,
+  /** Windowed-sine ease (zero value + tangent at the ends) — same family as the tunnel bend. */
+  bendEaseStart: 0.5,
+  // --- RIDE DYNAMICS ---
+  /** Nominal path length: the param u advances by (speed / pathLength)·dt → sets the ride duration. */
+  pathLength: 940,
+  /** Slide speed is clamped to this band; gas/brake modulate within it (the player still feels it). */
+  rideMinSpeed: 60,
+  rideMaxSpeed: 158, // a touch over maxSpeed (96) — the slide feels FAST
+  rideAccel: 64,
+  /** Lateral steer authority within the tube (u/s at full steer) + how fast the offset eases back
+   *  to centre when you let go (per-second). You nudge within the tube; you can't fall off. */
+  steerNudge: 28,
+  steerReturn: 2.6,
+  /** Lateral offset is clamped to ±(tubeHalfWidth − tubeMargin) so the car never clips a wall. */
+  tubeMargin: 4,
+  // --- TUBE MESH (reuses the tunnel neon palette; bloom-lit, #128) ---
+  tubeHalfWidth: 15,
+  tubeHeadroom: 17,
+  ringSpacing: 13, // longitudinal rib spacing along the path
+  arcSegments: 10, // arch cross-section resolution
+  rungSpacing: 10, // floor rung spacing
+  tubeColor: 0xffcc33, // gold tube
+  floorColor: 0x00ffff, // cyan road
+  // --- RE-ENTRANCY ---
+  /** After landing, gateway-style guard: no re-launch until the car has driven this far from the
+   *  landing point (mirrors ZEN_SECRET.returnGuardDistance) — landing near the vista can't re-fire. */
+  guardDistance: 95,
+} as const;
+
+/**
  * Zen BLOOM — the post pass that makes Zen's bright neon actually GLOW. Without it, everything is
  * 1px unlit lines: the landmark reward's flash (a colour-lerp to white) + the structures + the
  * grid all render but read as thin dim lines (the verified cause of "the reward never showed").

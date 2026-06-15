@@ -24,7 +24,7 @@
 import { test, expect, type Page } from '@playwright/test';
 import { trackErrors } from './_helpers';
 import { ZEN } from '../src/utils/constants';
-import { landmarksInRadius, LANDMARK_GATEWAY, LANDMARK_TUNNEL } from '../src/zen/ZenLandmarkModel';
+import { landmarksInRadius, LANDMARK_GATEWAY, LANDMARK_TUNNEL, LANDMARK_VISTA } from '../src/zen/ZenLandmarkModel';
 import { findReturnPortal } from '../src/zen/ZenSecret';
 
 // --- expected-warning allowlist (recon §4): benign sources that must NOT read as findings ---
@@ -46,6 +46,8 @@ interface ZenDbg {
   warpPhase: 'none' | 'out' | 'in';
   inSecret: boolean;
   hasSaved: boolean;
+  onSlide: boolean;
+  slideU: number;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -265,6 +267,38 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
       expect(through.done, `descended into the tunnel (closest=${Math.round(closest)}u, minY=${minY.toFixed(1)})`).toBe(true);
     } else {
       log('tunnel-skip (none in range — not a failure)');
+    }
+    heaps.push(await heapMB());
+
+    // --- PHASE 5: VISTA SKY-SLIDE — drive onto a vista deck → CATAPULT up the twisting sky-slide →
+    // land. Objective canaries: finite pos/cam through the big vertical soar + twist (the absolute-Y
+    // path is the new NaN candidate), onSlide round-trips true→false (it launches AND lands), and the
+    // soar gains real altitude. FEEL (exhilaration / camera whip) is Craig's phone — this is the
+    // OBJECTIVE gate only (recon §5 boundary). ---
+    const cur = (await readDbg(page))!.zen!;
+    const vis = nearestOfType(LANDMARK_VISTA, Math.round(cur.pos.x), Math.round(cur.pos.z));
+    if (vis) {
+      const dist = Math.hypot(vis.x - cur.pos.x, vis.z - cur.pos.z);
+      const budgetMs = Math.max(45_000, Math.round((dist / ZEN.maxSpeed) * 2.5) * 1000);
+      log(`vista-approach (@ ${Math.round(vis.x)},${Math.round(vis.z)} · ${Math.round(dist)}u · budget ${Math.round(budgetMs / 1000)}s)`);
+      const approach = await drive(page, 'vista-approach', { target: vis, budgetMs, done: (z) => z.onSlide });
+      all.push(...approach.samples);
+      const reached = approach.samples.length ? Math.min(...approach.samples.map((z) => Math.hypot(z.pos.x - vis.x, z.pos.z - vis.z))) : Infinity;
+      console.log(`[VALIDATION] vista: closestApproach=${Math.round(reached)}u launched=${approach.done}`);
+      expect(approach.done, `catapulted off the vista deck (closest=${Math.round(reached)}u)`).toBe(true);
+
+      // Ride the slide to completion — it's on-rails (the path owns position), so just hold gas and
+      // sample; checkSample asserts finiteness every frame through the soar + twist + descent.
+      log('sky-slide (riding)');
+      const baseY = cur.pos.y;
+      const ride = await drive(page, 'sky-slide', { target: null, budgetMs: 30_000, done: (z) => !z.onSlide });
+      all.push(...ride.samples);
+      const peakY = ride.samples.length ? Math.max(...ride.samples.map((z) => z.pos.y)) : baseY;
+      console.log(`[VALIDATION] sky-slide: peakY=${Math.round(peakY)} baseY=${Math.round(baseY)} climbed=${Math.round(peakY - baseY)} landed=${ride.done}`);
+      expect(ride.done, 'the sky-slide completed and deposited the car back on the ground (onSlide → false)').toBe(true);
+      expect(peakY - baseY, 'the catapult + slide gained real altitude (verticality)').toBeGreaterThan(60);
+    } else {
+      log('vista-skip (none in range — not a failure)');
     }
     heaps.push(await heapMB());
 

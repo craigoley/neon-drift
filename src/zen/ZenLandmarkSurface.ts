@@ -14,7 +14,7 @@
  * Only VISTA + TUNNEL landmarks reshape the surface; everywhere else this is just `heightAt`.
  */
 
-import { ZEN, ZEN_LANDMARK } from '../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_SLIDE } from '../utils/constants';
 import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
 import { landmarksInRadius, tunnelBendShape, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
@@ -87,6 +87,22 @@ export function drivableSurfaceY(seed: number, x: number, z: number): number {
 /** Is the car on a VISTA/TUNNEL drivable surface here? (The session suppresses crest-detach on it.) */
 export function onLandmarkSurface(seed: number, x: number, z: number): boolean {
   return coveringSurface(seed, x, z) !== null;
+}
+
+/** The VISTA whose FLAT TOP (the deck) the car is standing on at (x, z), or null. This is the
+ *  Sky-Slide trigger: driving onto a vista deck auto-launches the slide. The deck is the flat-top
+ *  radius (where the surface override is fully raised), tightened by deckTriggerRadiusFrac so the
+ *  launch fires when you're solidly ON the overlook, not skimming its sloped rim. Pure → testable. */
+export function vistaDeckUnder(seed: number, x: number, z: number): Landmark | null {
+  const near = landmarksInRadius(seed, x, z, ZEN_LANDMARK.surfaceQueryRadius);
+  for (const lm of near) {
+    if (lm.type !== LANDMARK_VISTA) continue;
+    const r = ZEN_LANDMARK.vistaTopRadius * lm.scale * ZEN_SLIDE.deckTriggerRadiusFrac;
+    const dx = x - lm.x;
+    const dz = z - lm.z;
+    if (dx * dx + dz * dz <= r * r) return lm;
+  }
+  return null;
 }
 
 /** Is the car deep INSIDE a tunnel here (enclosed)? — for any in-tunnel-only handling. */

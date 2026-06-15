@@ -83,9 +83,13 @@ export function isSurfaceType(type: LandmarkType): boolean {
  * smoothstep) so the bend is zero AND tangent at the mouths — the tunnel runs straight into the
  * surface, then curves as it deepens (no kink at the entrance). Calm by design, not technical.
  */
+export function bendShape(t: number, waves: number, easeStart: number): number {
+  const window = 1 - smoothstep(easeStart, 1, Math.abs(t));
+  return window * Math.sin(Math.PI * waves * t);
+}
+
 export function tunnelBendShape(t: number): number {
-  const window = 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(t));
-  return window * Math.sin(Math.PI * ZEN_LANDMARK.tunnelBendWaves * t);
+  return bendShape(t, ZEN_LANDMARK.tunnelBendWaves, ZEN_LANDMARK.tunnelDepthEaseStart);
 }
 
 /**

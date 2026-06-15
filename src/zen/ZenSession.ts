@@ -10,10 +10,12 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import { ZEN, ZEN_SECRET, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SECRET, ZEN_LANDMARK, ZEN_SLIDE, type CarDef } from '../utils/constants';
+import { clamp } from '../utils/math';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
-import { queryDrivableSurface, surfaceSlopeAlong } from './ZenLandmarkSurface';
+import { queryDrivableSurface, surfaceSlopeAlong, vistaDeckUnder } from './ZenLandmarkSurface';
+import { ZenSlidePath } from './ZenSlidePath';
 import {
   snapshot,
   restore,
@@ -37,6 +39,8 @@ export interface ZenDebugSnapshot {
   warpPhase: 'none' | 'out' | 'in';
   inSecret: boolean;
   hasSaved: boolean;
+  onSlide: boolean;
+  slideU: number;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -90,6 +94,23 @@ export class ZenSession {
   private guardX = 0;
   private guardZ = 0;
   private guardActive = false;
+
+  // --- VISTA SKY-SLIDE: drive onto a vista deck → catapult up an absolute-Y path that twists +
+  //     descends → land back near the vista. A GUIDED ride (the path owns position) — crest physics
+  //     + normal steering are suspended while onSlide (see tick). ---
+  /** True while riding the slide (the tick early-returns into stepSlide). */
+  private onSlide = false;
+  /** The active slide's pure path (null off the slide). */
+  private slide: ZenSlidePath | null = null;
+  /** Progress along the path ∈ [0, 1]; advanced by speed each frame. */
+  private slideU = 0;
+  /** Lateral offset from the path centreline (steering nudges within the tube; eases back to 0). */
+  private slideLat = 0;
+  /** Re-entrancy guard after a landing (mirrors the warp bounce-guard): no re-launch until driven
+   *  guardDistance clear of the landing point, so landing near the vista can't instantly re-fire. */
+  private slideGuardX = 0;
+  private slideGuardZ = 0;
+  private slideGuardActive = false;
 
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
   private fwd = false;
@@ -171,6 +192,13 @@ export class ZenSession {
       return;
     }
 
+    if (this.onSlide) {
+      // ON THE SKY-SLIDE: the path owns the car's position — crest physics + free steering are
+      // suspended (this branch never runs updateZen/updateVertical). stepSlide renders itself.
+      this.stepSlide(steer, dt);
+      return;
+    }
+
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
     // The DRIVABLE-surface slope (vista mesa / tunnel floor override where one applies, else the
     // terrain). Computed every frame so the LANDING catch-up (updateVertical) can ride up a rising
@@ -191,6 +219,20 @@ export class ZenSession {
     // Combined query: one coveringSurface scan for both Y + on-surface (not two).
     const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
     updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
+
+    // SKY-SLIDE TRIGGER: driving onto a vista DECK auto-catapults the car up the slide (every vista
+    // launches). Gated by the slide guard so landing near a vista can't instantly re-fire. Disarm
+    // the guard once we've driven clear of the landing point (same pattern as the warp bounce-guard).
+    if (this.slideGuardActive) {
+      const sdx = this.v.x - this.slideGuardX;
+      const sdz = this.v.z - this.slideGuardZ;
+      if (sdx * sdx + sdz * sdz >= ZEN_SLIDE.guardDistance * ZEN_SLIDE.guardDistance) {
+        this.slideGuardActive = false;
+      }
+    } else {
+      const vista = vistaDeckUnder(ZEN.worldSeed, this.v.x, this.v.z);
+      if (vista) this.startSlide(vista);
+    }
 
     // BOUNCE GUARD: after a warp, re-arm crossings only once we've travelled clear of the portal
     // we arrived at, so holding gas can't instantly re-cross it (the diagnosed instant-bounce).
@@ -230,9 +272,79 @@ export class ZenSession {
       warpPhase: this.warpPhase,
       inSecret: this.inSecret,
       hasSaved: this.saved !== null,
+      onSlide: this.onSlide,
+      slideU: this.slideU,
       biome: { from: this._dbgBiome.from, to: this._dbgBiome.to, blend: this._dbgBiome.blend },
       counts: info.counts,
     };
+  }
+
+  /** CATAPULT: build the absolute-Y slide path anchored at the vista deck, launching in the
+   *  direction the car drove on, and enter the on-slide state (the tube mesh appears). */
+  private startSlide(vista: Landmark): void {
+    const deckY = heightAt(ZEN.worldSeed, vista.x, vista.z) + ZEN_LANDMARK.vistaHeight * vista.scale + ZEN.rideHeight;
+    this.slide = new ZenSlidePath({ x: vista.x, y: deckY, z: vista.z }, this.v.heading);
+    this.slideU = 0;
+    this.slideLat = 0;
+    this.v.speed = Math.max(this.v.speed, ZEN_SLIDE.launchSpeed); // the catapult imparts launch speed
+    this.onSlide = true;
+    this.renderer.showSlide(this.slide);
+  }
+
+  /** THE RIDE: advance along the path by speed (gas/brake modulate within a band), set the car's
+   *  pose from the path + a clamped lateral steer nudge, and render. At u≥1, deposit the car near
+   *  the ground and hand back to normal driving (the #118 soft landing eases the residual gap). */
+  private stepSlide(steer: number, dt: number): void {
+    const path = this.slide!;
+    const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
+    this.v.speed = clamp(this.v.speed + throttle * ZEN_SLIDE.rideAccel * dt, ZEN_SLIDE.rideMinSpeed, ZEN_SLIDE.rideMaxSpeed);
+    const prevY = this.v.y;
+    this.slideU += (this.v.speed / path.length) * dt;
+
+    // Lateral steer nudge within the tube (eases back to centre when you let go) — you can't fall off.
+    const maxLat = ZEN_SLIDE.tubeHalfWidth - ZEN_SLIDE.tubeMargin;
+    this.slideLat += clamp(steer, -1, 1) * ZEN_SLIDE.steerNudge * dt;
+    if (Math.abs(steer) < 0.05) this.slideLat -= this.slideLat * Math.min(1, ZEN_SLIDE.steerReturn * dt);
+    this.slideLat = clamp(this.slideLat, -maxLat, maxLat);
+
+    const done = this.slideU >= 1;
+    if (done) this.slideU = 1;
+    const p = path.pointAt(this.slideU);
+    const t = path.tangentAt(this.slideU);
+    // Right axis = the horizontal perpendicular of the tangent — where the lateral nudge applies.
+    let sx = t.z;
+    let sz = -t.x;
+    const sl = Math.hypot(sx, sz) || 1;
+    sx /= sl;
+    sz /= sl;
+    this.v.x = p.x + sx * this.slideLat;
+    this.v.z = p.z + sz * this.slideLat;
+    this.v.y = p.y;
+    this.v.heading = Math.atan2(t.x, -t.z); // path tangent → facing (forward = sin h, −cos h)
+    // Drive the renderer's airborne nose-pitch from the path's vertical velocity (visual only — the
+    // ride isn't physically integrated). Leaving airborne=true at the end lets updateVertical land it.
+    this.v.vy = (this.v.y - prevY) / Math.max(dt, 1e-4);
+    this.v.airborne = true;
+    this.prevX = this.v.x;
+    this.prevZ = this.v.z;
+
+    if (done) this.endSlide();
+
+    this.renderer.render(this.v, steer, dt);
+    this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);
+  }
+
+  /** End the ride: drop the tube, leave the on-slide state, and arm the re-launch guard from the
+   *  landing point. The car keeps airborne=true + its descent vy, so the next normal tick's
+   *  updateVertical eases it onto the real terrain (the #118 soft landing — no snap). */
+  private endSlide(): void {
+    this.renderer.hideSlide();
+    this.slide = null;
+    this.onSlide = false;
+    this.v.vy = Math.min(this.v.vy, 0); // ensure a downward (or zero) settle, never an upward kick
+    this.slideGuardX = this.v.x;
+    this.slideGuardZ = this.v.z;
+    this.slideGuardActive = true;
   }
 
   /** Advance the warp fade; at the opaque midpoint, do the teleport (hidden by the fade). */

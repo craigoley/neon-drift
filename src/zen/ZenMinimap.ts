@@ -301,10 +301,15 @@ export class ZenMinimap {
     ctx.textBaseline = 'middle';
     const ly = c + R * ZEN_MINIMAP.tunnelCompassLabelDropRatio;
     const w = ctx.measureText(label).width;
+    const pad = ZEN_MINIMAP.tunnelCompassPillPadPx;
     ctx.fillStyle = cssHex(ZEN_MINIMAP.backdropColor);
-    ctx.globalAlpha = 0.72;
+    ctx.globalAlpha = ZEN_MINIMAP.tunnelCompassPillAlpha;
     ctx.beginPath();
-    ctx.roundRect(c - w / 2 - 5, ly - fs * 0.72, w + 10, fs * 1.5, fs * 0.5);
+    ctx.roundRect(
+      c - w / 2 - pad, ly - fs * ZEN_MINIMAP.tunnelCompassPillYOffsetRatio,
+      w + pad * 2, fs * ZEN_MINIMAP.tunnelCompassPillHeightRatio,
+      fs * ZEN_MINIMAP.tunnelCompassPillRadiusRatio,
+    );
     ctx.fill();
     ctx.globalAlpha = 1;
     ctx.fillStyle = cssHex(ZEN_MINIMAP.tunnelCompassColor);

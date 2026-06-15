@@ -1532,6 +1532,13 @@ export const ZEN_MINIMAP = {
   /** Min/max needle alpha across the pulse. */
   tunnelCompassPulseMin: 0.55,
   tunnelCompassPulseMax: 1,
+  /** Range-readout backdrop pill: alpha, horizontal padding (CSS px), and font-relative ratios
+   *  for the vertical offset, height, and corner radius (all scaled from tunnelCompassLabelPx). */
+  tunnelCompassPillAlpha: 0.72,
+  tunnelCompassPillPadPx: 5,
+  tunnelCompassPillYOffsetRatio: 0.72,
+  tunnelCompassPillHeightRatio: 1.5,
+  tunnelCompassPillRadiusRatio: 0.5,
 } as const;
 
 /**

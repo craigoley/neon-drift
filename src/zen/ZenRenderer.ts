@@ -269,7 +269,6 @@ export class ZenRenderer {
     this.post.setSize(size.x, size.y);
   }
 
-  /** Free the Zen-owned geometry/materials (the shared renderer is NOT disposed). */
   /** Show the Sky-Slide tube (built once on launch from the pure path); replaces any prior one. */
   showSlide(path: ZenSlidePath): void {
     this.hideSlide();

@@ -304,7 +304,7 @@ export class ZenSession {
     // Lateral steer nudge within the tube (eases back to centre when you let go) — you can't fall off.
     const maxLat = ZEN_SLIDE.tubeHalfWidth - ZEN_SLIDE.tubeMargin;
     this.slideLat += clamp(steer, -1, 1) * ZEN_SLIDE.steerNudge * dt;
-    if (Math.abs(steer) < 0.05) this.slideLat -= this.slideLat * Math.min(1, ZEN_SLIDE.steerReturn * dt);
+    if (Math.abs(steer) < ZEN_SLIDE.steerDeadZone) this.slideLat -= this.slideLat * Math.min(1, ZEN_SLIDE.steerReturn * dt);
     this.slideLat = clamp(this.slideLat, -maxLat, maxLat);
 
     const done = this.slideU >= 1;

@@ -1746,6 +1746,8 @@ export const ZEN_SLIDE = {
    *  to centre when you let go (per-second). You nudge within the tube; you can't fall off. */
   steerNudge: 28,
   steerReturn: 2.6,
+  /** Normalized steer magnitude below which the lateral offset eases back to centre (dead zone). */
+  steerDeadZone: 0.05,
   /** Lateral offset is clamped to ±(tubeHalfWidth − tubeMargin) so the car never clips a wall. */
   tubeMargin: 4,
   // --- TUBE MESH (reuses the tunnel neon palette; bloom-lit, #128) ---

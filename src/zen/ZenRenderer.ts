@@ -109,6 +109,25 @@ export class ZenRenderer {
     this.post.setQuality(high);
   }
 
+  /** READ-ONLY render-side state for the validation sweep (no behaviour): the camera position (a
+   *  NaN candidate via the eased lookY after a warp/tunnel) + the streamed scene-graph counts (the
+   *  bounded-growth canaries). Mirrors live values; adds nothing to the render path. */
+  get debugInfo(): {
+    cam: { x: number; y: number; z: number };
+    counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
+  } {
+    const c = this.camera.position;
+    return {
+      cam: { x: c.x, y: c.y, z: c.z },
+      counts: {
+        props: this.scenery.activePropCount,
+        terrainVerts: this.terrain.vertexCount,
+        landmarks: this.landmarks.activeCount,
+        sceneChildren: this.scene.children.length,
+      },
+    };
+  }
+
   /** Resolve the car's position out of solid props AND solid landmark parts (DEFLECT/SLIDE).
    *  The sim calls this after moving the car. Both scans are bounded around (x, z). Landmark
    *  rings + surface types are pass-through (no solid parts); arch + gateway pillars deflect. */

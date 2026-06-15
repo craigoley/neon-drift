@@ -93,6 +93,12 @@ export class ZenLandmarks {
     this.tunnelFloorGeo = this.buildTunnelFloor();
   }
 
+  /** Count of in-range landmark instances currently streamed in (read-only; the validation sweep's
+   *  bounded-growth canary — landmarks are rare, so this stays small as the car roams). */
+  get activeCount(): number {
+    return this.active.size;
+  }
+
   /**
    * Stream landmark meshes around the car + run the reach pulses. Cheap: landmarks are rare, so
    * the active set is tiny; the heavy work is a bounded `landmarksInRadius` scan.

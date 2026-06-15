@@ -25,6 +25,21 @@ import {
 import type { Landmark } from './ZenLandmarkModel';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
+import { biomeAt, createZenBiomeState } from './ZenBiome';
+
+/** Read-only Zen state snapshot for the validation sweep (no setters, no behaviour). */
+export interface ZenDebugSnapshot {
+  pos: { x: number; y: number; z: number };
+  cam: { x: number; y: number; z: number };
+  heading: number;
+  speed: number;
+  airborne: boolean;
+  warpPhase: 'none' | 'out' | 'in';
+  inSecret: boolean;
+  hasSaved: boolean;
+  biome: { from: number; to: number; blend: number };
+  counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
+}
 
 export interface ZenSessionOptions {
   /** The game's shared WebGLRenderer (Zen draws with it; never disposes it). */
@@ -79,6 +94,9 @@ export class ZenSession {
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
   private fwd = false;
   private back = false;
+
+  /** Reused scratch for the debug-snapshot biome sample (no per-call alloc). */
+  private readonly _dbgBiome = createZenBiomeState();
 
   private readonly onKey: (e: KeyboardEvent) => void;
 
@@ -195,6 +213,26 @@ export class ZenSession {
     this.renderer.render(this.v, steer, dt);
     // Live radar: me-centered, rotates with heading (throttled biome/ramp resample inside).
     this.minimap.update(this.v.x, this.v.z, this.v.heading, dt);
+  }
+
+  /** READ-ONLY live snapshot for the validation sweep (window.__neonDebug.zen). No setters, no
+   *  behaviour — mirrors the vehicle + warp/secret machine + the biome under the car + the render
+   *  counts, so the soak can assert finiteness, bounded growth, and transition (de)sync. */
+  debugSnapshot(): ZenDebugSnapshot {
+    const info = this.renderer.debugInfo;
+    biomeAt(ZEN.worldSeed, this.v.x, this.v.z, this._dbgBiome);
+    return {
+      pos: { x: this.v.x, y: this.v.y, z: this.v.z },
+      cam: info.cam,
+      heading: this.v.heading,
+      speed: this.v.speed,
+      airborne: this.v.airborne,
+      warpPhase: this.warpPhase,
+      inSecret: this.inSecret,
+      hasSaved: this.saved !== null,
+      biome: { from: this._dbgBiome.from, to: this._dbgBiome.to, blend: this._dbgBiome.blend },
+      counts: info.counts,
+    };
   }
 
   /** Advance the warp fade; at the opaque midpoint, do the teleport (hidden by the fade). */

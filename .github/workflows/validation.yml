@@ -1,0 +1,46 @@
+name: Validation sweep (L3 live/soak)
+
+# ON-DEMAND live-validation / bug-hunt sweep (L3). Drives a real Chromium through a console-clean
+# flow walk + a SUSTAINED unfrozen Zen soak (across biomes, into a secret-area warp + back, through
+# a tunnel), asserting OBJECTIVE failures only — crash, console error, freeze/stall, NaN, unbounded
+# growth, transition desync. It does NOT assert FEEL (that stays human phone playtest). FIND, DON'T
+# FIX: a failure is a FINDING for a separate triage PR.
+#
+# Deliberately OFF the per-PR path: workflow_dispatch + a weekly schedule only — NO `pull_request`
+# trigger. So it never becomes a merge-blocking check, and (per docs/validation-sweep-recon.md §6)
+# it can never trip or loop the claude-review review-and-merge pipeline (which fires on
+# pull_request events). The long soak also doesn't belong on the fast per-PR critical path.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 5 * * 0' # weekly, Sunday 05:00 UTC
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validation:
+    name: Live-validation sweep
+    runs-on: ubuntu-latest
+    timeout-minutes: 25 # the soak runs the real RAF loop for a sustained stretch
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      # Chromium + its OS deps (the sweep needs one engine).
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e:validation
+      # Surface the report/traces (the findings) on failure for triage.
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: validation-report
+          path: playwright-report/
+          retention-days: 14

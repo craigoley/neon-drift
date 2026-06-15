@@ -1389,8 +1389,10 @@ export const ZEN_BIOME_TERRAIN: readonly ZenBiomeTerrain[] = [
   // DAWN — peaky mountains: TALL + somewhat broad peaks (ridge freq 0.65 → ~150u peaks) so you
   //   launch off a big peak for a long gentle arc rather than buzzing narrow ridges. Higher
   //   coverage (bias) makes mountains DOMINATE the biome (it reads as a mountain range, not the
-  //   occasional Sunset peak) — the MOST air, but flowing + calm (tuned down from a 34% buzz).
-  { hillAmplitude: 4.0, hillFrequencyMul: 1.0, mountainAmount: 2.0, mountainBias: 0.08, ridgeFrequencyMul: 0.65 },
+  //   occasional Sunset peak) — the MOST air, but flowing + calm. mountainAmount TEMPERED 2.0→1.4
+  //   (still the airiest biome, > Sunset's 1.0) so its peaks stop producing the rare OUTLIER crests
+  //   (the jarring big-launch tail) while keeping Dawn's identity — peaky, not flattened.
+  { hillAmplitude: 4.0, hillFrequencyMul: 1.0, mountainAmount: 1.4, mountainBias: 0.08, ridgeFrequencyMul: 0.65 },
 ] as const;
 
 /**
@@ -2388,6 +2390,17 @@ export const ZEN = {
    *  bites on gaps the ease would close by > this in one frame (~14u), which real grounded
    *  hill/descent tracking never reaches. */
   maxLandStep: 2.5,
+  /** SLOPE-AWARE landing catch-up (the consistency fix): when the car lands into a RISING far-side
+   *  (a steep mountain crest → a big gap), the gentle terrainFollowLerp would float the car UP over
+   *  ~5-8 frames (the diagnosed "soft float-up landing"). Instead, for a big gap we catch up FIRMLY
+   *  at ~the slope's own climb rate (|slope|·speed·this) — so the car RIDES UP the hill at the rate
+   *  it's driving into it, reading as a planted landing, not a float. On GENTLE ground the rate
+   *  floors at maxLandStep (this term is < maxLandStep for slope < ~1 at cruise) → normal driving +
+   *  clean landings are UNCHANGED. */
+  landRideFactor: 1.5,
+  /** Hard ceiling (world units/frame) on that firm catch-up — so even a near-vertical far-side
+   *  settles over a couple of frames, never a one-frame teleport (keeps the #118 no-lurch guarantee). */
+  landSettleCeil: 6,
   /** Subdivisions per chunk in the terrain wireframe (per side). More = smoother hills
    *  AND peaks (raised from 6 for PR4 mountains to read without spiking), more vertices.
    *  The windowed line-grid is rebuilt only on chunk crossings. */
@@ -2419,8 +2432,10 @@ export const ZEN = {
   airGravity: 80,
   /** Cap on the detach upward velocity → the MAX AIR off the steepest crests/ramps (a sharp
    *  ramp face would otherwise fling huge upward velocity). Keeps the biggest arc gentle/zen
-   *  and readable. Small crests detach with small velocity, far under this cap. */
-  maxLaunchVel: 38,
+   *  and readable. Small crests detach with small velocity, FAR under this cap, so this only
+   *  clips the rare OUTLIER launches. LOWERED 38→28 (arc cap ~9.0u→~4.9u) to clip the jarring
+   *  big-launch tail while leaving the 99% gentle micro-hops (vy well under the cap) untouched. */
+  maxLaunchVel: 28,
   /** Max nose-pitch (radians) while airborne — the car tips to follow its arc (nose up
    *  rising, down toward landing). Visual only. */
   airTiltMax: 0.5,

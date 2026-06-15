@@ -130,7 +130,7 @@ describe('Zen air-time — the air-shadow GAP + the raised arc', () => {
     expect(maxGap).toBeGreaterThan(2); // a clearly visible gap opens between car + shadow
   });
 
-  it('the raised maxLaunchVel gives a BIGGER but bounded arc (exhilarating, still zen)', () => {
+  it('maxLaunchVel gives a TAMED, bounded arc — a real jump, no jarring rocket (consistency fix)', () => {
     const v = createZenVehicle();
     v.speed = 80;
     v.airborne = true;
@@ -141,8 +141,9 @@ describe('Zen air-time — the air-shadow GAP + the raised arc', () => {
       maxY = Math.max(maxY, v.y);
     }
     const arcCap = (ZEN.maxLaunchVel * ZEN.maxLaunchVel) / (2 * ZEN.airGravity);
-    expect(maxY).toBeGreaterThan(7); // bigger than the old ~5.6u arc
-    expect(maxY).toBeLessThanOrEqual(arcCap + 0.2); // but BOUNDED by the cap — not orbit
+    expect(maxY).toBeGreaterThan(3); // still a REAL jump, clearly above the sub-1u micro-hops
+    expect(maxY).toBeLessThanOrEqual(arcCap + 0.2); // BOUNDED by the cap — not an orbit
+    expect(arcCap).toBeLessThan(6); // cap LOWERED (maxLaunchVel 38→28) to clip the jarring ~9u tail
   });
 });
 

@@ -154,12 +154,11 @@ export class ZenSession {
     }
 
     const throttle = (this.fwd ? 1 : 0) - (this.back ? 1 : 0);
-    // Slope drives the gentle speed nudge — GROUNDED only (no terrain grip in the air). Uses the
-    // DRIVABLE surface (vista mesa / tunnel floor override where one applies, else the terrain).
-    const slope = this.v.airborne
-      ? 0
-      : surfaceSlopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
-    updateZen(this.v, steer, throttle, dt, slope);
+    // The DRIVABLE-surface slope (vista mesa / tunnel floor override where one applies, else the
+    // terrain). Computed every frame so the LANDING catch-up (updateVertical) can ride up a rising
+    // far-side at its own rate; the gentle SPEED nudge stays GROUNDED-only (no terrain grip in air).
+    const slope = surfaceSlopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
+    updateZen(this.v, steer, throttle, dt, this.v.airborne ? 0 : slope);
     // Props are SOLID — but only while GROUNDED: airborne, the car flies OVER them. Push
     // the car back out of any prop circle it entered (slides around — no hard stop).
     if (!this.v.airborne) {

@@ -96,6 +96,16 @@ export function followSurface(v: ZenVehicle, targetY: number, dt: number): ZenVe
   return v;
 }
 
+/** The firm, SLOPE-AWARE landing catch-up rate (world units/frame): ride up a rising far-side at
+ *  ~its own climb rate (|slope|·speed), floored at maxLandStep (so gentle landings are unchanged)
+ *  and ceilinged at landSettleCeil (so even a near-vertical wall never teleports). */
+function landCatchupRate(v: ZenVehicle, slope: number, dt: number): number {
+  return Math.min(
+    ZEN.landSettleCeil,
+    Math.max(ZEN.maxLandStep, Math.abs(slope) * v.speed * dt * ZEN.landRideFactor),
+  );
+}
+
 /**
  * Vertical update with AIR-TIME. `groundY` = heightAt(x, z) + ride height (the surface the
  * car is over now); `slope` = rise/run along the heading (0 while airborne).
@@ -122,11 +132,11 @@ export function updateVertical(v: ZenVehicle, groundY: number, slope: number, dt
     v.vy -= ZEN.airGravity * dt;
     v.y += v.vy * dt;
     if (v.y <= groundY) {
-      // Land — but CAP the upward correction so flying into a high far-side wall settles
-      // over a few frames instead of teleporting the car up ~18u in one frame (the lurch).
-      // A normal touch-down (gap < maxLandStep) still snaps up instantly; followSurface
-      // finishes any larger settle on the grounded frames below.
-      v.y += Math.min(groundY - v.y, ZEN.maxLandStep);
+      // Land — clear the gap at the SLOPE-AWARE firm rate (ride up a rising far-side at ~its own
+      // climb rate) so a steep-crest landing settles firmly, not a slow float-up. A clean touch-down
+      // (gap < maxLandStep) still snaps up instantly; a big gap settles over a couple of bounded
+      // frames (landSettleCeil → no teleport). Grounded tracking (followSurface) is untouched.
+      v.y += Math.min(groundY - v.y, landCatchupRate(v, slope, dt));
       v.vy = 0;
       v.airborne = false;
     }

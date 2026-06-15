@@ -1448,8 +1448,11 @@ export const ZEN_STARS = {
  * 3D). Tunable here so Craig can dial size/opacity/reach on his phone.
  */
 export const ZEN_MINIMAP = {
-  /** World-units radius the radar shows around the car (the inscribed circle of the grid). */
-  worldRadius: 1500,
+  /** World-units radius the radar shows around the car (the inscribed circle of the grid).
+   *  MATCHED to the landmark beacon draw range (ZEN_LANDMARK.drawRadius 2600) so the radar no
+   *  longer shows LESS than the eye already sees in-world — a tunnel beacon you can spot is also
+   *  on the radar. */
+  worldRadius: 2600,
   /** On-screen diameter (CSS px) — tucked in a corner, sized for a phone (not intrusive). */
   sizePx: 124,
   /** Inset (CSS px) from the screen corner. */
@@ -1502,6 +1505,40 @@ export const ZEN_MINIMAP = {
   landmarkLineWidth: 1.5,
   /** Radius (CSS px) of the landmark centre dot. */
   landmarkDotPx: 1,
+
+  // --- nearest-tunnel COMPASS (the directional cue: "TUNNEL ▲ N.N km") ---
+  // Tunnels are the rarest landmark + the most-missed (even post-#131 they're in beacon range
+  // only ~10% of roaming time). A persistent bearing needle to the NEAREST deterministic tunnel
+  // turns wandering into directed travel — point the car at it and drive. Hands off to the on-map
+  // chevron once the tunnel enters the radar (no redundant double-cue).
+  /** Cells (Chebyshev radius) to search outward for the nearest tunnel. cellSize ~2600u, so this
+   *  covers ~20km — well past the post-bump mean spacing, so a tunnel is almost always found.
+   *  Bounded + throttled (computed on the radar's resample, not every frame). */
+  tunnelCompassMaxCells: 8,
+  /** World units shown as one kilometre on the range readout (1000u = 1km — friendly numbers). */
+  tunnelCompassUnitsPerKm: 1000,
+  /** Compass colour (the tunnel gold, matching the in-world beacon + the on-map chevron). */
+  tunnelCompassColor: 0xffcc33,
+  /** Bearing-needle size (CSS px): the triangle length + half-width. */
+  tunnelCompassArrowLenPx: 9,
+  tunnelCompassArrowHalfPx: 5,
+  /** How far inside the scope ring the needle TIP sits (CSS px). */
+  tunnelCompassInsetPx: 4,
+  /** Range-readout font size (CSS px) + its drop below the scope centre (as a fraction of radius). */
+  tunnelCompassLabelPx: 11,
+  tunnelCompassLabelDropRatio: 0.52,
+  /** Gentle pulse rate (rad/s) so the needle breathes (draws the eye, stays calm). */
+  tunnelCompassPulseRate: 2.4,
+  /** Min/max needle alpha across the pulse. */
+  tunnelCompassPulseMin: 0.55,
+  tunnelCompassPulseMax: 1,
+  /** Range-readout backdrop pill: alpha, horizontal padding (CSS px), and font-relative ratios
+   *  for the vertical offset, height, and corner radius (all scaled from tunnelCompassLabelPx). */
+  tunnelCompassPillAlpha: 0.72,
+  tunnelCompassPillPadPx: 5,
+  tunnelCompassPillYOffsetRatio: 0.72,
+  tunnelCompassPillHeightRatio: 1.5,
+  tunnelCompassPillRadiusRatio: 0.5,
 } as const;
 
 /**
@@ -1526,9 +1563,11 @@ export const ZEN_LANDMARK = {
    *  you can drive up to / through / onto them — never buried in a mountain. */
   maxMask: 0.25,
   /** Relative weight of each TYPE in the placement mix (indexed by LandmarkType: ring, arch,
-   *  gateway, vista, tunnel). Tunnel + vista are RARER (weight 1) — they're bigger "destinations";
-   *  ring/arch are the common drive-throughs. */
-  typeWeights: [3, 3, 2, 1, 1],
+   *  gateway, vista, tunnel). TUNNEL RAISED 1→3 (≈10%→25% of landmarks) — diagnosed unfindable
+   *  from pure spatial rarity (~14.6km apart, in beacon range only ~10% of roaming time), so the
+   *  descent is now ~2.5× more common (mean spacing ≈9.3km). Vista stays the rare "destination"
+   *  (weight 1 ≈ 8%); ring/arch remain the common drive-throughs. No type vanishes. */
+  typeWeights: [3, 3, 2, 1, 3],
   /** Per-landmark uniform scale variety. */
   scaleMin: 0.85,
   scaleMax: 1.35,

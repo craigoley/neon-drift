@@ -1664,17 +1664,25 @@ export const ZEN_LANDMARK = {
   //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---
   /** Tunnel length along its through-axis; half-width of the floor; how far BELOW the terrain the
    *  floor dips at the deepest; headroom (ceiling above the floor — must exceed the camera height so
-   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 380→1200 — a MUCH longer underground
-   *  JOURNEY (~10s enclosed at cruise). The descent/ascent ramps lengthen with it (gentler entry);
-   *  it also CURVES (tunnelBend*). (edgeMargin + surfaceQueryRadius co-scaled to the longer footprint.) */
-  tunnelLength: 1200,
+   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 380→1200→1800 — a MUCH longer underground
+   *  JOURNEY. The descent/ascent ramps lengthen WITH it, so a deeper floor (see tunnelDepth) is still a
+   *  gentle ramp, not a cliff. (surfaceQueryRadius co-scaled below so the override resolves from the far
+   *  mouth.) The #149 unified floor (tunnelDepthFactor, shared mesh+surface) + curve-fits-tube
+   *  (tunnelHalfWidth ≥ tunnelBendAmplitude) invariants hold at any length/depth (both are normalized /
+   *  length-independent). */
+  tunnelLength: 1800,
   /** Half-width of the tube/floor (world units, pre-scale). WIDENED 13→34 so it comfortably CONTAINS
    *  its own curve: the centreline swings ±tunnelBendAmplitude (26), so a car driving straight sits at
    *  lat up to 26 from the curved centre — with hw 13 that exceeded the wall (lat ≥ hw) and the drivable
    *  override dropped to null → the car POPPED to normal ground (diagnosis #148). hw 34 ≥ bendAmplitude
    *  26 + an ~8u drive margin, so a normal path never reaches the wall (no null-flip). */
   tunnelHalfWidth: 34,
-  tunnelDepth: 16,
+  /** How far (world units, pre-scale) the floor drops below the surface at the deepest. DEEPER
+   *  16→28 — a more dramatic plunge into the neon underworld. The drop is spread over the (now longer)
+   *  descent ramp, so the grade stays gentle (≈6% — a smooth ramp, not a cliff) and the #118-class
+   *  eased entry/exit at the mouths stays snap-free. Shared by the floor mesh + the followed surface
+   *  via tunnelDepthFactor (#149), so both deepen together — the car still rides exactly on the road. */
+  tunnelDepth: 28,
   tunnelHeadroom: 13,
   /** The tunnel's gentle LATERAL CURVE: peak sideways offset of the centreline (world units, pre-scale)
    *  + how many sine half-bends span the length. A calm sweeping S (waves 1), windowed to be straight +
@@ -1723,9 +1731,11 @@ export const ZEN_LANDMARK = {
   tunnelBeaconChevronStartFrac: 0.75,
   tunnelBeaconChevronStepFrac: 0.22,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
-   *  footprint (the curved tunnel reaches ~812u from centre at max scale). RAISED with the longer,
-   *  curved tunnel so the override is still found from the far mouth. */
-  surfaceQueryRadius: 840,
+   *  footprint. RAISED 840→1300 with the LONGER tunnel: at max scale the tube reaches
+   *  tunnelLength·scaleMax·0.5 ≈ 1215u along from centre, so the override must still be found from the
+   *  far mouth. (Cost is a slightly larger cell scan per query — still a handful of cells; throttled
+   *  callers aside, it's a bounded scalar scan.) */
+  surfaceQueryRadius: 1300,
 } as const;
 
 /**
@@ -1799,11 +1809,11 @@ export const ZEN_SLIDE = {
   // --- PATH GEOMETRY (local to the launch vista; absolute-Y) — BIG + TWISTY, all eased (C¹ at seams) ---
   /** Apex height above the vista deck — the big vertical soar. */
   climbHeight: 190,
-  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED 380→610 (~1.6×):
-   *  a LONGER soaring slide. Scaled together with bendWaves + pathLength so the bend WAVELENGTH
-   *  (forwardReach / bendWaves ≈ 254u) and the ride pacing are unchanged — same gentle #146 bends +
-   *  calm camera, just more of them over a longer ride (not denser/sharper). Altitude is unchanged. */
-  forwardReach: 610,
+  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED 380→610→854
+   *  (×1.4) for an even longer soar. Scaled together with bendWaves + pathLength so the bend
+   *  WAVELENGTH (forwardReach / bendWaves ≈ 254u) + the ride pacing are UNCHANGED — same gentle #146
+   *  bends + #151 steady camera, just more of them over a longer ride (not denser/sharper). */
+  forwardReach: 854,
   /** Fraction of the path the catapult climb owns (the rest twists + descends). */
   ascentFrac: 0.16,
   /** How far BELOW the deck the path ends (≈ down to the ground at the vista base; the #118 soft
@@ -1813,11 +1823,11 @@ export const ZEN_SLIDE = {
    *  gentler bends (the big twist made Craig dizzy; the soar — climb/descent — felt good and is
    *  unchanged). A graceful sweep, not a violent swing. */
   bendAmplitude: 40,
-  /** Half-bend count along the slide. COMFORT-tuned 3→1.5 (#146); then 1.5→2.4 with the LONGER path
-   *  (forwardReach 380→610) to hold the bend WAVELENGTH constant (610/2.4 ≈ 380/1.5 ≈ 254u) — the
-   *  SAME gentle #146 bends at the SAME spacing, just more of them over the longer slide (NOT denser
-   *  or sharper). Amplitude (gentleness) is unchanged. */
-  bendWaves: 2.4,
+  /** Half-bend count along the slide. COMFORT-tuned 3→1.5 (#146); scaled WITH the path length to hold
+   *  the bend WAVELENGTH constant: 1.5→2.4 (#147), then 2.4→3.36 (×1.4) here. 854/3.36 ≈ 610/2.4 ≈
+   *  380/1.5 ≈ 254u — the SAME gentle #146 bends at the SAME spacing, just more of them over the
+   *  longer slide (NOT denser or sharper). Amplitude (gentleness) is unchanged. */
+  bendWaves: 3.36,
   /** Windowed-sine ease (zero value + tangent at the ends) — same family as the tunnel bend. */
   bendEaseStart: 0.5,
   // --- CAMERA (comfort): the slide uses its OWN, calmer camera than normal driving (the global
@@ -1830,10 +1840,10 @@ export const ZEN_SLIDE = {
   leanMax: 0.06,
   // --- RIDE DYNAMICS ---
   /** Nominal path length: the param u advances by (speed / pathLength)·dt → sets the ride duration.
-   *  LENGTHENED 940→1500 (~1.6×, with forwardReach) so the longer slide keeps the SAME apparent
-   *  speed/pacing (you spend longer on it = more soar) — and the tube mesh's rib density (rings =
-   *  pathLength / ringSpacing) stays constant over the longer path. */
-  pathLength: 1500,
+   *  LENGTHENED 940→1500→2100 (×1.4 here, with forwardReach) so the longer slide keeps the SAME
+   *  apparent speed/pacing (you spend longer on it = more soar) — and the tube mesh's rib density
+   *  (rings = pathLength / ringSpacing) stays constant over the longer path. */
+  pathLength: 2100,
   /** Slide speed is clamped to this band; gas/brake modulate within it (the player still feels it). */
   rideMinSpeed: 60,
   rideMaxSpeed: 158, // a touch over maxSpeed (96) — the slide feels FAST

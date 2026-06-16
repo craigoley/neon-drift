@@ -1801,12 +1801,23 @@ export const ZEN_SLIDE = {
   /** How far BELOW the deck the path ends (≈ down to the ground at the vista base; the #118 soft
    *  landing absorbs the residual gap to the real terrain). */
   descentDrop: 24,
-  /** Lateral twist amplitude (the big sideways swing of the slide centreline). */
-  bendAmplitude: 74,
-  /** TWISTY: half-bend count along the slide (the tunnel uses 1 — this snakes several times). */
-  bendWaves: 3,
+  /** Lateral twist amplitude (the sideways swing of the slide centreline). COMFORT-tuned 74→40:
+   *  gentler bends (the big twist made Craig dizzy; the soar — climb/descent — felt good and is
+   *  unchanged). A graceful sweep, not a violent swing. */
+  bendAmplitude: 40,
+  /** Half-bend count along the slide. COMFORT-tuned 3→1.5: FEWER turns (a calm sweeping descent
+   *  with a couple of graceful bends, not a busy twisty slide). Some sweep stays — not a dead drop. */
+  bendWaves: 1.5,
   /** Windowed-sine ease (zero value + tangent at the ends) — same family as the tunnel bend. */
   bendEaseStart: 0.5,
+  // --- CAMERA (comfort): the slide uses its OWN, calmer camera than normal driving (the global
+  //     ZEN.camPosLerp/leanMax stay as-is for cruising). Softer look-at/heading ease so the rig
+  //     GLIDES through the bends instead of whipping, and far less bank so the horizon barely tilts
+  //     (a prime nausea source). Damped but NOT floaty — still connected to the car. ---
+  /** Heading/look-at ease while sliding (vs ZEN.camPosLerp 4.5) — lower = more damped, glides. */
+  camPosLerp: 2.8,
+  /** Chassis bank while sliding (vs ZEN.leanMax 0.18) — much less horizon tilt → less dizziness. */
+  leanMax: 0.06,
   // --- RIDE DYNAMICS ---
   /** Nominal path length: the param u advances by (speed / pathLength)·dt → sets the ride duration. */
   pathLength: 940,

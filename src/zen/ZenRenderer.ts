@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SLIDE, type CarDef } from '../utils/constants';
 import { clamp, smoothFollow } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
@@ -190,6 +190,12 @@ export class ZenRenderer {
    * `steer` drives a gentle visual bank; `dt` paces the camera smoothing.
    */
   render(v: ZenVehicle, steer: number, dt: number): void {
+    // COMFORT: while riding the Sky-Slide (the tube is up → slideMesh set), use the slide's own
+    // CALMER camera — a softer heading/look-at ease that glides through the bends instead of
+    // whipping, and far less bank so the horizon barely tilts. Normal driving keeps the global feel.
+    const onSlide = this.slideMesh !== null;
+    const camLerp = onSlide ? ZEN_SLIDE.camPosLerp : ZEN.camPosLerp;
+    const leanMax = onSlide ? ZEN_SLIDE.leanMax : ZEN.leanMax;
     // Car: ride the terrain surface (or fly its arc), yaw to face the heading, pitch into
     // the slope (grounded) or along the flight arc (airborne), and bank into the turn
     // (chassis only, so the wheels-on-ground read stays). rotation.y = -heading aligns the
@@ -204,7 +210,7 @@ export class ZenRenderer {
       const slope = surfaceSlopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
       this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
     }
-    this.car.chassis.rotation.z = -clamp(steer, -1, 1) * ZEN.leanMax;
+    this.car.chassis.rotation.z = -clamp(steer, -1, 1) * leanMax;
 
     // Terrain + scenery: stream the heightmap surface + props around the car (both rebuild
     // only on chunk crossings — cheap the rest of the time).
@@ -241,7 +247,7 @@ export class ZenRenderer {
     //       resting distance steady at any cruise speed.
     //   (2) SPEED FEEL: a small, eased distance pull-back + subtle FOV widen from speed
     //       (the explicit zenFraming curve), so cruising still reads as motion.
-    const f = smoothFollow(ZEN.camPosLerp, dt);
+    const f = smoothFollow(camLerp, dt);
     this.boomHeading += (v.heading - this.boomHeading) * f;
 
     const targetFactor = clamp(v.speed / ZEN.maxSpeed, 0, 1);

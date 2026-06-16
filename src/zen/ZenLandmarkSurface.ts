@@ -17,7 +17,7 @@
 import { ZEN, ZEN_LANDMARK, ZEN_SLIDE } from '../utils/constants';
 import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
-import { landmarksInRadius, tunnelBendShape, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
+import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
 
 /** Reused scratch for surfaceUnder results (no per-frame allocation). */
 const _su = { y: 0, enclosed: false };
@@ -39,9 +39,12 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
     _su.enclosed = false;
     return _su;
   }
-  // TUNNEL: descend below the terrain along the through-axis, blending to terrain at the mouths
-  // (along) and the walls (lateral). The centreline CURVES sideways by bendOff (matches the rendered
-  // tube/floor — same tunnelBendShape), so the lateral distance is measured from the curved centre.
+  // TUNNEL: the car rides the SAME floor it sees — ONE definition shared with the rendered floor
+  // mesh (ZenLandmarks): a CENTRE-anchored depth profile along the through-axis (tunnelDepthFactor),
+  // FLAT across the channel. The centreline CURVES sideways by bendOff (same tunnelBendShape as the
+  // mesh) — used ONLY to test whether the car is within the curved tube (lat < hw), NOT to reshape
+  // the floor Y. (Diagnosis #148: the old per-car heightAt(CAR) anchor + a lateral taper the mesh
+  // lacked disagreed with the visible road → the car bobbed/popped THROUGHOUT. Now they're identical.)
   const tx = Math.sin(lm.rotationY);
   const tz = Math.cos(lm.rotationY);
   const dx = x - lm.x;
@@ -52,15 +55,13 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
   const halfL = (ZEN_LANDMARK.tunnelLength * lm.scale) * 0.5;
   const hw = ZEN_LANDMARK.tunnelHalfWidth * lm.scale;
   const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale * tunnelBendShape(along / halfL);
-  const lat = Math.abs(perp - bendOff); // lateral distance from the CURVED centreline
+  const lat = Math.abs(perp - bendOff); // lateral distance from the CURVED centreline (footprint test only)
   if (s >= halfL || lat >= hw) return null;
-  // Descent profile: full depth through the inner half, easing to 0 at the mouths (entry ramps).
-  const depthF = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, s);
-  // Lateral: flat across the channel, easing up to the terrain near the walls.
-  const latF = 1 - smoothstep(hw * ZEN_LANDMARK.tunnelLateralEaseStart, hw, lat);
-  const dip = ZEN_LANDMARK.tunnelDepth * lm.scale * depthF * latF;
-  _su.y = heightAt(seed, x, z) - dip;
-  _su.enclosed = dip >= ZEN_LANDMARK.tunnelEnclosedDepth;
+  // The floor: terrain at the tunnel CENTRE minus the shared depth profile — EXACTLY the rendered
+  // mesh's world Y (heightAt(centre) + scale·localFloorY), at any lateral offset within the tube.
+  const depth = ZEN_LANDMARK.tunnelDepth * lm.scale * tunnelDepthFactor(along / halfL);
+  _su.y = heightAt(seed, lm.x, lm.z) - depth;
+  _su.enclosed = depth >= ZEN_LANDMARK.tunnelEnclosedDepth;
   return _su;
 }
 

@@ -43,6 +43,9 @@ export interface ZenDebugSnapshot {
   hasSaved: boolean;
   onSlide: boolean;
   slideU: number;
+  /** True while the car is on a VISTA/TUNNEL drivable-surface override (vs plain terrain) — the
+   *  tunnel-smoothness canary asserts this doesn't toggle mid-tunnel (diagnosis #148). */
+  onSurface: boolean;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -109,6 +112,9 @@ export class ZenSession {
   //     + normal steering are suspended while onSlide (see tick). ---
   /** True while riding the slide (the tick early-returns into stepSlide). */
   private onSlide = false;
+  /** Last frame's drivable-surface flag (on a vista mesa / tunnel floor vs plain terrain) — mirrored
+   *  into __neonDebug so the validation sweep can assert it doesn't toggle mid-tunnel. */
+  private lastOnSurface = false;
   /** The active slide's pure path (null off the slide). */
   private slide: ZenSlidePath | null = null;
   /** Progress along the path ∈ [0, 1]; advanced by speed each frame. */
@@ -238,6 +244,7 @@ export class ZenSession {
     // override blends to terrain at the rim so the entry/exit eases (no snap).
     // Combined query: one coveringSurface scan for both Y + on-surface (not two).
     const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
+    this.lastOnSurface = surface.onSurface; // for __neonDebug (the tunnel-smoothness canary)
     updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
 
     // SKY-SLIDE TRIGGER: driving onto a vista DECK auto-catapults the car up the slide (every vista
@@ -312,6 +319,7 @@ export class ZenSession {
       hasSaved: this.saved !== null,
       onSlide: this.onSlide,
       slideU: this.slideU,
+      onSurface: this.lastOnSurface,
       biome: { from: this._dbgBiome.from, to: this._dbgBiome.to, blend: this._dbgBiome.blend },
       counts: info.counts,
     };

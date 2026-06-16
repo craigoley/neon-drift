@@ -93,6 +93,18 @@ export function tunnelBendShape(t: number): number {
 }
 
 /**
+ * The tunnel floor's DEPTH FACTOR at a normalized axial position `tNorm = along / halfLength` ∈
+ * [−1, 1]: 1 deep in the inner half, easing to 0 at the mouths (the descent/ascent ramps). The ONE
+ * source of truth for the floor's along-axis shape — BOTH the rendered floor mesh (ZenLandmarks) and
+ * the followed drivable surface (ZenLandmarkSurface) call this, so the car sits exactly on the road
+ * it sees (diagnosis #148: they used to be two separate definitions → the "bump"). Multiply by
+ * `tunnelDepth` (× the landmark scale, in world space) for the actual drop below the floor anchor.
+ */
+export function tunnelDepthFactor(tNorm: number): number {
+  return 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(tNorm));
+}
+
+/**
  * The landmark in a given cell, or null if the cell carries none (the common case — landmarks
  * are RARE). Deterministic: depends only on (seed, cellX, cellZ). Gated to gentle terrain so the
  * structure is reachable (you can drive up to / through it).

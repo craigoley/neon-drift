@@ -29,6 +29,7 @@ import {
   crossedOpening,
   openingRadius,
   tunnelBendShape,
+  tunnelDepthFactor,
   type Landmark,
   type LandmarkType,
   LANDMARK_RING,
@@ -429,11 +430,11 @@ export class ZenLandmarks {
     return ZenLandmarks.lineGeo(p);
   }
 
-  /** Local floor depth at axial position z (mirrors ZenLandmarkSurface): full depth through the inner
-   *  half, easing to 0 at the mouths (the descent/ascent ramps). Shared by the tube + the floor road. */
+  /** Local floor Y at axial position z: the SHARED tunnelDepthFactor (ONE definition with the followed
+   *  drivable surface — ZenLandmarkSurface — so the car sits exactly on this road). Full depth through
+   *  the inner half, easing to 0 at the mouths. Shared by the tube ribs + the floor road. */
   private static tunnelFloorY(z: number, halfL: number): number {
-    const f = 1 - smoothstep(halfL * ZEN_LANDMARK.tunnelDepthEaseStart, halfL, Math.abs(z));
-    return -ZEN_LANDMARK.tunnelDepth * f;
+    return -ZEN_LANDMARK.tunnelDepth * tunnelDepthFactor(z / halfL);
   }
 
   /** TUNNEL — a neon TUBE you descend INTO (drive along local Z): arched cross-section RIBS at

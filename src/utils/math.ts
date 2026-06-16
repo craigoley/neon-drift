@@ -22,6 +22,15 @@ export function inverseLerp(a: number, b: number, value: number): number {
   return (value - a) / (b - a);
 }
 
+/** Wrap an angle (radians) into [−π, π] — the shortest signed representation. Use it to ease an
+ *  angle the SHORT way around the ±π boundary: `a += wrapToPi(target − a) * f`. A naive lerp toward a
+ *  WRAPPED target (e.g. an atan2 heading) unwinds a full turn when the target crosses ±π; wrapping
+ *  the delta makes that crossing a tiny step instead. No-op when the delta is already small. */
+export function wrapToPi(angle: number): number {
+  const t = (angle + Math.PI) % (2 * Math.PI);
+  return (t < 0 ? t + 2 * Math.PI : t) - Math.PI;
+}
+
 /**
  * Frame-rate-independent exponential decay toward 0. Returns the fraction of a
  * quantity that REMAINS after `dt` seconds, given that `retainedPerSecond` of

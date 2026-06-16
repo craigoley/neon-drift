@@ -1507,6 +1507,22 @@ export const ZEN_MINIMAP = {
   landmarkLineWidth: 1.5,
   /** Radius (CSS px) of the landmark centre dot. */
   landmarkDotPx: 1,
+  // --- PER-TYPE COMPASS: the radar always shows the bearing to the NEAREST of EACH landmark type
+  //     (ring/arch/gateway/vista/tunnel), as a small type-coloured tick at the scope edge — so you
+  //     can pick a type and drive its bearing. Colours MATCH the in-world neon structures, so the
+  //     radar self-teaches (no separate legend): orange ring, cyan arch, purple gateway, green
+  //     vista, gold tunnel. Tasteful, not 5 loud quest arrows. ---
+  /** Bearing-tick colour per LandmarkType [ring, arch, gateway, vista, tunnel]. */
+  compassColors: [0xff6600, 0x00ffff, 0xcc44ff, 0x66ff99, 0xffcc33],
+  /** Length (CSS px) of the bearing tick drawn inward from the ring, and its line width. */
+  compassTickPx: 6,
+  compassTickWidth: 2.5,
+  /** How far (CSS px) the tick's outer end sits inside the ring (so it doesn't overdraw the ring). */
+  compassEdgeInsetPx: 1.5,
+  /** Outward search for the nearest-of-each-type query: start radius + cap (world units). Expands
+   *  ×2 until all five types are found or the cap is hit (a far/rare type may need a wide scan). */
+  compassSearchStart: 4500,
+  compassSearchMax: 48000,
 } as const;
 
 /**
@@ -1517,13 +1533,16 @@ export const ZEN_MINIMAP = {
  * to extend — more types are easy follow-ups). Craig dials "how rare" + sizes/effects here.
  */
 export const ZEN_LANDMARK = {
-  /** Side length (world units) of a landmark-placement cell — BIG, so landmarks are sparse.
-   *  At most one landmark per cell. */
-  cellSize: 2600,
-  /** Probability (0..1) a cell carries a landmark, before the terrain gate. Tuned with cellSize
-   *  so a landmark sits roughly every ~3.5–4k units of roaming — RARER than ramps (a beacon you
-   *  journey to, not a constant). */
-  chance: 0.42,
+  /** Side length (world units) of a landmark-placement cell — BIG, so landmarks stay sparse.
+   *  At most one landmark per cell. LOWERED 2600→2250 (now every type does something distinct,
+   *  Craig wants to find the cool stuff more often) — denser cells, but still a beacon you journey
+   *  to, not litter. The per-type radar compass (ZenMinimap) makes even the rare types navigable. */
+  cellSize: 2250,
+  /** Probability (0..1) a cell carries a landmark, before the terrain gate. RAISED 0.42→0.48 with
+   *  the smaller cell — together ≈1.5× the encounter rate (mean spacing ~3.5–4k → ~2.6–3k), so you
+   *  reliably find something cool on a drive without it feeling everywhere. The clear tunable knob:
+   *  raise this (and/or lower cellSize) to find them more often, lower it to keep them special. */
+  chance: 0.48,
   /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint (the
    *  curved tunnel reaches ~810u along + ~53u laterally at max scale ≈ 812u), so a structure lives
    *  wholly inside its cell (the scan checks one cell). RAISED with the longer, curved tunnel. */

@@ -13,7 +13,7 @@ import { ZEN, ZEN_MINIMAP, ZEN_BIOMES } from '../utils/constants';
 import { mixHex } from '../utils/math';
 import { biomeAt, createZenBiomeState, type ZenBiomeState } from './ZenBiome';
 import { rampCenterForCell } from './ZenHeight';
-import { landmarksInRadius, type LandmarkType } from './ZenLandmarkModel';
+import { landmarksInRadius, LANDMARK_TYPE_COUNT, type LandmarkType } from './ZenLandmarkModel';
 
 /** A point of interest the radar marks. EXTENSIBLE: ramps + landmarks so far; discoveries
  *  become additional `kind`s drawn by the same marker pipeline. */
@@ -87,6 +87,47 @@ export function gatherMarkers(seed: number, carX: number, carZ: number, radius: 
   // TYPE so the radar can draw tunnels (etc.) distinctly, not all as one generic dot.
   for (const lm of landmarksInRadius(seed, carX, carZ, radius)) {
     out.push({ x: lm.x, z: lm.z, kind: 'landmark', landmarkType: lm.type });
+  }
+  return out;
+}
+
+/** The nearest landmark of a given type to the car (the per-type compass entry). */
+export interface TypedNearest {
+  type: LandmarkType;
+  x: number;
+  z: number;
+  /** Straight-line world distance from the car. */
+  dist: number;
+}
+
+/**
+ * The NEAREST landmark of EACH type to (carX, carZ) — the per-type radar compass. Deterministic
+ * (the same placement field the world uses), found by an outward expanding-radius scan: gather all
+ * landmarks in a disk and keep the closest per type, doubling the radius until all five types are
+ * found or the cap is hit (a rare/far type — e.g. a vista — may need a wide scan). "Actually
+ * nearest" is exact: a full disk scan returns ALL landmarks in range, so the per-type minimum is
+ * the true nearest within it (and anything beyond is farther). Returns only the types found.
+ *
+ * Called on the minimap's THROTTLED resample (not per frame), so the re-scan cost is amortised.
+ */
+export function nearestOfEachType(seed: number, carX: number, carZ: number): TypedNearest[] {
+  const best: ({ x: number; z: number; d2: number } | null)[] = new Array(LANDMARK_TYPE_COUNT).fill(null);
+  let radius = ZEN_MINIMAP.compassSearchStart;
+  for (;;) {
+    for (const lm of landmarksInRadius(seed, carX, carZ, radius)) {
+      const dx = lm.x - carX;
+      const dz = lm.z - carZ;
+      const d2 = dx * dx + dz * dz;
+      const cur = best[lm.type];
+      if (!cur || d2 < cur.d2) best[lm.type] = { x: lm.x, z: lm.z, d2 };
+    }
+    if (best.every((b) => b !== null) || radius >= ZEN_MINIMAP.compassSearchMax) break;
+    radius *= 2;
+  }
+  const out: TypedNearest[] = [];
+  for (let t = 0; t < best.length; t++) {
+    const b = best[t];
+    if (b) out.push({ type: t as LandmarkType, x: b.x, z: b.z, dist: Math.sqrt(b.d2) });
   }
   return out;
 }

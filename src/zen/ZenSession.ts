@@ -10,12 +10,14 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import { ZEN, ZEN_SECRET, ZEN_LANDMARK, ZEN_SLIDE, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SECRET, ZEN_LANDMARK, ZEN_SLIDE, ZEN_ARCH, ZEN_RING, type CarDef } from '../utils/constants';
 import { clamp } from '../utils/math';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
 import { queryDrivableSurface, surfaceSlopeAlong, vistaDeckUnder } from './ZenLandmarkSurface';
 import { ZenSlidePath } from './ZenSlidePath';
+import { boostIntensity, boostedMaxSpeed } from './ZenArchBoost';
+import { randomWarpDestination } from './ZenRingWarp';
 import {
   snapshot,
   restore,
@@ -24,7 +26,7 @@ import {
   crossedAnyGateway,
   type VehicleSnapshot,
 } from './ZenSecret';
-import type { Landmark } from './ZenLandmarkModel';
+import { crossedAnyOfType, LANDMARK_ARCH, LANDMARK_RING, type Landmark } from './ZenLandmarkModel';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
@@ -94,6 +96,13 @@ export class ZenSession {
   private guardX = 0;
   private guardZ = 0;
   private guardActive = false;
+  /** Which warp this is: 'secret' (gateway → save/restore the secret region) or 'random' (a RING
+   *  random main-world hop, no save). Set on the trigger; read at the teleport midpoint. */
+  private warpKind: 'secret' | 'random' = 'secret';
+  /** The RING random-warp destination, computed on the trigger, applied at the teleport midpoint. */
+  private pendingDest: { x: number; z: number; heading: number } | null = null;
+  /** The active bounce-guard radius — the secret return-guard, or the RING guard for a random hop. */
+  private guardDist: number = ZEN_SECRET.returnGuardDistance;
 
   // --- VISTA SKY-SLIDE: drive onto a vista deck → catapult up an absolute-Y path that twists +
   //     descends → land back near the vista. A GUIDED ride (the path owns position) — crest physics
@@ -111,6 +120,10 @@ export class ZenSession {
   private slideGuardX = 0;
   private slideGuardZ = 0;
   private slideGuardActive = false;
+
+  /** ARCH speed-boost: seconds of boost remaining (0 = cruise). Counts down each frame; crossing an
+   *  arch refreshes it. The eased speed cap + the streak visual both derive from it (ZenArchBoost). */
+  private boostT = 0;
 
   /** Throttle held state (keyboard + touch). throttle = forward − back ∈ {-1,0,1}. */
   private fwd = false;
@@ -183,6 +196,12 @@ export class ZenSession {
   /** Advance one frame: drive the movement model with the shared `steer` + the Zen
    *  throttle, then render. Called by the composition root in place of the forward sim. */
   tick(steer: number, dt: number): void {
+    // ARCH boost decays every frame; drive the streak visual from its eased intensity in EVERY path
+    // (it should fade out cleanly even through a warp/slide). The boosted speed cap is applied in the
+    // normal-driving branch below (the only branch updateZen runs in).
+    this.boostT = Math.max(0, this.boostT - dt);
+    this.renderer.setBoost(boostIntensity(this.boostT));
+
     if (this.warpPhase !== 'none') {
       // WARPING: the car is frozen; just run the fade machine (the teleport fires at the opaque
       // midpoint). Render with no steer so the camera doesn't bank under the fade.
@@ -204,7 +223,8 @@ export class ZenSession {
     // terrain). Computed every frame so the LANDING catch-up (updateVertical) can ride up a rising
     // far-side at its own rate; the gentle SPEED nudge stays GROUNDED-only (no terrain grip in air).
     const slope = surfaceSlopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
-    updateZen(this.v, steer, throttle, dt, this.v.airborne ? 0 : slope);
+    // The speed cap is RAISED while an ARCH boost is active (eased back to cruise as it decays).
+    updateZen(this.v, steer, throttle, dt, this.v.airborne ? 0 : slope, boostedMaxSpeed(this.boostT));
     // Props are SOLID — but only while GROUNDED: airborne, the car flies OVER them. Push
     // the car back out of any prop circle it entered (slides around — no hard stop).
     if (!this.v.airborne) {
@@ -239,15 +259,33 @@ export class ZenSession {
     if (this.guardActive) {
       const gdx = this.v.x - this.guardX;
       const gdz = this.v.z - this.guardZ;
-      if (gdx * gdx + gdz * gdz >= ZEN_SECRET.returnGuardDistance * ZEN_SECRET.returnGuardDistance) {
+      if (gdx * gdx + gdz * gdz >= this.guardDist * this.guardDist) {
         this.guardActive = false;
       }
     }
-    // PORTAL TRIGGER: crossing a gateway's opening starts the warp (into / out of the secret area).
+    // PORTAL TRIGGER: crossing a GATEWAY's opening starts the secret-area warp (into / out of it).
     if (!this.guardActive && crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+      this.warpKind = 'secret';
       this.warpPhase = 'out';
       this.warpT = 0;
       this.v.speed = 0; // freeze the coast during the fade
+    }
+    // ARCH = SPEED BOOST: crossing an arch's opening grants a free, refreshable surge (no guard — a
+    // boost is harmless to re-trigger; crossedOpening already fires once per pass). An instant kick +
+    // a timer that raises the cap then eases it back to cruise (ZenArchBoost).
+    if (crossedAnyOfType(ZEN.worldSeed, LANDMARK_ARCH, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+      this.boostT = ZEN_ARCH.boostSeconds;
+      this.v.speed = Math.max(this.v.speed, ZEN_ARCH.boostMaxSpeed * ZEN_ARCH.boostKickFrac);
+    }
+    // RING = RANDOM WARP: crossing a ring blinks you somewhere new. Main-world only (not inSecret),
+    // guarded against an instant re-warp, and skipped if a gateway warp already fired this frame.
+    if (
+      this.warpPhase === 'none' &&
+      !this.guardActive &&
+      !this.inSecret &&
+      crossedAnyOfType(ZEN.worldSeed, LANDMARK_RING, this.prevX, this.prevZ, this.v.x, this.v.z)
+    ) {
+      this.startRandomWarp();
     }
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
@@ -347,6 +385,16 @@ export class ZenSession {
     this.slideGuardActive = true;
   }
 
+  /** RING random warp: pick a random destination + start the fade (reusing the secret machinery,
+   *  minus save/restore). The teleport fires at the opaque midpoint (doTeleport's 'random' branch). */
+  private startRandomWarp(): void {
+    this.pendingDest = randomWarpDestination(this.v.x, this.v.z);
+    this.warpKind = 'random';
+    this.warpPhase = 'out';
+    this.warpT = 0;
+    this.v.speed = 0; // freeze the coast during the fade
+  }
+
   /** Advance the warp fade; at the opaque midpoint, do the teleport (hidden by the fade). */
   private advanceWarp(dt: number): void {
     this.warpT += dt;
@@ -370,7 +418,20 @@ export class ZenSession {
    *  region in front of its return portal; RETURN restores the exact saved spot. Snaps the camera
    *  and resets the crossing tracker so the teleport jump doesn't false-trigger another warp. */
   private doTeleport(): void {
-    if (!this.inSecret) {
+    if (this.warpKind === 'random' && this.pendingDest) {
+      // RING random hop: NOT inSecret, NO save/restore — just blink to the random spot on valid
+      // terrain, facing the travel direction (#130 safe-arrival), and use the ring's bounce guard.
+      const d = this.pendingDest;
+      this.v.x = d.x;
+      this.v.z = d.z;
+      this.v.heading = d.heading;
+      this.v.speed = 0;
+      this.v.vy = 0;
+      this.v.airborne = false;
+      this.v.y = heightAt(ZEN.worldSeed, d.x, d.z) + ZEN.rideHeight;
+      this.pendingDest = null;
+      this.guardDist = ZEN_RING.guardDistance;
+    } else if (!this.inSecret) {
       this.saved = snapshot(this.v);
       const pose = arrivalPose(this.returnPortal);
       this.v.x = pose.x;
@@ -382,10 +443,12 @@ export class ZenSession {
       this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
       this.inSecret = true;
       this.renderer.setSecret(true);
+      this.guardDist = ZEN_SECRET.returnGuardDistance;
     } else {
       if (this.saved) restore(this.v, this.saved);
       this.inSecret = false;
       this.renderer.setSecret(false);
+      this.guardDist = ZEN_SECRET.returnGuardDistance;
     }
     this.renderer.snapCamera(this.v);
     this.prevX = this.v.x;

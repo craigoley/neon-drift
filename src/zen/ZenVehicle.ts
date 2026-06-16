@@ -50,7 +50,7 @@ export function createZenVehicle(): ZenVehicle {
  * rest), coasting glides to rest via friction, and speed is clamped to a modest cap.
  * Heading 0 + speed → moves -z (forward); turning right then driving curves toward +x.
  */
-export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: number, slope = 0): ZenVehicle {
+export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: number, slope = 0, maxSpeed: number = ZEN.maxSpeed): ZenVehicle {
   // Turn authority ramps from 0 (stopped) to 1 (>= turnFullSpeed) so the car turns by
   // driving, not by spinning in place.
   const authority = clamp(v.speed / ZEN.turnFullSpeed, 0, 1);
@@ -72,9 +72,10 @@ export function updateZen(v: ZenVehicle, steer: number, throttle: number, dt: nu
     v.speed = Math.max(v.speed, Math.min(preSlope, ZEN.slopeUphillFloor));
   }
 
-  // Coast-friction bleeds speed toward rest, then clamp to the calm cap.
+  // Coast-friction bleeds speed toward rest, then clamp to the calm cap (raised while an ARCH
+  // speed-boost is active — see ZenArchBoost; defaults to the cruise cap everywhere else).
   v.speed *= decay(ZEN.friction, dt);
-  v.speed = clamp(v.speed, 0, ZEN.maxSpeed);
+  v.speed = clamp(v.speed, 0, maxSpeed);
 
   // Integrate along the heading (-z = forward; right turn curves toward +x).
   v.x += Math.sin(v.heading) * v.speed * dt;

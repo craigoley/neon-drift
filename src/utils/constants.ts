@@ -1705,6 +1705,59 @@ export const ZEN_LANDMARK = {
 } as const;
 
 /**
+ * Zen ARCH = SPEED BOOST. Driving THROUGH an arch's opening grants a long-lasting speed surge that
+ * eases back to cruise — a pure calm reward (no charge, no cost). The boost raises the speed cap
+ * (and gives an instant kick) for `boostSeconds`, then the eased cap glides back down so the surge
+ * FADES, never snaps away. The existing crossing flash/ripple stays as the "you crossed" feedback.
+ */
+export const ZEN_ARCH = {
+  /** Boosted top speed (cruise is 96) — a big, lovely surge. */
+  boostMaxSpeed: 170,
+  /** How long the boost lasts before it has fully eased back to cruise. */
+  boostSeconds: 6.5,
+  /** Instant kick on crossing as a fraction of the boosted top (you feel it immediately). */
+  boostKickFrac: 0.96,
+  // --- SPEED STREAKS (the "I'm boosting" visual): thin neon lines streaming past, bloom-lit, that
+  //     fade in with the boost and ease out as it decays. Calm-exhilarating, not violent. ---
+  streakCount: 28,
+  /** Tube radius the streaks live in around the car's forward axis (world units). */
+  streakRadius: 26,
+  /** How far ahead/behind the car the streak field spans, and each streak's length. */
+  streakSpan: 150,
+  streakLength: 22,
+  /** Flow speed multiplier (streaks stream backward faster than the car for the sense of speed). */
+  streakFlow: 1.6,
+  streakColor: 0x00ffff,
+  /** Peak opacity at full boost (eased by intensity → 0 at rest, so they vanish when not boosting). */
+  streakOpacity: 0.5,
+  /** Angular offset between groups of 3 streaks (radians) — decorrelates the tube pattern. */
+  streakAngOffset: 0.7,
+  /** Inner radius fraction (of streakRadius) — the tightest streaks sit at this fraction. */
+  streakRadiusInner: 0.55,
+  /** Radius variation range added to the inner fraction (inner + range × golden = actual frac). */
+  streakRadiusRange: 0.45,
+  /** Below this boost intensity the streaks are hidden (avoids near-invisible geometry). */
+  streakMinIntensity: 0.02,
+  /** Base flow fraction at zero intensity — flow = streakFlow × (base + (1−base) × intensity). */
+  streakFlowBase: 0.5,
+} as const;
+
+/**
+ * Zen RING = RANDOM WARP. Driving THROUGH a ring blinks you to a RANDOM, unpredictable spot on the
+ * map — a "shuffle / explore" button. REUSES the secret-area teleport+fade machinery (ZenSession),
+ * but with a RANDOM destination, NO save/restore, and NOT inSecret (main-world → main-world, not a
+ * returnable place). The #130 safe-arrival lessons apply: sane heading, land on terrain, and a
+ * bounce guard so you don't instantly re-warp at the destination. Fade timings reuse ZEN_SECRET.
+ */
+export const ZEN_RING = {
+  /** Random hop distance band (world units) — far enough to feel like "somewhere else". */
+  minDistance: 2400,
+  maxDistance: 6400,
+  /** After arriving, ignore crossings until driven this far clear (no warp-bounce at the dest). */
+  guardDistance: 150,
+} as const;
+
+/**
  * Zen VISTA SKY-SLIDE — driving onto a vista deck AUTO-CATAPULTS the car up into an enclosed neon
  * sky-tunnel that twists + descends like a playful slide, depositing you back on the ground near the
  * vista. A GUIDED PARAMETRIC RIDE on an ABSOLUTE-Y path (the surface override is ground-relative and

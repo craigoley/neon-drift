@@ -253,3 +253,14 @@ export function crossedOpening(lm: Landmark, prevX: number, prevZ: number, x: nu
   const r = openingRadius(lm.type) * lm.scale;
   return lat2 <= r * r;
 }
+
+/** Did the car cross the opening (prev→curr) of any nearby landmark OF A GIVEN TYPE? The generic
+ *  drive-through trigger — ARCH (speed boost) + RING (random warp) reuse it, the same way
+ *  ZenSecret.crossedAnyGateway uses crossedOpening for the secret-area portal. Bounded scan. */
+export function crossedAnyOfType(seed: number, type: LandmarkType, prevX: number, prevZ: number, x: number, z: number): boolean {
+  const near = landmarksInRadius(seed, x, z, ZEN_LANDMARK.solidQueryRadius);
+  for (const lm of near) {
+    if (lm.type === type && crossedOpening(lm, prevX, prevZ, x, z)) return true;
+  }
+  return false;
+}

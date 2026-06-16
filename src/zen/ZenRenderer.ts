@@ -19,6 +19,7 @@ import { ZenTerrain } from './ZenTerrain';
 import { ZenBackdrop } from './ZenBackdrop';
 import { ZenShadow } from './ZenShadow';
 import { ZenStarfield } from './ZenStarfield';
+import { ZenSpeedStreaks } from './ZenSpeedStreaks';
 import { ZenBiomeView } from './ZenBiomeView';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { ZenLandmarks } from './ZenLandmarks';
@@ -61,6 +62,9 @@ export class ZenRenderer {
   private lookY: number = ZEN.camLookAtHeight;
   /** The Sky-Slide tube mesh while a slide is active (null otherwise). */
   private slideMesh: THREE.Group | null = null;
+  /** Speed-streak field for the ARCH boost; `boost` ∈ [0,1] eases its opacity (0 = hidden). */
+  private readonly streaks: ZenSpeedStreaks;
+  private boost = 0;
 
   constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
     this.renderer = renderer;
@@ -92,6 +96,9 @@ export class ZenRenderer {
     // (fog/sky/sun/mountains/stars/prop-tint) from the biome under the car each frame.
     this.stars = new ZenStarfield(this.scene, ZEN.worldSeed);
     this.biomeView = new ZenBiomeView(this.scene, this.backdrop, this.stars, this.scenery);
+
+    // ARCH speed-boost streaks (hidden until a boost is active).
+    this.streaks = new ZenSpeedStreaks(this.scene);
 
     this.car = new CarMesh(car);
     // YXZ so the slope PITCH (rotation.x) is applied about the already-yawed lateral
@@ -148,6 +155,11 @@ export class ZenRenderer {
   /** Equip / clear a GLOW cosmetic override on the Zen car (purely visual). */
   setGlow(hex: number | null): void {
     this.car.setGlowOverride(hex);
+  }
+
+  /** Set the ARCH boost intensity (0..1) — drives the speed-streak visual's opacity + flow. */
+  setBoost(intensity: number): void {
+    this.boost = intensity;
   }
 
   /** Toggle the SECRET-area look — forces the secret palette (vs the coord-derived biome) while
@@ -217,6 +229,8 @@ export class ZenRenderer {
     // the shadow stays on the ground → a visible gap (the readable "in the air" cue).
     const groundY = drivableSurfaceY(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
     this.shadow.update(v.x, groundY, v.z, v.y - groundY);
+    // ARCH boost speed-streaks: stream past the car, opacity/flow eased by the boost intensity.
+    this.streaks.update(v.x, v.y, v.z, v.heading, this.boost, dt);
 
     // Chase camera — MOSTLY STEADY with only a whisper of speed reactivity (calm, not
     // adrenaline). Two decoupled parts:
@@ -294,6 +308,7 @@ export class ZenRenderer {
     this.scenery.dispose();
     this.landmarks.dispose();
     this.stars.dispose();
+    this.streaks.dispose();
     this.post.dispose();
   }
 }

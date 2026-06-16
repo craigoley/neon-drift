@@ -19,7 +19,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_BIOMES, ZEN_BIOME, ZEN_SECRET_BIOME, cssHex, type BiomeDef } from '../utils/constants';
+import { ZEN_BIOMES, ZEN_BIOME, ZEN_SECRET_BIOME, ZEN_TUNNEL_SECRET_BIOME, cssHex, type BiomeDef } from '../utils/constants';
 import { lerp, mixHex } from '../utils/math';
 import type { ZenBiomeState } from './ZenBiome';
 import type { ZenBackdrop } from './ZenBackdrop';
@@ -29,6 +29,9 @@ import type { ZenScenery } from './ZenScenery';
 /** Sentinel `lastFrom` marking that the SECRET palette is currently applied — distinct from any
  *  real biome index (0..n) and the initial -1, so the next normal apply() detects the change. */
 const SECRET_APPLIED = -2;
+/** Sentinel for the TUNNEL-PAYOFF palette (distinct from SECRET_APPLIED so switching between the two
+ *  forced palettes — or back to a real biome — always repaints). */
+const TUNNEL_SECRET_APPLIED = -3;
 
 export class ZenBiomeView {
   private readonly scene: THREE.Scene;
@@ -40,6 +43,8 @@ export class ZenBiomeView {
   private readonly gradHex: number[][];
   /** Secret-area sun gradient pre-parsed to ints (the forced secret palette). */
   private readonly secretGrad: number[];
+  /** Tunnel-payoff sun gradient pre-parsed to ints (the forced deep-amber palette). */
+  private readonly tunnelGrad: number[];
 
   // Reused scratch — no per-apply allocation.
   private readonly stops: { at: number; color: string }[];
@@ -58,6 +63,7 @@ export class ZenBiomeView {
     this.scenery = scenery;
     this.gradHex = ZEN_BIOMES.map((b) => b.gradient.map((s) => parseInt(s.color.slice(1), 16)));
     this.secretGrad = ZEN_SECRET_BIOME.gradient.map((s) => parseInt(s.color.slice(1), 16));
+    this.tunnelGrad = ZEN_TUNNEL_SECRET_BIOME.gradient.map((s) => parseInt(s.color.slice(1), 16));
     // Scratch stops mirror biome 0's `at` positions (shared across all biomes).
     this.stops = ZEN_BIOMES[0].gradient.map((s) => ({ at: s.at, color: s.color }));
   }
@@ -82,6 +88,16 @@ export class ZenBiomeView {
     this.paint(ZEN_SECRET_BIOME, ZEN_SECRET_BIOME, 0, this.secretGrad, this.secretGrad);
     this.lastFrom = SECRET_APPLIED;
     this.lastTo = SECRET_APPLIED;
+    this.lastBlend = 0;
+  }
+
+  /** Force the TUNNEL-PAYOFF palette (the deep-amber void) while inside the tunnel bottom space.
+   *  Throttled like applySecret: repaints once on entering; the next apply()/applySecret() resumes. */
+  applyTunnelSecret(): void {
+    if (this.lastFrom === TUNNEL_SECRET_APPLIED) return;
+    this.paint(ZEN_TUNNEL_SECRET_BIOME, ZEN_TUNNEL_SECRET_BIOME, 0, this.tunnelGrad, this.tunnelGrad);
+    this.lastFrom = TUNNEL_SECRET_APPLIED;
+    this.lastTo = TUNNEL_SECRET_APPLIED;
     this.lastBlend = 0;
   }
 

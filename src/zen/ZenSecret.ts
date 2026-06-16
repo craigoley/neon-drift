@@ -49,10 +49,14 @@ export function restore(v: ZenVehicle, s: VehicleSnapshot): void {
  * Deterministic (a Chebyshev-ring scan outward from the base cell, first GATEWAY wins), so a secret
  * area is a real PLACE you return to. (PR1: one fixed region; PR3 derives per-portal regions.)
  */
-export function findReturnPortal(seed: number): Landmark {
+export function findReturnPortal(
+  seed: number,
+  regionX: number = ZEN_SECRET.regionX,
+  regionZ: number = ZEN_SECRET.regionZ,
+): Landmark {
   const cs = ZEN_LANDMARK.cellSize;
-  const bcx = Math.floor(ZEN_SECRET.regionX / cs);
-  const bcz = Math.floor(ZEN_SECRET.regionZ / cs);
+  const bcx = Math.floor(regionX / cs);
+  const bcz = Math.floor(regionZ / cs);
   for (let r = 0; r < 48; r++) {
     for (let dz = -r; dz <= r; dz++) {
       for (let dx = -r; dx <= r; dx++) {

@@ -157,13 +157,13 @@ export class ZenRenderer {
     this.car.setGlowOverride(hex);
   }
 
-  /** Toggle the SECRET-area look — forces the secret palette (vs the coord-derived biome) while
-   *  the car is inside a secret area. */
   /** Set the ARCH boost intensity (0..1) — drives the speed-streak visual's opacity + flow. */
   setBoost(intensity: number): void {
     this.boost = intensity;
   }
 
+  /** Toggle the SECRET-area look — forces the secret palette (vs the coord-derived biome) while
+   *  the car is inside a secret area. */
   setSecret(active: boolean): void {
     this.secretActive = active;
     this.terrain.setSecret(active); // force the GRID floor violet too (not just the backdrop)

@@ -24,8 +24,8 @@ export class ZenSpeedStreaks {
     const n = ZEN_ARCH.streakCount;
     this.pos = new Float32Array(n * 2 * 3); // 2 endpoints × xyz per streak
     for (let i = 0; i < n; i++) {
-      this.ang.push((i / n) * Math.PI * 2 + (i % 3) * 0.7); // spread around the tube, decorrelated
-      this.rad.push(ZEN_ARCH.streakRadius * (0.55 + 0.45 * ((i * 0.6180339) % 1))); // varied radii
+      this.ang.push((i / n) * Math.PI * 2 + (i % 3) * ZEN_ARCH.streakAngOffset); // spread around the tube, decorrelated
+      this.rad.push(ZEN_ARCH.streakRadius * (ZEN_ARCH.streakRadiusInner + ZEN_ARCH.streakRadiusRange * ((i * 0.6180339) % 1))); // varied radii
       this.phase.push((i * 0.6180339) % 1); // golden-ratio spread along the span
     }
     this.geo = new THREE.BufferGeometry();
@@ -46,7 +46,7 @@ export class ZenSpeedStreaks {
 
   /** Place + flow the streaks around the car. `intensity` ∈ [0,1] (0 = off → hidden). */
   update(carX: number, carY: number, carZ: number, heading: number, intensity: number, dt: number): void {
-    if (intensity < 0.02) {
+    if (intensity < ZEN_ARCH.streakMinIntensity) {
       this.mesh.visible = false;
       return;
     }
@@ -61,7 +61,7 @@ export class ZenSpeedStreaks {
     const span = ZEN_ARCH.streakSpan;
     const len = ZEN_ARCH.streakLength;
     // Faster flow when more boosted (streaks rush past harder); decrement phase → front-to-back.
-    const flow = ZEN_ARCH.streakFlow * (0.5 + 0.5 * intensity) * dt;
+    const flow = ZEN_ARCH.streakFlow * (ZEN_ARCH.streakFlowBase + (1 - ZEN_ARCH.streakFlowBase) * intensity) * dt;
 
     for (let i = 0; i < this.ang.length; i++) {
       let ph = this.phase[i] - flow;

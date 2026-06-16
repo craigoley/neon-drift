@@ -1730,6 +1730,16 @@ export const ZEN_ARCH = {
   streakColor: 0x00ffff,
   /** Peak opacity at full boost (eased by intensity → 0 at rest, so they vanish when not boosting). */
   streakOpacity: 0.5,
+  /** Angular offset between groups of 3 streaks (radians) — decorrelates the tube pattern. */
+  streakAngOffset: 0.7,
+  /** Inner radius fraction (of streakRadius) — the tightest streaks sit at this fraction. */
+  streakRadiusInner: 0.55,
+  /** Radius variation range added to the inner fraction (inner + range × golden = actual frac). */
+  streakRadiusRange: 0.45,
+  /** Below this boost intensity the streaks are hidden (avoids near-invisible geometry). */
+  streakMinIntensity: 0.02,
+  /** Base flow fraction at zero intensity — flow = streakFlow × (base + (1−base) × intensity). */
+  streakFlowBase: 0.5,
 } as const;
 
 /**

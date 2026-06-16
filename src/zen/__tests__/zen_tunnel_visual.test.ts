@@ -12,6 +12,7 @@ import {
   tunnelFloorRGB,
   tunnelDecorStations,
   tunnelDecorWallOffset,
+  tunnelDecorPlan,
   tunnelLocalFloorY,
   tunnelArchHeightLocal,
 } from '../ZenTunnelVisual';
@@ -97,5 +98,54 @@ describe('Zen tunnel — DECORATIVE crystals sit OFF the drive line (never touch
     const signs = new Set(stations.map((s) => s.sign));
     expect(signs.has(-1)).toBe(true);
     expect(signs.has(1)).toBe(true);
+  });
+});
+
+describe('Zen tunnel — PER-TUNNEL decoration variety (Stage 2b): distinct but deterministic', () => {
+  const seed = 12345;
+  const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+  const SAMPLE_IDS = [1001, 2002, 3003, 4004, 5005, 6006, 7007, 8008];
+
+  it('is DETERMINISTIC — the same (seed, id) always yields the identical plan', () => {
+    for (const id of SAMPLE_IDS) {
+      expect(tunnelDecorPlan(seed, id, halfL)).toEqual(tunnelDecorPlan(seed, id, halfL));
+    }
+  });
+
+  it('VARIES per tunnel — different ids differ in accent, motif, density, or sizing', () => {
+    // Across a handful of ids, the plans are not all identical: collect a signature per id and assert
+    // there is more than one distinct signature (they are not copy-pasted).
+    const sig = (id: number) => {
+      const plan = tunnelDecorPlan(seed, id, halfL);
+      const accent = plan[0]?.rgb.join(',') ?? 'none';
+      const motif = plan[0]?.motif ?? -1;
+      return `${plan.length}|${accent}|${motif}|${plan.map((i) => i.size.toFixed(2)).join('-')}`;
+    };
+    const sigs = new Set(SAMPLE_IDS.map(sig));
+    expect(sigs.size).toBeGreaterThan(1);
+    // And specifically: at least two ids draw a DIFFERENT dominant accent OR a different motif.
+    const accents = new Set(SAMPLE_IDS.map((id) => tunnelDecorPlan(seed, id, halfL)[0]?.rgb.join(',')));
+    const motifs = new Set(SAMPLE_IDS.map((id) => tunnelDecorPlan(seed, id, halfL)[0]?.motif));
+    expect(accents.size + motifs.size).toBeGreaterThan(2);
+  });
+
+  it('every placed crystal stays OFF the drive line (above the road) and INSIDE the arch', () => {
+    for (const id of SAMPLE_IDS) {
+      for (const it of tunnelDecorPlan(seed, id, halfL)) {
+        const floorY = tunnelLocalFloorY(it.z, halfL);
+        const archH = tunnelArchHeightLocal(it.z, halfL);
+        expect(it.centreY - it.size).toBeGreaterThan(floorY); // whole crystal above the road
+        expect(it.centreY + it.size).toBeLessThanOrEqual(floorY + archH + 1e-6); // and below the ceiling
+      }
+    }
+  });
+
+  it('is BOUNDED — the plan never exceeds the candidate-station count (perf: small per tunnel)', () => {
+    const maxStations = tunnelDecorStations(halfL).length;
+    for (const id of SAMPLE_IDS) {
+      const plan = tunnelDecorPlan(seed, id, halfL);
+      expect(plan.length).toBeLessThanOrEqual(maxStations);
+      expect(plan.length).toBeGreaterThan(0); // ...but each tunnel still has something to see
+    }
   });
 });

@@ -1782,16 +1782,27 @@ export const ZEN_TUNNEL_VISUAL = {
   floorCyanHold: 0.55,
   /** The road glows a touch brighter than the tube walls (×) so it reads as the "drive here" line. */
   floorBrightness: 1.2,
-  // --- DECORATIVE crystals (Stage 2a): faceted neon diamonds set INTO the tube walls at intervals,
-  //     that you PASS but never drive into (purely visual — never seen by the drivable surface). They
-  //     sit out by the walls, well above the road, only where the arch is tall enough (the deep, novel
-  //     stretch). Identical on every tunnel (per-tunnel variety is Stage 2b). ---
-  decorColor: 0xff00ff, // magenta accent (palette pop against the cyan→gold tube)
-  decorSpacing: 150, // world units (pre-scale) between decoration stations along the length
-  decorSize: 3, // half-size of each crystal diamond (world units, pre-scale) — fits the ~13u headroom
+  // --- DECORATIVE crystals: faceted neon shapes set INTO the tube walls at intervals, that you PASS
+  //     but never drive into (purely visual — never seen by the drivable surface). They sit out by the
+  //     walls, well above the road, only where the arch is tall enough (the deep, novel stretch). ---
+  decorColor: 0xff00ff, // magenta accent (the default; per-tunnel variety picks from decorAccents below)
+  decorSpacing: 150, // world units (pre-scale) between candidate decoration stations along the length
+  decorSize: 3, // base half-size of each crystal (world units, pre-scale) — fits the ~13u headroom
   decorWallInset: 3, // set the crystal this far inside the wall (off |x−centre| = halfWidth)
-  decorHeightFrac: 0.55, // crystal centre up the wall as a fraction of the local arch height
+  decorHeightFrac: 0.55, // crystal centre up the wall as a fraction of the local arch height (Stage 2a base)
   decorMinArch: 8, // skip stations where the arch is shorter than this (near the mouths) — no room
+  // --- PER-TUNNEL VARIETY (Stage 2b): each tunnel's decoration is seeded by its deterministic id
+  //     (unit(seed, lm.id, slot)) so the SAME tunnel always looks identical, but DIFFERENT tunnels get
+  //     a distinct accent / density / motif / sizing — they no longer feel copy-pasted. Still purely
+  //     decorative (a separate per-tunnel mesh; the drivable surface is untouched). ---
+  decorAccents: [0xff00ff, 0x00ffff, 0xff6600, 0xaa33ff], // per-tunnel dominant accent (magenta/cyan/orange/violet)
+  decorDensityMin: 0.5, // a tunnel keeps at least this fraction of its candidate stations...
+  decorDensityMax: 1.0, // ...and at most this many (sparse-to-full character varies per tunnel)
+  decorSizeJitter: 0.4, // crystal size varies ±this fraction of decorSize, per crystal
+  decorMotifs: 2, // number of crystal SHAPES (a per-tunnel choice: faceted diamond vs tall hex shard)
+  decorRoadClearance: 1.0, // keep every crystal's lowest point at least this far ABOVE the road
+  decorHexZFrac: 0.6, // hex shard z-extent as a fraction of crystal size (narrower than the diamond)
+  decorHexYFrac: 0.35, // hex shard mid-point y-offset as a fraction of size (the waist pinch)
 } as const;
 
 /**

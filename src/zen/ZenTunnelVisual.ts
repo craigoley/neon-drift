@@ -10,6 +10,7 @@
 
 import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL } from '../utils/constants';
 import { clamp, lerp } from '../utils/math';
+import { hashNoise } from '../utils/rng';
 import { smoothstep } from './ZenNoise';
 import { tunnelDepthFactor } from './ZenLandmarkModel';
 
@@ -123,4 +124,60 @@ export function tunnelDecorStations(halfL: number): DecorStation[] {
  *  builder adds bend(z) to this; |offset| being near halfWidth is what keeps it off the central road. */
 export function tunnelDecorWallOffset(): number {
   return ZEN_LANDMARK.tunnelHalfWidth - ZEN_TUNNEL_VISUAL.decorWallInset;
+}
+
+// --- PER-TUNNEL VARIETY (Stage 2b) -------------------------------------------------------------------
+
+/** Decorrelate the decoration seed from placement/props/etc. (a distinct salt). */
+const DECOR_SEED_OFFSET = 0x5eed1;
+
+/** One deterministic 0..1 value for (tunnel id, slot) — the same positional-hash pattern the rest of
+ *  Zen uses, salted for decoration. SAME tunnel id => same values (identical look); different id =>
+ *  different values (distinct look). */
+function decorUnit(seed: number, id: number, slot: number): number {
+  const idx = (Math.imul(id, 0x9e3779b1) + slot) | 0;
+  return (hashNoise((seed + DECOR_SEED_OFFSET) | 0, idx) + 1) * 0.5;
+}
+
+/** One placed decoration: where it sits + how big + its colour + which crystal SHAPE. The builder
+ *  (ZenLandmarks) turns each into wall line-geometry; this is pure so the variety is Node-testable. */
+export interface DecorItem {
+  z: number;
+  /** -1 = left wall, +1 = right wall. */
+  sign: number;
+  centreY: number;
+  size: number;
+  rgb: RGB;
+  /** Crystal shape index (0..decorMotifs-1) — chosen per tunnel. */
+  motif: number;
+}
+
+/**
+ * The PER-TUNNEL decoration plan for a tunnel of local half-length halfL, deterministic in (seed, id):
+ * picks a dominant accent + motif + density for the whole tunnel, then walks the candidate stations and
+ * keeps a seeded subset, each with a jittered size + a safe (above-the-road, inside-the-arch) height. A
+ * different id yields a visibly different arrangement; the same id is always identical. PURELY COSMETIC
+ * — nothing here is read by the drivable surface.
+ */
+export function tunnelDecorPlan(seed: number, id: number, halfL: number): DecorItem[] {
+  const V = ZEN_TUNNEL_VISUAL;
+  const stations = tunnelDecorStations(halfL);
+  // Per-tunnel character: dominant accent, crystal shape, and how densely populated.
+  const accentIdx = Math.min(V.decorAccents.length - 1, Math.floor(decorUnit(seed, id, 1) * V.decorAccents.length));
+  const accent = hexRGB(V.decorAccents[accentIdx]);
+  const motif = Math.min(V.decorMotifs - 1, Math.floor(decorUnit(seed, id, 2) * V.decorMotifs));
+  const density = lerp(V.decorDensityMin, V.decorDensityMax, decorUnit(seed, id, 3));
+  const out: DecorItem[] = [];
+  stations.forEach((st, k) => {
+    // Seeded keep/skip → which stations carry a crystal varies per tunnel (sparse vs full).
+    if (decorUnit(seed, id, 100 + k * 3) > density) return;
+    const size = V.decorSize * (1 + (decorUnit(seed, id, 101 + k * 3) * 2 - 1) * V.decorSizeJitter);
+    // Keep the WHOLE crystal above the road (+clearance) and inside the arch — skip if there's no room.
+    const lo = st.floorY + size + V.decorRoadClearance;
+    const hi = st.floorY + st.archH - size;
+    if (hi <= lo) return;
+    const centreY = lerp(lo, hi, decorUnit(seed, id, 102 + k * 3));
+    out.push({ z: st.z, sign: st.sign, centreY, size, rgb: accent, motif });
+  });
+  return out;
 }

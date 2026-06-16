@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL } from '../utils/constants';
+import { ZEN_LANDMARK } from '../utils/constants';
 import { smoothstep } from './ZenNoise';
 import { heightAt } from './ZenHeight';
 import { deflectPoint } from './ZenWorld';
@@ -42,8 +42,7 @@ import {
   descentParam,
   tunnelTubeRGB,
   tunnelFloorRGB,
-  tunnelDecorRGB,
-  tunnelDecorStations,
+  tunnelDecorPlan,
   tunnelDecorWallOffset,
 } from './ZenTunnelVisual';
 
@@ -73,6 +72,10 @@ interface Active {
   //     in with distance alongside the gold tube. ---
   floorMesh: THREE.LineSegments | null;
   floorMaterial: THREE.LineBasicMaterial | null;
+  // --- per-tunnel DECORATION (tunnel only; null otherwise): the wall crystals, seeded by the tunnel
+  //     id so each tunnel looks distinct. Per-instance geometry (NOT shared) → disposed on cull. ---
+  decorMesh: THREE.LineSegments | null;
+  decorMaterial: THREE.LineBasicMaterial | null;
 }
 
 const _white = new THREE.Color(0xffffff);
@@ -137,6 +140,8 @@ export class ZenLandmarks {
         if (a.gateMaterial) a.gateMaterial.dispose();
         if (a.floorMesh) a.floorMesh.removeFromParent();
         if (a.floorMaterial) a.floorMaterial.dispose();
+        if (a.decorMesh) { a.decorMesh.removeFromParent(); a.decorMesh.geometry.dispose(); }
+        if (a.decorMaterial) a.decorMaterial.dispose();
         this.active.delete(id);
       }
     }
@@ -203,8 +208,9 @@ export class ZenLandmarks {
         ZEN_LANDMARK.drawRadius,
         dist,
       );
-      // The tunnel road fades with the tube (same distance emerge).
+      // The tunnel road + the wall crystals fade with the tube (same distance emerge).
       if (a.floorMaterial) a.floorMaterial.opacity = a.material.opacity;
+      if (a.decorMaterial) a.decorMaterial.opacity = a.material.opacity;
     }
 
     // Remember the car position for next frame's gate plane-crossing test.
@@ -320,6 +326,31 @@ export class ZenLandmarks {
       this.scene.add(floorMesh);
     }
 
+    // Per-tunnel DECORATION (tunnel only) — wall crystals seeded by the tunnel id, so each tunnel is
+    // visibly distinct. Its own (per-instance) geometry + white vertex-colour material; same transform
+    // as the tube; fades in with distance like the floor. Disposed on cull (it's not shared geometry).
+    let decorMesh: THREE.LineSegments | null = null;
+    let decorMaterial: THREE.LineBasicMaterial | null = null;
+    if (lm.type === LANDMARK_TUNNEL) {
+      const decorGeo = this.buildTunnelDecorGeo(lm);
+      if (decorGeo) {
+        decorMaterial = new THREE.LineBasicMaterial({
+          color: 0xffffff, // white base — the per-tunnel accent rides the vertex colours
+          vertexColors: true,
+          transparent: true,
+          opacity: 1,
+          fog: false,
+          depthWrite: false,
+        });
+        decorMesh = new THREE.LineSegments(decorGeo, decorMaterial);
+        decorMesh.position.set(lm.x, groundY, lm.z);
+        decorMesh.rotation.y = lm.rotationY;
+        decorMesh.scale.setScalar(lm.scale);
+        decorMesh.frustumCulled = false;
+        this.scene.add(decorMesh);
+      }
+    }
+
     this.active.set(lm.id, {
       landmark: lm,
       mesh,
@@ -334,6 +365,8 @@ export class ZenLandmarks {
       gateT: -1,
       floorMesh,
       floorMaterial,
+      decorMesh,
+      decorMaterial,
     });
   }
 
@@ -345,6 +378,8 @@ export class ZenLandmarks {
       if (a.gateMaterial) a.gateMaterial.dispose();
       if (a.floorMesh) a.floorMesh.removeFromParent();
       if (a.floorMaterial) a.floorMaterial.dispose();
+      if (a.decorMesh) { a.decorMesh.removeFromParent(); a.decorMesh.geometry.dispose(); }
+      if (a.decorMaterial) a.decorMaterial.dispose();
     }
     this.active.clear();
     for (const g of this.geo) g.dispose();
@@ -551,27 +586,46 @@ export class ZenLandmarks {
         beacon(0, y - dip, mz, span, y, mz);
       }
     }
-    // DECORATIVE crystals (Stage 2a): faceted magenta diamonds set into the WALLS at intervals — you
-    // pass them, never drive into them (off by the walls, above the road). Purely visual: appended to
-    // this tube line geometry, never seen by the drivable surface. Identical on every tunnel.
-    const [dr, dg, db] = tunnelDecorRGB();
-    const decor = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
-      lineFixed(ax, ay, az, bx, by, bz, dr, dg, db);
+    // (Stage 2b) The decorative crystals are NO LONGER baked here — the shared per-type geometry would
+    // make every tunnel identical. They're now a SEPARATE per-tunnel mesh (buildTunnelDecorGeo), seeded
+    // by the tunnel id, so each tunnel's decoration is distinct-but-deterministic. The tube gradient +
+    // beacon stay shared (identical is correct for them).
+    return ZenLandmarks.lineGeo(p, c);
+  }
+
+  /** PER-TUNNEL decoration geometry (Stage 2b): the wall crystals for ONE tunnel, seeded by its id so
+   *  each tunnel looks distinct (different accent / density / motif / sizing) yet deterministic. Built
+   *  on spawn, disposed on cull (per-instance — NOT shared). Purely decorative: set into the walls,
+   *  above the road, NEVER seen by the drivable surface. Returns null if the plan is empty. */
+  private buildTunnelDecorGeo(lm: Landmark): THREE.BufferGeometry | null {
+    const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+    const items = tunnelDecorPlan(this.seed, lm.id, halfL);
+    if (items.length === 0) return null;
+    const p: number[] = [];
+    const c: number[] = [];
+    const bend = (z: number) => ZEN_LANDMARK.tunnelBendAmplitude * tunnelBendShape(z / halfL);
     const wallOff = tunnelDecorWallOffset();
-    const s = ZEN_TUNNEL_VISUAL.decorSize;
-    for (const st of tunnelDecorStations(halfL)) {
-      const wx = bend(st.z) + st.sign * wallOff; // out by the curving wall, not on the central road
-      const cy = st.centreY;
-      // A faceted diamond in the (y, z) plane on the wall: 4 outline edges + 2 facet lines (reads as a
-      // glowing crystal as you slide past). All at x = wx (mounted flush to the wall, above the floor).
-      const top: [number, number] = [cy + s, st.z], bot: [number, number] = [cy - s, st.z];
-      const fore: [number, number] = [cy, st.z + s], aft: [number, number] = [cy, st.z - s];
-      decor(wx, top[0], top[1], wx, fore[0], fore[1]);
-      decor(wx, fore[0], fore[1], wx, bot[0], bot[1]);
-      decor(wx, bot[0], bot[1], wx, aft[0], aft[1]);
-      decor(wx, aft[0], aft[1], wx, top[0], top[1]);
-      decor(wx, top[0], top[1], wx, bot[0], bot[1]); // vertical facet
-      decor(wx, fore[0], fore[1], wx, aft[0], aft[1]); // horizontal facet
+    for (const it of items) {
+      const wx = bend(it.z) + it.sign * wallOff; // out by the curving wall, not on the central road
+      const z = it.z, cy = it.centreY, s = it.size;
+      const [r, g, b] = it.rgb;
+      // A wall crystal in the (y, z) plane at x = wx (mounted flush to the wall, above the floor). The
+      // seg() helper pushes one line + its two endpoint colours (the per-tunnel accent).
+      const seg = (ay: number, az: number, by: number, bz: number) => {
+        p.push(wx, ay, az, wx, by, bz);
+        c.push(r, g, b, r, g, b);
+      };
+      if (it.motif === 0) {
+        // Faceted DIAMOND: 4 outline edges (top/fore/bottom/aft) + a vertical + horizontal facet.
+        seg(cy + s, z, cy, z + s); seg(cy, z + s, cy - s, z); seg(cy - s, z, cy, z - s); seg(cy, z - s, cy + s, z);
+        seg(cy + s, z, cy - s, z); seg(cy, z + s, cy, z - s);
+      } else {
+        // Tall HEX SHARD: a 6-point elongated crystal (narrower in z, taller in y) + a vertical spine.
+        const hz = s * 0.6, sy = s * 0.35;
+        seg(cy + s, z, cy + sy, z + hz); seg(cy + sy, z + hz, cy - sy, z + hz); seg(cy - sy, z + hz, cy - s, z);
+        seg(cy - s, z, cy - sy, z - hz); seg(cy - sy, z - hz, cy + sy, z - hz); seg(cy + sy, z - hz, cy + s, z);
+        seg(cy + s, z, cy - s, z);
+      }
     }
     return ZenLandmarks.lineGeo(p, c);
   }

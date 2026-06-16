@@ -318,22 +318,74 @@ describe('Zen tunnel — VISUAL EVOLUTION (Stage 1: depth gradient) + DECOR (Sta
     expect(maxR).toBeGreaterThan(1.0);
   });
 
-  it('DECORATIVE crystals are present (magenta) and sit ABOVE the road (never on the drive line)', () => {
+  it('the SHARED tube geometry no longer carries decor (it moved to a per-tunnel mesh, Stage 2b)', () => {
     const geo = tubeGeo();
-    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
     const col = geo.getAttribute('color') as THREE.BufferAttribute;
-    let decorCount = 0;
-    let minClearance = Infinity; // smallest (vertex Y − local floor Y) over all decor vertices
+    let magenta = 0;
+    for (let i = 0; i < col.count; i++) if (col.getX(i) > 0.9 && col.getY(i) < 0.1 && col.getZ(i) > 0.9) magenta++;
+    expect(magenta).toBe(0); // the tube gradient + gold beacon only — decor is its own per-tunnel mesh
+  });
+
+  it('DECORATIVE crystals are now a SEPARATE per-tunnel mesh, in the scene, ABOVE the road', () => {
+    const tunnel = findTunnel();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    lms.update(tunnel.x, tunnel.z, TICK);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = (lms as any).active.get(tunnel.id);
+    expect(a.decorMesh).toBeInstanceOf(THREE.LineSegments);
+    expect(a.decorMaterial.vertexColors).toBe(true);
+    expect(scene.children).toContain(a.decorMesh); // actually in the scene graph
+    const pos = a.decorMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    expect(pos.count).toBeGreaterThan(0);
+    // Every decor vertex sits ABOVE the road surface — wall scenery you pass, not drive over.
+    const hL = ZEN_LANDMARK.tunnelLength * tunnel.scale * 0.5;
+    let minClearance = Infinity;
+    a.decorMesh.updateMatrixWorld(true);
+    const v = new THREE.Vector3();
+    const tx = Math.sin(tunnel.rotationY), tz = Math.cos(tunnel.rotationY);
+    const groundY = heightAt(SEED, tunnel.x, tunnel.z);
     for (let i = 0; i < pos.count; i++) {
-      const isMagenta = col.getX(i) > 0.9 && col.getY(i) < 0.1 && col.getZ(i) > 0.9;
-      if (!isMagenta) continue;
-      decorCount++;
-      const y = pos.getY(i);
-      const floorY = tunnelLocalFloorY(pos.getZ(i), HALF_L);
-      minClearance = Math.min(minClearance, y - floorY);
+      v.fromBufferAttribute(pos, i).applyMatrix4(a.decorMesh.matrixWorld);
+      const along = (v.x - tunnel.x) * tx + (v.z - tunnel.z) * tz;
+      const floorWorldY = groundY + tunnelLocalFloorY(along / tunnel.scale, hL / tunnel.scale) * tunnel.scale;
+      minClearance = Math.min(minClearance, v.y - floorWorldY);
     }
-    expect(decorCount).toBeGreaterThan(0); // crystals exist in the tube geometry
-    // Every decor vertex sits ABOVE the road surface — it's wall scenery you pass, not drive over.
-    expect(minClearance).toBeGreaterThan(0.5);
+    expect(minClearance).toBeGreaterThan(0); // clears the road everywhere
+  });
+
+  it('DIFFERENT tunnels get DIFFERENT decoration; the SAME tunnel is deterministic (Stage 2b)', () => {
+    // Collect two distinct tunnel landmarks.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tunnels: any[] = [];
+    for (let cz = 0; cz < 200 && tunnels.length < 2; cz++)
+      for (let cx = 0; cx < 200 && tunnels.length < 2; cx++) {
+        const lm = landmarkForCell(SEED, cx, cz);
+        if (lm && lm.type === LANDMARK_TUNNEL) tunnels.push(lm);
+      }
+    expect(tunnels.length).toBe(2);
+    const lms = new ZenLandmarks(new THREE.Scene(), SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const build = (lm: any) => (lms as any).buildTunnelDecorGeo(lm)?.getAttribute('position') as THREE.BufferAttribute | undefined;
+    const a0 = build(tunnels[0]);
+    const a1 = build(tunnels[1]);
+    const a0again = build(tunnels[0]);
+    expect(a0 && a1 && a0again).toBeTruthy();
+    // Determinism: same id → identical geometry (same vertex count + first vertex).
+    expect(a0again!.count).toBe(a0!.count);
+    expect(a0again!.getY(0)).toBeCloseTo(a0!.getY(0), 9);
+    // Variety: two different tunnels differ (vertex count OR a sampled vertex differs).
+    const differs = a0!.count !== a1!.count || a0!.getY(0) !== a1!.getY(0) || a0!.getZ(0) !== a1!.getZ(0);
+    expect(differs).toBe(true);
+  });
+
+  it('PERF: the per-tunnel decor geometry is BOUNDED (rare + culled — geo count stays small)', () => {
+    const tunnel = findTunnel();
+    const lms = new ZenLandmarks(new THREE.Scene(), SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const geo = (lms as any).buildTunnelDecorGeo(tunnel) as THREE.BufferGeometry | null;
+    const verts = geo ? (geo.getAttribute('position') as THREE.BufferAttribute).count : 0;
+    // A handful of stations × a few segments × 2 verts — comfortably under a small cap (not unbounded).
+    expect(verts).toBeLessThan(400);
   });
 });

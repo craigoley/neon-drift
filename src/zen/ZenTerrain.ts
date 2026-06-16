@@ -14,7 +14,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN, ZEN_BIOMES, ZEN_SECRET_BIOME } from '../utils/constants';
+import { ZEN, ZEN_BIOMES, ZEN_SECRET_BIOME, ZEN_TUNNEL_SECRET_BIOME } from '../utils/constants';
 import { clamp, mixHex } from '../utils/math';
 import { worldToChunk } from './ZenWorld';
 import { heightAt, rampContribution } from './ZenHeight';
@@ -46,6 +46,8 @@ export class ZenTerrain {
   /** Inside a SECRET area: force the grid floor to the secret-void gridLine (the dominant visual
    *  must change, not just the backdrop) — so the place reads as the violet void floor-to-sky. */
   private secret = false;
+  /** Inside the TUNNEL-PAYOFF space: force the grid floor to the deep-amber gridLine. */
+  private tunnelSecret = false;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.seed = seed;
@@ -87,6 +89,14 @@ export class ZenTerrain {
     this.carCx = NaN; // force a recolour rebuild on the next update
   }
 
+  /** Enter / leave the TUNNEL-PAYOFF space — forces the grid floor to (or off) the deep-amber gridLine
+   *  (parallel to setSecret; the two never overlap — you're in at most one hidden space). */
+  setTunnelSecret(active: boolean): void {
+    if (active === this.tunnelSecret) return;
+    this.tunnelSecret = active;
+    this.carCx = NaN; // force a recolour rebuild on the next update
+  }
+
   /** Recenter + rebuild the surface when the car crosses into a new chunk (cheap rest of
    *  the time — a chunk-coord compare). */
   update(carX: number, carZ: number): void {
@@ -120,9 +130,12 @@ export class ZenTerrain {
         const idx = j * stride + i;
         h[idx] = heightAt(this.seed, wx, wz);
         ra[idx] = clamp(rampContribution(this.seed, wx, wz) / ZEN.rampHeight, 0, 1);
-        // Secret area: the whole floor is the secret-void colour; else the blended biome gridLine.
+        // Hidden space: the whole floor is the forced gridLine (tunnel-payoff amber, or secret violet);
+        // else the blended biome gridLine.
         let c: number;
-        if (this.secret) {
+        if (this.tunnelSecret) {
+          c = ZEN_TUNNEL_SECRET_BIOME.gridLine;
+        } else if (this.secret) {
           c = ZEN_SECRET_BIOME.gridLine;
         } else {
           biomeAt(this.seed, wx, wz, this.bstate);

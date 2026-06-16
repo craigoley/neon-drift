@@ -1328,6 +1328,49 @@ export const ZEN_SECRET_BIOME: BiomeDef = {
  * mis-render (the #127 tunnel-camera lesson). The only world state is the ZenVehicle, so save/
  * restore is ~7 numbers. PR1 = ONE fixed region (placeholder palette); beauty/variety come later.
  */
+/**
+ * Zen TUNNEL-PAYOFF palette — a distinct DEEP-AMBER/GOLD void forced while inside the tunnel's bottom
+ * payoff space (Stage 4 of docs/zen-tunnel-interesting-recon.md). Deliberately DIFFERENT from the
+ * gateway secret area's violet (ZEN_SECRET_BIOME) so the two hidden spaces read as distinct places. It
+ * echoes the tunnel's deep-end gold. (Slice palette — a plain distinct look; beauty is a follow-up.)
+ */
+export const ZEN_TUNNEL_SECRET_BIOME: BiomeDef = {
+  id: 'tunnel-deep',
+  displayName: 'Deep Tunnel',
+  gradient: [
+    { at: 0.0, color: '#fff3d6' },
+    { at: 0.3, color: '#ffcc66' },
+    { at: 0.58, color: '#cc7a1f' },
+    { at: 0.82, color: '#5a2f0a' },
+    { at: 1.0, color: '#150a02' },
+  ],
+  gridCenter: 0xffd98a,
+  gridLine: 0xffaa44,
+  fog: 0x1a0f04,
+  mountain: 0xb87a30,
+  starIntensity: 0.2,
+  accent: 0xffb050,
+  audioTone: 0.35,
+};
+
+/**
+ * Zen TUNNEL BOTTOM-PAYOFF (Stage 4 vertical slice). Descending a tunnel to its DEEP POINT warps the
+ * car to a NEW distinct tunnel-themed region (a far coordinate band, separate from the gateway secret
+ * area), explore it, then a return portal (its nearest GATEWAY) brings you back NEAR THE TUNNEL
+ * ENTRANCE (re-runnable). Reuses the #129/#130 fade/teleport/safe-arrival machinery. Slice: a plain
+ * distinct space (the beautiful tunnel-themed build is a follow-up).
+ */
+export const ZEN_TUNNEL_SECRET = {
+  /** Far base coordinate the tunnel-payoff region sits near — a DIFFERENT band from the gateway
+   *  secret region (640000, -480000), so the two spaces are distinct places. Its nearest GATEWAY is
+   *  the arrival + return portal. */
+  regionX: -520000,
+  regionZ: 600000,
+  /** After arriving back near the tunnel entrance, ignore re-triggers until driven this far clear —
+   *  a bit larger than the gateway guard so a fresh descent is deliberate, not an instant re-loop. */
+  returnGuardDistance: 160,
+} as const;
+
 export const ZEN_SECRET = {
   /** Far base coordinate the secret region sits near — well beyond normal roam (its nearest
    *  GATEWAY becomes the arrival + return portal). Fixed for the slice. */

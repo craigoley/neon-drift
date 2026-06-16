@@ -53,6 +53,8 @@ export class ZenRenderer {
   private boomHeading = 0;
   /** True while the car is inside a secret area → the secret palette is forced. */
   private secretActive = false;
+  /** True while the car is inside the TUNNEL-PAYOFF space → the deep-amber palette is forced. */
+  private tunnelSecretActive = false;
   /** Eased speed factor (0..1) driving the gentle distance/FOV swing; smoothed so brief
    *  throttle changes don't pump the framing. */
   private speedFactor = 0;
@@ -171,6 +173,13 @@ export class ZenRenderer {
     this.terrain.setSecret(active); // force the GRID floor violet too (not just the backdrop)
   }
 
+  /** Toggle the TUNNEL-PAYOFF look — forces the deep-amber palette while the car is inside the
+   *  tunnel bottom space (a distinct hidden space from the violet secret area). */
+  setTunnelSecret(active: boolean): void {
+    this.tunnelSecretActive = active;
+    this.terrain.setTunnelSecret(active); // force the GRID floor amber too
+  }
+
   /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a
    *  secret-area WARP so the rig doesn't ease across the teleport distance (it would slew for
    *  seconds). Mirrors the resting framing the per-frame ease converges to. */
@@ -226,7 +235,9 @@ export class ZenRenderer {
     // Biome region: resolve the look at the car's position and apply it (throttled inside
     // — repaints fire a bounded number of times per transition, none at rest); keep the
     // star dome centred on the car. Inside a SECRET area, force the secret palette instead.
-    if (this.secretActive) {
+    if (this.tunnelSecretActive) {
+      this.biomeView.applyTunnelSecret();
+    } else if (this.secretActive) {
       this.biomeView.applySecret();
     } else {
       biomeAt(ZEN.worldSeed, v.x, v.z, this.biomeState);

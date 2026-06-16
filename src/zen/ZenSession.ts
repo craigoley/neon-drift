@@ -10,7 +10,7 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import { ZEN, ZEN_SECRET, ZEN_LANDMARK, ZEN_SLIDE, ZEN_ARCH, ZEN_RING, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SECRET, ZEN_TUNNEL_SECRET, ZEN_LANDMARK, ZEN_SLIDE, ZEN_ARCH, ZEN_RING, type CarDef } from '../utils/constants';
 import { clamp } from '../utils/math';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
@@ -27,6 +27,7 @@ import {
   type VehicleSnapshot,
 } from './ZenSecret';
 import { crossedAnyOfType, LANDMARK_ARCH, LANDMARK_RING, type Landmark } from './ZenLandmarkModel';
+import { coveringTunnel, passedDeepPoint, tunnelReturnPortal } from './ZenTunnelPayoff';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
@@ -40,6 +41,8 @@ export interface ZenDebugSnapshot {
   airborne: boolean;
   warpPhase: 'none' | 'out' | 'in';
   inSecret: boolean;
+  /** True while inside the tunnel bottom-payoff space (Stage 4) — distinct from inSecret. */
+  inTunnelSpace: boolean;
   hasSaved: boolean;
   onSlide: boolean;
   slideU: number;
@@ -101,13 +104,31 @@ export class ZenSession {
   private guardX = 0;
   private guardZ = 0;
   private guardActive = false;
-  /** Which warp this is: 'secret' (gateway → save/restore the secret region) or 'random' (a RING
-   *  random main-world hop, no save). Set on the trigger; read at the teleport midpoint. */
-  private warpKind: 'secret' | 'random' = 'secret';
+  /** Which warp this is: 'secret' (gateway → save/restore the secret region), 'random' (a RING random
+   *  main-world hop, no save), or 'tunnel' (the deep-point payoff → a distinct tunnel space, return
+   *  near the entrance). Set on the trigger; read at the teleport midpoint. */
+  private warpKind: 'secret' | 'random' | 'tunnel' = 'secret';
   /** The RING random-warp destination, computed on the trigger, applied at the teleport midpoint. */
   private pendingDest: { x: number; z: number; heading: number } | null = null;
   /** The active bounce-guard radius — the secret return-guard, or the RING guard for a random hop. */
   private guardDist: number = ZEN_SECRET.returnGuardDistance;
+
+  // --- TUNNEL BOTTOM-PAYOFF (Stage 4 slice): descend a tunnel to its DEEP POINT → warp to a distinct
+  //     tunnel-themed space → a return portal there brings you back NEAR THE ENTRANCE (re-runnable).
+  //     Reuses the warp/fade/save-restore machinery above; the trigger detection is pure (ZenTunnelPayoff). ---
+  /** True while inside the tunnel payoff space (forces the amber palette + flips the gateway to "return"). */
+  private inTunnelSpace = false;
+  /** The tunnel-payoff region's arrival + return portal (the gateway nearest its far coord — computed once). */
+  private readonly tunnelPortal: Landmark;
+  /** The car's pose snapshot taken when it ENTERED the current tunnel — the return target (near the
+   *  entrance, not the deep point). Saved into `saved` at the trigger so RETURN restores it. */
+  private tunnelEntry: VehicleSnapshot | null = null;
+  /** Last frame's signed along-position inside the covering tunnel (null = not in a tunnel) — for the
+   *  deep-point sign-flip detection. */
+  private tunnelPrevAlong: number | null = null;
+  /** The tunnel id already triggered this descent (debounce: one payoff per run; cleared on leaving
+   *  the tunnel footprint or returning). */
+  private tunnelTriggeredId: number | null = null;
 
   // --- VISTA SKY-SLIDE: drive onto a vista deck → catapult up an absolute-Y path that twists +
   //     descends → land back near the vista. A GUIDED ride (the path owns position) — crest physics
@@ -186,6 +207,7 @@ export class ZenSession {
       `position:absolute;inset:0;background:${ZEN_SECRET.fadeColor};opacity:0;pointer-events:none;`;
     this.overlay.appendChild(this.fader);
     this.returnPortal = findReturnPortal(ZEN.worldSeed);
+    this.tunnelPortal = tunnelReturnPortal(ZEN.worldSeed);
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
 
@@ -272,9 +294,35 @@ export class ZenSession {
         this.guardActive = false;
       }
     }
-    // PORTAL TRIGGER: crossing a GATEWAY's opening starts the secret-area warp (into / out of it).
-    if (!this.guardActive && crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
-      this.warpKind = 'secret';
+    // TUNNEL BOTTOM-PAYOFF TRIGGER: while descending a tunnel (main world only), fire ONCE when the car
+    // crosses the DEEP POINT (along = 0). Record the ENTRANCE on first entering the tube — that's the
+    // return target (near the entrance, not the deep point). Debounced per descent + behind the bounce
+    // guard, so wiggling at the bottom or arriving back can't instantly re-fire. (Pure: ZenTunnelPayoff.)
+    if (!this.inSecret && !this.inTunnelSpace) {
+      const cover = coveringTunnel(ZEN.worldSeed, this.v.x, this.v.z);
+      if (cover) {
+        if (this.tunnelPrevAlong === null) {
+          this.tunnelEntry = snapshot(this.v); // just entered the tube → remember the entrance
+          this.tunnelTriggeredId = null;
+        }
+        if (
+          this.warpPhase === 'none' &&
+          !this.guardActive &&
+          this.tunnelTriggeredId !== cover.tunnel.id &&
+          passedDeepPoint(this.tunnelPrevAlong, cover.along)
+        ) {
+          this.tunnelTriggeredId = cover.tunnel.id;
+          this.startTunnelPayoff();
+        }
+        this.tunnelPrevAlong = cover.along;
+      } else {
+        this.tunnelPrevAlong = null; // left the tube → re-arm for the next descent
+      }
+    }
+    // PORTAL TRIGGER: crossing a GATEWAY's opening starts a warp. In the tunnel-payoff space it's the
+    // RETURN (back near the entrance); elsewhere it's the secret-area enter/leave.
+    if (this.warpPhase === 'none' && !this.guardActive && crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+      this.warpKind = this.inTunnelSpace ? 'tunnel' : 'secret';
       this.warpPhase = 'out';
       this.warpT = 0;
       this.v.speed = 0; // freeze the coast during the fade
@@ -292,6 +340,7 @@ export class ZenSession {
       this.warpPhase === 'none' &&
       !this.guardActive &&
       !this.inSecret &&
+      !this.inTunnelSpace &&
       crossedAnyOfType(ZEN.worldSeed, LANDMARK_RING, this.prevX, this.prevZ, this.v.x, this.v.z)
     ) {
       this.startRandomWarp();
@@ -319,6 +368,7 @@ export class ZenSession {
       airborne: this.v.airborne,
       warpPhase: this.warpPhase,
       inSecret: this.inSecret,
+      inTunnelSpace: this.inTunnelSpace,
       hasSaved: this.saved !== null,
       onSlide: this.onSlide,
       slideU: this.slideU,
@@ -406,6 +456,15 @@ export class ZenSession {
     this.v.speed = 0; // freeze the coast during the fade
   }
 
+  /** TUNNEL PAYOFF: start the fade to warp into the tunnel bottom space (the deep-point trigger fired).
+   *  The teleport (save the entrance + jump to the tunnel region) happens at the opaque midpoint. */
+  private startTunnelPayoff(): void {
+    this.warpKind = 'tunnel';
+    this.warpPhase = 'out';
+    this.warpT = 0;
+    this.v.speed = 0; // freeze the coast during the fade
+  }
+
   /** Advance the warp fade; at the opaque midpoint, do the teleport (hidden by the fade). */
   private advanceWarp(dt: number): void {
     this.warpT += dt;
@@ -442,6 +501,34 @@ export class ZenSession {
       this.v.y = heightAt(ZEN.worldSeed, d.x, d.z) + ZEN.rideHeight;
       this.pendingDest = null;
       this.guardDist = ZEN_RING.guardDistance;
+    } else if (this.warpKind === 'tunnel') {
+      // TUNNEL PAYOFF: ENTER saves the ENTRANCE (the return target — NOT the deep point) + warps to
+      // the distinct tunnel space in front of its portal; RETURN restores that entrance, safe-arrival.
+      if (!this.inTunnelSpace) {
+        this.saved = this.tunnelEntry ?? snapshot(this.v);
+        const pose = arrivalPose(this.tunnelPortal);
+        this.v.x = pose.x;
+        this.v.z = pose.z;
+        this.v.heading = pose.heading;
+        this.v.speed = 0;
+        this.v.vy = 0;
+        this.v.airborne = false;
+        this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+        this.inTunnelSpace = true;
+        this.renderer.setTunnelSecret(true);
+        this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
+      } else {
+        if (this.saved) restore(this.v, this.saved);
+        this.v.speed = 0; // #130 safe-arrival: don't barrel straight back to the deep point
+        this.v.vy = 0;
+        this.v.airborne = false;
+        this.inTunnelSpace = false;
+        this.renderer.setTunnelSecret(false);
+        this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
+        // Re-arm the descent detector so a fresh run can re-trigger (after the bounce guard clears).
+        this.tunnelPrevAlong = null;
+        this.tunnelTriggeredId = null;
+      }
     } else if (!this.inSecret) {
       this.saved = snapshot(this.v);
       const pose = arrivalPose(this.returnPortal);

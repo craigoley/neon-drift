@@ -104,3 +104,97 @@ describe('Zen tunnel — driving straight through is SMOOTH (no bump, no pop to 
     expect(maxStep, 'per-frame ΔY stays tiny — smooth, not a bump').toBeLessThan(0.5);
   });
 });
+
+/** Drive a tunnel from outside one mouth at a fixed lateral OFFSET from the axis (steer 0), the line a
+ *  real player drives. Returns the mid-tunnel onSurface-toggle count + worst per-frame ΔY. */
+function driveOffset(t: typeof tun, offset: number): { toggles: number; maxStep: number; descended: boolean } {
+  const dt = 1 / 60;
+  const ax = Math.sin(t.rotationY);
+  const az = Math.cos(t.rotationY);
+  const hL = (ZEN_LANDMARK.tunnelLength * t.scale) * 0.5;
+  const v = createZenVehicle();
+  v.x = t.x - ax * (hL + 30) + -az * offset; // start offset along the perpendicular
+  v.z = t.z - az * (hL + 30) + ax * offset;
+  v.heading = Math.PI - t.rotationY;
+  v.y = heightAt(seed, v.x, v.z) + ZEN.rideHeight;
+  v.speed = 80;
+  let toggles = 0;
+  let maxStep = 0;
+  let descended = false;
+  let lastOn: boolean | null = null;
+  for (let f = 0; f < 560; f++) {
+    const slope = surfaceSlopeAlong(seed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+    updateZen(v, 0, 1, dt, v.airborne ? 0 : slope);
+    const surf = queryDrivableSurface(seed, v.x, v.z);
+    const prevY = v.y;
+    updateVertical(v, surf.y + ZEN.rideHeight, slope, dt, !surf.onSurface);
+    expect(Number.isFinite(v.y)).toBe(true);
+    const al = (v.x - t.x) * ax + (v.z - t.z) * az;
+    if (Math.abs(al) < hL - 3) {
+      maxStep = Math.max(maxStep, Math.abs(v.y - prevY));
+      if (lastOn !== null && lastOn !== surf.onSurface) toggles++;
+      lastOn = surf.onSurface;
+      if (v.y < -2) descended = true;
+    }
+  }
+  return { toggles, maxStep, descended };
+}
+
+describe('Zen tunnel — driving OFF-CENTRE is SMOOTH (the line a player actually drives — #153 regression)', () => {
+  // The ORIGINAL guard drove only the centred axis (perp ≈ 0), where lat = |bendOff| ≤ bendAmp < hw —
+  // a case that can NEVER pop, so it passed while the off-centre bump was live (#153). The real test
+  // sweeps lateral offsets across the straight-driving CORRIDOR, on the nearest AND the largest tunnel.
+  const corridor = ZEN_LANDMARK.tunnelHalfWidth - ZEN_LANDMARK.tunnelBendAmplitude; // pre-scale
+  const biggest = landmarksInRadius(seed, 0, 0, 60000)
+    .filter((l) => l.type === LANDMARK_TUNNEL)
+    .sort((a, b) => b.scale - a.scale)[0];
+
+  it('the straight-driving corridor (hw − bendAmplitude) is a REAL width, not the thin 8u of #149', () => {
+    expect(corridor).toBeGreaterThanOrEqual(25);
+  });
+
+  for (const offset of [0, 12, 20, 28]) {
+    it(`nearest tunnel, offset ${offset}u: no pop (onSurface never toggles, ΔY tiny)`, () => {
+      const r = driveOffset(tun, offset);
+      expect(r.descended).toBe(true);
+      expect(r.toggles, `offset ${offset} → no floor↔surface pop`).toBe(0);
+      expect(r.maxStep, `offset ${offset} → smooth`).toBeLessThan(0.6);
+    });
+  }
+
+  for (const offset of [0, 20, 30]) {
+    it(`LARGEST tunnel (scale ${biggest.scale.toFixed(2)}), offset ${offset}u: no pop`, () => {
+      const r = driveOffset(biggest, offset);
+      expect(r.toggles, `scaleMax offset ${offset} → no pop`).toBe(0);
+      expect(r.maxStep).toBeLessThan(0.6);
+    });
+  }
+});
+
+describe('Zen tunnel — path-relative membership: in iff TRUE perpendicular distance ≤ halfWidth', () => {
+  // Place the car at a known PERPENDICULAR distance d from the curved centreline (along its local
+  // normal), at several axial positions incl. the bend peak, and assert membership is |d| ≤ hw — the
+  // true distance, not the axis-relative gap (#153). Robust to curve steepness (curvature-invariant).
+  const bendSlope = (along: number) => {
+    const e = halfL * 1e-3;
+    return (ZEN_LANDMARK.tunnelBendAmplitude * tun.scale * (tunnelBendShape((along + e) / halfL) - tunnelBendShape((along - e) / halfL))) / (2 * e);
+  };
+  /** World point at perpendicular distance d from the centreline at axial `along`. */
+  const atPerpDist = (along: number, d: number) => {
+    const m = bendSlope(along);
+    const inv = 1 / Math.sqrt(1 + m * m);
+    // local normal (in along,perp) = (−m, 1)·inv; offset the centreline point C=(along, bendOff) by d·normal.
+    const aLocal = along + d * (-m) * inv;
+    const pLocal = ZEN_LANDMARK.tunnelBendAmplitude * tun.scale * tunnelBendShape(along / halfL) + d * inv;
+    return { x: tun.x + aLocal * tx - pLocal * tz, z: tun.z + aLocal * tz + pLocal * tx };
+  };
+  for (const f of [-0.5, -0.2, 0.3, 0.5]) {
+    it(`at along=${f}·halfL: |d| just inside hw is ON the floor, just outside is OFF`, () => {
+      const along = f * halfL;
+      const inside = atPerpDist(along, hw * 0.9);
+      const outside = atPerpDist(along, hw * 1.1);
+      expect(queryDrivableSurface(seed, inside.x, inside.z).onSurface, `d=0.9·hw → in`).toBe(true);
+      expect(queryDrivableSurface(seed, outside.x, outside.z).onSurface, `d=1.1·hw → out`).toBe(false);
+    });
+  }
+});

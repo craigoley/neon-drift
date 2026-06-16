@@ -54,9 +54,19 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
   const s = Math.abs(along);
   const halfL = (ZEN_LANDMARK.tunnelLength * lm.scale) * 0.5;
   const hw = ZEN_LANDMARK.tunnelHalfWidth * lm.scale;
-  const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale * tunnelBendShape(along / halfL);
-  const lat = Math.abs(perp - bendOff); // lateral distance from the CURVED centreline (footprint test only)
-  if (s >= halfL || lat >= hw) return null;
+  const amp = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale;
+  const bendOff = amp * tunnelBendShape(along / halfL);
+  // PATH-RELATIVE (Frenet) membership: the TRUE perpendicular distance from the car to the CURVED
+  // centreline, not the axis-relative gap. The centreline's local slope (lateral per along) is
+  // d(bendOff)/d(along); the perpendicular distance to its tangent line = |perp − bendOff| /
+  // √(1 + slope²) (exact to first order — curvature-invariant). So "in the tube" is exactly
+  // |d| ≤ halfWidth, no thin corridor artifact from the axis frame (diagnosis #153). The depth-Y
+  // below still keys off `along` (NOT a nearest-point arc-length), so it stays byte-identical to the
+  // rendered floor mesh (the #149 unified-floor invariant).
+  const eps = halfL * 1e-3;
+  const bendSlope = (amp * tunnelBendShape((along + eps) / halfL) - amp * tunnelBendShape((along - eps) / halfL)) / (2 * eps);
+  const d = Math.abs(perp - bendOff) / Math.sqrt(1 + bendSlope * bendSlope);
+  if (s >= halfL || d >= hw) return null;
   // The floor: terrain at the tunnel CENTRE minus the shared depth profile — EXACTLY the rendered
   // mesh's world Y (heightAt(centre) + scale·localFloorY), at any lateral offset within the tube.
   const depth = ZEN_LANDMARK.tunnelDepth * lm.scale * tunnelDepthFactor(along / halfL);

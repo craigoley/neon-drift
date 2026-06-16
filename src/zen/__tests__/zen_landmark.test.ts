@@ -422,13 +422,14 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     // Pick the axial position where the bend peaks (|shape| max, ~half-length in).
     const along = halfL * 0.5;
     const bWorld = ZEN_LANDMARK.tunnelBendAmplitude * t.scale * tunnelBendShape(along / halfL);
-    // The channel genuinely CURVES — a real lateral sweep (well over a third of a half-width), not a
-    // straight tube.
-    expect(Math.abs(bWorld)).toBeGreaterThan(ZEN_LANDMARK.tunnelHalfWidth * t.scale * 0.35);
-    // ...but the tube is now WIDE ENOUGH to CONTAIN that curve (hw ≥ bendAmplitude — diagnosis #148
-    // fix), so even on the STRAIGHT axis the car is still ON the channel (it used to fall OFF → the
-    // override dropped to null → the car popped to normal ground = the bump).
-    expect(ZEN_LANDMARK.tunnelHalfWidth).toBeGreaterThanOrEqual(ZEN_LANDMARK.tunnelBendAmplitude);
+    // The channel genuinely CURVES — at the bend peak the centreline reaches most of its amplitude
+    // (a real sweep, not a straight tube). (Curve gentled #148→#153 fix; measured vs the amplitude,
+    // not the half-width, since the tube is now deliberately much wider than the bend — see below.)
+    expect(Math.abs(bWorld)).toBeGreaterThan(ZEN_LANDMARK.tunnelBendAmplitude * t.scale * 0.8);
+    // ...but the tube comfortably CONTAINS its curve with a REAL straight-driving corridor
+    // (hw − bendAmplitude ≥ a usable width — the #153 proper fix, vs #149's thin 8u), so even on the
+    // STRAIGHT axis the car is well ON the channel (it used to fall OFF → null → pop to ground).
+    expect(ZEN_LANDMARK.tunnelHalfWidth - ZEN_LANDMARK.tunnelBendAmplitude).toBeGreaterThanOrEqual(25);
     const axisX = t.x + tx * along, axisZ = t.z + tz * along;
     expect(onLandmarkSurface(SEED, axisX, axisZ)).toBe(true);
     // On the CURVED centreline at the same axial position → ON the channel, still deep.

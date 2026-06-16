@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_LANDMARK } from '../utils/constants';
+import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL } from '../utils/constants';
 import { smoothstep } from './ZenNoise';
 import { heightAt } from './ZenHeight';
 import { deflectPoint } from './ZenWorld';
@@ -38,12 +38,24 @@ import {
   LANDMARK_VISTA,
   LANDMARK_TUNNEL,
 } from './ZenLandmarkModel';
+import {
+  descentParam,
+  tunnelTubeRGB,
+  tunnelFloorRGB,
+  tunnelDecorRGB,
+  tunnelDecorStations,
+  tunnelDecorWallOffset,
+} from './ZenTunnelVisual';
 
 interface Active {
   landmark: Landmark;
   mesh: THREE.LineSegments;
   material: THREE.LineBasicMaterial;
   baseColor: THREE.Color;
+  /** True for vertex-coloured meshes (the tunnel tube): the reach-glow brightens by SCALING
+   *  material.color above white (×>1) rather than lerping a flat base toward white — so the per-vertex
+   *  gradient is preserved at rest and amplified (bloom-flared) during the glow. */
+  vertexLit: boolean;
   /** Reach-glow elapsed seconds (>= the type's duration = idle); -1 = not glowing. */
   pulseT: number;
   /** Debounce: true while the car is within reach (so the glow fires once per visit). */
@@ -166,7 +178,13 @@ export class ZenLandmarks {
         a.sustainT = 0;
       }
       const glow = Math.max(env, sustain);
-      a.material.color.copy(a.baseColor).lerp(_white, glow * ZEN_LANDMARK.pulseBrighten);
+      if (a.vertexLit) {
+        // White baseline (= the gradient shows true) → scale ABOVE white to brighten the whole
+        // per-vertex gradient on the glow (bloom flares the lifted colours). At rest: scalar 1 = white.
+        a.material.color.setScalar(1 + glow * ZEN_LANDMARK.pulseBrighten);
+      } else {
+        a.material.color.copy(a.baseColor).lerp(_white, glow * ZEN_LANDMARK.pulseBrighten);
+      }
       a.mesh.scale.setScalar(lm.scale * (1 + glow * ZEN_LANDMARK.pulseSwell));
 
       // Gate ripple (beat 2, drive-through only): fire when the car crosses the opening plane
@@ -237,8 +255,13 @@ export class ZenLandmarks {
 
   private spawn(lm: Landmark): void {
     const colorHex = LANDMARK_COLORS[lm.type];
+    // The TUNNEL tube carries a per-vertex depth GRADIENT (cyan→violet→gold) + magenta decor crystals,
+    // so its material is WHITE with vertexColors on (the gradient rides the vertex attribute). The
+    // reach-pulse then BRIGHTENS the gradient by scaling material.color above white (see update()).
+    const vertexLit = lm.type === LANDMARK_TUNNEL;
     const material = new THREE.LineBasicMaterial({
-      color: colorHex,
+      color: vertexLit ? 0xffffff : colorHex,
+      vertexColors: vertexLit,
       transparent: true,
       opacity: 1,
       fog: false, // a beacon — reads on the horizon through the haze
@@ -282,7 +305,8 @@ export class ZenLandmarks {
     let floorMaterial: THREE.LineBasicMaterial | null = null;
     if (lm.type === LANDMARK_TUNNEL) {
       floorMaterial = new THREE.LineBasicMaterial({
-        color: ZEN_LANDMARK.tunnelFloorColor,
+        color: 0xffffff, // white base — the cyan-held depth gradient rides the vertex colours
+        vertexColors: true,
         transparent: true,
         opacity: 1,
         fog: false,
@@ -300,7 +324,8 @@ export class ZenLandmarks {
       landmark: lm,
       mesh,
       material,
-      baseColor: new THREE.Color(colorHex),
+      baseColor: new THREE.Color(vertexLit ? 0xffffff : colorHex),
+      vertexLit,
       pulseT: -1,
       near: false,
       sustainT: 0,
@@ -444,9 +469,24 @@ export class ZenLandmarks {
    *  (buildTunnelFloor). The terrain stays the roof; the car follows the lower floor (ZenLandmarkSurface). */
   private buildTunnel(): THREE.BufferGeometry {
     const p: number[] = [];
-    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
-      p.push(ax, ay, az, bx, by, bz);
+    const c: number[] = [];
     const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+    // GRADIENT line: positions + per-vertex colour by each endpoint's DESCENT PROGRESS (cyan→violet→
+    // gold deepening toward the centre). The colour rides the vertex attribute; material stays white.
+    const tubeRGB = (z: number): [number, number, number] => tunnelTubeRGB(descentParam(z / halfL));
+    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => {
+      p.push(ax, ay, az, bx, by, bz);
+      const a = tubeRGB(az), b = tubeRGB(bz);
+      c.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+    };
+    // FIXED-colour line (the above-ground BEACON keeps its gold "spot me" identity, not the gradient).
+    const lineFixed = (
+      ax: number, ay: number, az: number, bx: number, by: number, bz: number,
+      r: number, g: number, bl: number,
+    ) => {
+      p.push(ax, ay, az, bx, by, bz);
+      c.push(r, g, bl, r, g, bl);
+    };
     const hw = ZEN_LANDMARK.tunnelHalfWidth;
     const head = ZEN_LANDMARK.tunnelHeadroom;
     const arcN = ZEN_LANDMARK.tunnelArcSegments;
@@ -494,19 +534,46 @@ export class ZenLandmarks {
     const span = hw * ZEN_LANDMARK.tunnelBeaconChevronSpan;
     const dip = ZEN_LANDMARK.tunnelBeaconChevronDip;
     const nChev = ZEN_LANDMARK.tunnelBeaconChevrons;
+    // The beacon keeps the established GOLD tunnel colour (its spot-from-afar identity), not the gradient.
+    const gold = ZEN_LANDMARK.tunnelColor;
+    const gr = ((gold >> 16) & 0xff) / 255, gg = ((gold >> 8) & 0xff) / 255, gb = (gold & 0xff) / 255;
+    const beacon = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
+      lineFixed(ax, ay, az, bx, by, bz, gr, gg, gb);
     for (const mz of [-halfL, halfL]) {
       // Portal frame: two posts + a top beam, at the mouth plane (floor is 0 here).
-      line(-hw, 0, mz, -hw, bh, mz);
-      line(hw, 0, mz, hw, bh, mz);
-      line(-hw, bh, mz, hw, bh, mz);
+      beacon(-hw, 0, mz, -hw, bh, mz);
+      beacon(hw, 0, mz, hw, bh, mz);
+      beacon(-hw, bh, mz, hw, bh, mz);
       // Downward chevrons stacked in the frame (V's pointing down → "descend").
       for (let k = 0; k < nChev; k++) {
         const y = bh * (ZEN_LANDMARK.tunnelBeaconChevronStartFrac - k * ZEN_LANDMARK.tunnelBeaconChevronStepFrac);
-        line(-span, y, mz, 0, y - dip, mz);
-        line(0, y - dip, mz, span, y, mz);
+        beacon(-span, y, mz, 0, y - dip, mz);
+        beacon(0, y - dip, mz, span, y, mz);
       }
     }
-    return ZenLandmarks.lineGeo(p);
+    // DECORATIVE crystals (Stage 2a): faceted magenta diamonds set into the WALLS at intervals — you
+    // pass them, never drive into them (off by the walls, above the road). Purely visual: appended to
+    // this tube line geometry, never seen by the drivable surface. Identical on every tunnel.
+    const [dr, dg, db] = tunnelDecorRGB();
+    const decor = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
+      lineFixed(ax, ay, az, bx, by, bz, dr, dg, db);
+    const wallOff = tunnelDecorWallOffset();
+    const s = ZEN_TUNNEL_VISUAL.decorSize;
+    for (const st of tunnelDecorStations(halfL)) {
+      const wx = bend(st.z) + st.sign * wallOff; // out by the curving wall, not on the central road
+      const cy = st.centreY;
+      // A faceted diamond in the (y, z) plane on the wall: 4 outline edges + 2 facet lines (reads as a
+      // glowing crystal as you slide past). All at x = wx (mounted flush to the wall, above the floor).
+      const top: [number, number] = [cy + s, st.z], bot: [number, number] = [cy - s, st.z];
+      const fore: [number, number] = [cy, st.z + s], aft: [number, number] = [cy, st.z - s];
+      decor(wx, top[0], top[1], wx, fore[0], fore[1]);
+      decor(wx, fore[0], fore[1], wx, bot[0], bot[1]);
+      decor(wx, bot[0], bot[1], wx, aft[0], aft[1]);
+      decor(wx, aft[0], aft[1], wx, top[0], top[1]);
+      decor(wx, top[0], top[1], wx, bot[0], bot[1]); // vertical facet
+      decor(wx, fore[0], fore[1], wx, aft[0], aft[1]); // horizontal facet
+    }
+    return ZenLandmarks.lineGeo(p, c);
   }
 
   /** TUNNEL FLOOR — the cyan neon ROAD the car drives on (a separate mesh/colour from the gold tube).
@@ -515,9 +582,15 @@ export class ZenLandmarks {
    *  with the floor profile (matches ZenLandmarkSurface at the centreline). */
   private buildTunnelFloor(): THREE.BufferGeometry {
     const p: number[] = [];
-    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) =>
-      p.push(ax, ay, az, bx, by, bz);
+    const c: number[] = [];
     const halfL = ZEN_LANDMARK.tunnelLength * 0.5;
+    // The ROAD's colour evolves with depth too, but held toward cyan (the readable "drive here" ribbon).
+    const floorRGB = (z: number): [number, number, number] => tunnelFloorRGB(descentParam(z / halfL));
+    const line = (ax: number, ay: number, az: number, bx: number, by: number, bz: number) => {
+      p.push(ax, ay, az, bx, by, bz);
+      const a = floorRGB(az), b = floorRGB(bz);
+      c.push(a[0], a[1], a[2], b[0], b[1], b[2]);
+    };
     const hw = ZEN_LANDMARK.tunnelHalfWidth;
     const rung = ZEN_LANDMARK.tunnelFloorRungSpacing;
     const floorY = (z: number) => ZenLandmarks.tunnelFloorY(z, halfL);
@@ -538,7 +611,7 @@ export class ZenLandmarks {
       line(l, fy, z, r, fy, z); // lateral rung across the channel
       prev = { l, m, r, y: fy };
     }
-    return ZenLandmarks.lineGeo(p);
+    return ZenLandmarks.lineGeo(p, c);
   }
 
   /** RING / PORTAL — a vertical neon ring (hole faces ±Z) you drive through; bottom dips below
@@ -563,9 +636,12 @@ export class ZenLandmarks {
     return ZenLandmarks.lineGeo(p);
   }
 
-  private static lineGeo(positions: number[]): THREE.BufferGeometry {
+  private static lineGeo(positions: number[], colors?: number[]): THREE.BufferGeometry {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    // Optional per-vertex COLOUR (tunnel only — the depth gradient + decor). Other types pass no
+    // colours and their materials leave vertexColors off, so this attribute is simply absent for them.
+    if (colors) g.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
     return g;
   }
 }

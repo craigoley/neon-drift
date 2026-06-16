@@ -17,6 +17,7 @@ import { ZenLandmarks } from '../ZenLandmarks';
 import { heightAt } from '../ZenHeight';
 import { drivableSurfaceY } from '../ZenLandmarkSurface';
 import { landmarkForCell, reachRadius, LANDMARK_RING, LANDMARK_VISTA, LANDMARK_TUNNEL } from '../ZenLandmarkModel';
+import { tunnelLocalFloorY } from '../ZenTunnelVisual';
 import { ZEN, ZEN_LANDMARK, ZEN_BLOOM } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
@@ -185,13 +186,16 @@ describe('Zen tunnel — the FLOOR is a visible neon ROAD (was a void under the 
     return { tunnel, scene, lms, a };
   }
 
-  it('a tunnel spawns a SEPARATE cyan floor mesh, added to the scene (the road you drive on)', () => {
+  it('a tunnel spawns a SEPARATE floor mesh (vertex-coloured, white base), added to the scene', () => {
     const { scene, a } = spawnTunnel();
     expect(a.floorMesh).toBeInstanceOf(THREE.LineSegments);
     expect(a.floorMaterial).toBeInstanceOf(THREE.LineBasicMaterial);
-    expect(a.floorMaterial.color.getHex()).toBe(ZEN_LANDMARK.tunnelFloorColor); // cyan road, not gold tube
+    // Visual-evolution contract: the road's colour rides a per-vertex gradient (cyan-held), so the
+    // material is WHITE with vertexColors on (was a flat cyan material.color before Stage 1).
+    expect(a.floorMaterial.vertexColors).toBe(true);
+    expect(a.floorMaterial.color.getHex()).toBe(0xffffff);
+    expect(a.floorMesh.geometry.getAttribute('color')).toBeTruthy(); // the gradient is present
     expect(scene.children).toContain(a.floorMesh); // actually in the scene graph
-    expect(a.floorMaterial.color.getHex()).not.toBe(a.material.color.getHex()); // distinct from the tube
   });
 
   it('the road sits AT the drivable surface (car drives ON it) and runs the FULL length', () => {
@@ -226,5 +230,110 @@ describe('Zen tunnel — the FLOOR is a visible neon ROAD (was a void under the 
     // Local floor Y runs from ~0 at the mouths to ~−tunnelDepth at the deepest.
     expect(maxLocalY).toBeCloseTo(0, 1);
     expect(minLocalY).toBeLessThan(-ZEN_LANDMARK.tunnelDepth * 0.85);
+  });
+});
+
+describe('Zen tunnel — VISUAL EVOLUTION (Stage 1: depth gradient) + DECOR (Stage 2a) — no surface impact', () => {
+  function findTunnel() {
+    for (let cz = 0; cz < 200; cz++) for (let cx = 0; cx < 200; cx++) {
+      const lm = landmarkForCell(SEED, cx, cz);
+      if (lm && lm.type === LANDMARK_TUNNEL) return lm;
+    }
+    throw new Error('no tunnel found');
+  }
+  const HALF_L = ZEN_LANDMARK.tunnelLength * 0.5; // local (shared geo is scale 1)
+  /** Build a headless ZenLandmarks + return the shared tube geometry. */
+  function tubeGeo() {
+    const lms = new ZenLandmarks(new THREE.Scene(), SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return (lms as any).geo[LANDMARK_TUNNEL] as THREE.BufferGeometry;
+  }
+
+  it('the tube has a per-vertex COLOUR gradient (white material + vertexColors), not a flat colour', () => {
+    const tunnel = findTunnel();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    lms.update(tunnel.x, tunnel.z, TICK);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = (lms as any).active.get(tunnel.id);
+    expect(a.material.vertexColors).toBe(true);
+    expect(a.material.color.getHex()).toBe(0xffffff); // white base — the gradient rides the vertices
+    const col = a.mesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    expect(col).toBeTruthy();
+    expect(col.count).toBe(a.mesh.geometry.getAttribute('position').count);
+  });
+
+  it('the gradient EVOLVES with depth: cyan-ish near the mouths → gold-ish at the deepest centre', () => {
+    const geo = tubeGeo();
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    const col = geo.getAttribute('color') as THREE.BufferAttribute;
+    // Sample the gradient TUBE vertices (exclude the magenta decor + we look at ribs along z). For the
+    // shallowest (|z|→halfL) and deepest (z→0) tube vertices, read the colour and compare hue.
+    let shallow = { r: 0, g: 0, b: 0, az: -1 };
+    let deep = { r: 0, g: 0, b: 0, az: HALF_L + 1 };
+    for (let i = 0; i < pos.count; i++) {
+      const r = col.getX(i), g = col.getY(i), b = col.getZ(i);
+      const isMagenta = r > 0.9 && g < 0.1 && b > 0.9; // skip decor crystals
+      if (isMagenta) continue;
+      const az = Math.abs(pos.getZ(i));
+      if (az > shallow.az) shallow = { r, g, b, az };
+      if (az < deep.az) deep = { r, g, b, az };
+    }
+    // Shallow (mouths) reads CYAN: blue/green dominate red. Deep (centre) reads GOLD: red dominates blue.
+    expect(shallow.b).toBeGreaterThan(shallow.r);
+    expect(shallow.g).toBeGreaterThan(shallow.r);
+    expect(deep.r).toBeGreaterThan(deep.b); // gold/warm at the bottom (the glowing payoff end)
+  });
+
+  it('the ROAD stays cyan-readable (held toward cyan) even where the tube wall has gone gold', () => {
+    // At the deepest centre, the floor vertex must stay cyan-dominant (b >= r), while the tube wall is
+    // gold (r > b) — so the "drive here" ribbon never visually merges into the gold walls.
+    const tunnel = findTunnel();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    lms.update(tunnel.x, tunnel.z, TICK);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const a = (lms as any).active.get(tunnel.id);
+    const fpos = a.floorMesh.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const fcol = a.floorMesh.geometry.getAttribute('color') as THREE.BufferAttribute;
+    // The deepest floor vertex (min local Y).
+    let bi = 0, minY = Infinity;
+    for (let i = 0; i < fpos.count; i++) if (fpos.getY(i) < minY) { minY = fpos.getY(i); bi = i; }
+    expect(fcol.getZ(bi)).toBeGreaterThanOrEqual(fcol.getX(bi)); // road: blue >= red (cyan-held)
+  });
+
+  it('the reach-pulse STILL brightens the vertex-lit tube (scales material.color above white)', () => {
+    const tunnel = findTunnel();
+    const scene = new THREE.Scene();
+    const lms = new ZenLandmarks(scene, SEED);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const active = (lms as any).active as Map<number, any>;
+    let maxR = 0;
+    for (let i = 0; i < 120; i++) {
+      lms.update(tunnel.x, tunnel.z, TICK); // parked on it → within reach → the glow runs
+      const a = active.get(tunnel.id);
+      if (a) maxR = Math.max(maxR, a.material.color.r);
+    }
+    // White baseline is 1.0; the glow scales it ABOVE white (gradient amplified → bloom flares it).
+    expect(maxR).toBeGreaterThan(1.0);
+  });
+
+  it('DECORATIVE crystals are present (magenta) and sit ABOVE the road (never on the drive line)', () => {
+    const geo = tubeGeo();
+    const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+    const col = geo.getAttribute('color') as THREE.BufferAttribute;
+    let decorCount = 0;
+    let minClearance = Infinity; // smallest (vertex Y − local floor Y) over all decor vertices
+    for (let i = 0; i < pos.count; i++) {
+      const isMagenta = col.getX(i) > 0.9 && col.getY(i) < 0.1 && col.getZ(i) > 0.9;
+      if (!isMagenta) continue;
+      decorCount++;
+      const y = pos.getY(i);
+      const floorY = tunnelLocalFloorY(pos.getZ(i), HALF_L);
+      minClearance = Math.min(minClearance, y - floorY);
+    }
+    expect(decorCount).toBeGreaterThan(0); // crystals exist in the tube geometry
+    // Every decor vertex sits ABOVE the road surface — it's wall scenery you pass, not drive over.
+    expect(minClearance).toBeGreaterThan(0.5);
   });
 });

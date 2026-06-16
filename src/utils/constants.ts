@@ -1756,6 +1756,45 @@ export const ZEN_LANDMARK = {
 } as const;
 
 /**
+ * Zen TUNNEL VISUAL EVOLUTION (Stage 1 + 2a of docs/zen-tunnel-interesting-recon.md). PURELY COSMETIC —
+ * this drives per-vertex COLOURS on the tube + floor line meshes and the decorative crystals baked into
+ * the tube. It NEVER touches the drivable surface (ZenLandmarkSurface) — the #154 corridor, the #149
+ * unified floor, and the off-centre canary are not involved (the path is byte-identical).
+ *
+ * GRADIENT: colour evolves by DESCENT PROGRESS p = 1 − |along/halfL| (0 at the mouths, 1 at the deepest
+ * centre): cyan (shallow) → violet (mid) → gold (deepest). The material.color stays WHITE and the
+ * gradient rides in a per-vertex colour attribute (so the reach-pulse, which scales material.color,
+ * still brightens it; bloom #128 flares the bright deep-gold end). The FLOOR keeps its cyan "drive
+ * here" identity (held toward cyan + a touch brighter than the walls) so the road stays readable.
+ */
+export const ZEN_TUNNEL_VISUAL = {
+  /** Three gradient stops (hex) by descent progress: mouths → mid-descent → deepest. */
+  gradientShallow: 0x00ffff, // cyan — at the mouths (matches the road's identity)
+  gradientMid: 0xaa33ff, // violet — mid-descent
+  gradientDeep: 0xffcc33, // gold — the deepest centre (the glowing payoff end)
+  /** Progress p at which the MID stop sits (the gradient is two linear ramps: shallow→mid→deep). */
+  gradientMidPoint: 0.5,
+  /** Extra brightness added at the deepest (×(1 + deepBrightness·p)) — a subtle bloom RAMP so the deep
+   *  end glows more as you descend (recon Kind 1b). Keep subtle. */
+  deepBrightness: 0.3,
+  /** The ROAD stays cyan-readable: its colour is lerped back TOWARD cyan by this fraction (1 = pure
+   *  cyan always, 0 = the full tube gradient). Keeps the bright ribbon legible deep down. */
+  floorCyanHold: 0.55,
+  /** The road glows a touch brighter than the tube walls (×) so it reads as the "drive here" line. */
+  floorBrightness: 1.2,
+  // --- DECORATIVE crystals (Stage 2a): faceted neon diamonds set INTO the tube walls at intervals,
+  //     that you PASS but never drive into (purely visual — never seen by the drivable surface). They
+  //     sit out by the walls, well above the road, only where the arch is tall enough (the deep, novel
+  //     stretch). Identical on every tunnel (per-tunnel variety is Stage 2b). ---
+  decorColor: 0xff00ff, // magenta accent (palette pop against the cyan→gold tube)
+  decorSpacing: 150, // world units (pre-scale) between decoration stations along the length
+  decorSize: 3, // half-size of each crystal diamond (world units, pre-scale) — fits the ~13u headroom
+  decorWallInset: 3, // set the crystal this far inside the wall (off |x−centre| = halfWidth)
+  decorHeightFrac: 0.55, // crystal centre up the wall as a fraction of the local arch height
+  decorMinArch: 8, // skip stations where the arch is shorter than this (near the mouths) — no room
+} as const;
+
+/**
  * Zen ARCH = SPEED BOOST. Driving THROUGH an arch's opening grants a long-lasting speed surge that
  * eases back to cruise — a pure calm reward (no charge, no cost). The boost raises the speed cap
  * (and gives an instant kick) for `boostSeconds`, then the eased cap glides back down so the surge

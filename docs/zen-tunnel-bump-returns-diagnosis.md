@@ -46,9 +46,9 @@ offset=28: toggles=1  maxLat=54/34
 
 **The null-cut (unchanged since #148):**
 ```
-ZenLandmarkSurface.ts:54  const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale * tunnelBendShape(along / halfL);
-ZenLandmarkSurface.ts:55  const lat = Math.abs(perp - bendOff);   // distance from the CURVED centreline
-ZenLandmarkSurface.ts:56  if (s >= halfL || lat >= hw) return null;   // ← OUTSIDE the curved tube → normal terrain
+ZenLandmarkSurface.ts:57  const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * lm.scale * tunnelBendShape(along / halfL);
+ZenLandmarkSurface.ts:58  const lat = Math.abs(perp - bendOff);   // distance from the CURVED centreline
+ZenLandmarkSurface.ts:59  if (s >= halfL || lat >= hw) return null;   // ← OUTSIDE the curved tube → normal terrain
 ```
 **(a) Did the curve out-swing the tube again?** No — VERIFIED in constants: `tunnelHalfWidth 34 ≥
 tunnelBendAmplitude 26` still holds (`constants.ts:1679, 1690`), and `bendOff` max is

@@ -1668,7 +1668,12 @@ export const ZEN_LANDMARK = {
    *  JOURNEY (~10s enclosed at cruise). The descent/ascent ramps lengthen with it (gentler entry);
    *  it also CURVES (tunnelBend*). (edgeMargin + surfaceQueryRadius co-scaled to the longer footprint.) */
   tunnelLength: 1200,
-  tunnelHalfWidth: 13,
+  /** Half-width of the tube/floor (world units, pre-scale). WIDENED 13→34 so it comfortably CONTAINS
+   *  its own curve: the centreline swings ±tunnelBendAmplitude (26), so a car driving straight sits at
+   *  lat up to 26 from the curved centre — with hw 13 that exceeded the wall (lat ≥ hw) and the drivable
+   *  override dropped to null → the car POPPED to normal ground (diagnosis #148). hw 34 ≥ bendAmplitude
+   *  26 + an ~8u drive margin, so a normal path never reaches the wall (no null-flip). */
+  tunnelHalfWidth: 34,
   tunnelDepth: 16,
   tunnelHeadroom: 13,
   /** The tunnel's gentle LATERAL CURVE: peak sideways offset of the centreline (world units, pre-scale)

@@ -48,6 +48,7 @@ interface ZenDbg {
   hasSaved: boolean;
   onSlide: boolean;
   slideU: number;
+  onSurface: boolean;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -265,6 +266,29 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
       const minY = through.samples.length ? Math.min(...through.samples.map((z) => z.pos.y)) : NaN;
       console.log(`[VALIDATION] tunnel: closestApproach=${Math.round(closest)}u minY=${minY.toFixed(1)} reached=${through.done}`);
       expect(through.done, `descended into the tunnel (closest=${Math.round(closest)}u, minY=${minY.toFixed(1)})`).toBe(true);
+
+      // SMOOTHNESS CANARY (diagnosis #148: the car bumped between the tunnel floor and normal ground
+      // — FINITE but not SMOOTH, so the old sweep passed). Drive THROUGH + out the far side and assert
+      // the car STAYS on the tunnel floor: `onSurface` doesn't toggle back to terrain mid-tunnel, and
+      // no gross per-sample ΔY pop. (The per-frame guarantee is the unit test zen_tunnel_smooth; this
+      // is the live belt-and-suspenders.) Reuse the pure unit test as the precise guard.
+      log('tunnel-through (smoothness)');
+      const past = { x: 2 * tun.x - home.pos.x, z: 2 * tun.z - home.pos.z }; // keep going past the tunnel
+      const out = await drive(page, 'tunnel-through', {
+        target: past,
+        budgetMs: 14_000,
+        done: (z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z) > 140 && z.pos.y > -1,
+      });
+      all.push(...out.samples);
+      const traversal = [...through.samples, ...out.samples];
+      const deep = traversal.filter((z) => z.pos.y < -3); // firmly inside the tunnel
+      const maxJump = traversal.length > 1 ? Math.max(...traversal.slice(1).map((z, i) => Math.abs(z.pos.y - traversal[i].pos.y))) : 0;
+      const poppedToGround = deep.some((z) => !z.onSurface); // deep but on plain terrain = the #148 pop
+      console.log(`[VALIDATION] tunnel-smooth: deepSamples=${deep.length} poppedToGround=${poppedToGround} maxΔY=${maxJump.toFixed(1)}u`);
+      if (deep.length >= 2) {
+        expect(poppedToGround, 'stayed on the tunnel floor (no pop to normal ground mid-tunnel)').toBe(false);
+      }
+      expect(maxJump, 'no gross vertical pop while traversing the tunnel').toBeLessThan(25);
     } else {
       log('tunnel-skip (none in range — not a failure)');
     }

@@ -46,6 +46,8 @@ export interface ZenDebugSnapshot {
   /** True while the car is on a VISTA/TUNNEL drivable-surface override (vs plain terrain) — the
    *  tunnel-smoothness canary asserts this doesn't toggle mid-tunnel (diagnosis #148). */
   onSurface: boolean;
+  /** The camera's orbit angle (boomHeading) — the slide-spin canary asserts its per-frame Δ is bounded. */
+  camHeading: number;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -311,6 +313,7 @@ export class ZenSession {
     return {
       pos: { x: this.v.x, y: this.v.y, z: this.v.z },
       cam: info.cam,
+      camHeading: info.camHeading,
       heading: this.v.heading,
       speed: this.v.speed,
       airborne: this.v.airborne,

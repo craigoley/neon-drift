@@ -49,6 +49,7 @@ interface ZenDbg {
   onSlide: boolean;
   slideU: number;
   onSurface: boolean;
+  camHeading: number;
   biome: { from: number; to: number; blend: number };
   counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
 }
@@ -321,6 +322,19 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
       console.log(`[VALIDATION] sky-slide: peakY=${Math.round(peakY)} baseY=${Math.round(baseY)} climbed=${Math.round(peakY - baseY)} landed=${ride.done}`);
       expect(ride.done, 'the sky-slide completed and deposited the car back on the ground (onSlide → false)').toBe(true);
       expect(peakY - baseY, 'the catapult + slide gained real altitude (verticality)').toBeGreaterThan(60);
+
+      // CAMERA-SPIN CANARY (diagnosis #150: the chase camera "spun around" at a ±π heading crossing on
+      // the slide — FINITE but violent, so the old sweep passed). Through the WHOLE ride the camera's
+      // orbit angle must move smoothly: per-sample shortest-angle Δ stays well under a half-turn (the
+      // bug spun ~360° in ~0.5s ≈ a quarter-turn per 120ms sample). Per-frame guarantee: the unit test
+      // zen_slide_camera.test.ts; this is the live belt-and-suspenders.
+      const wrapPi = (a: number) => Math.atan2(Math.sin(a), Math.cos(a));
+      let maxCamStep = 0;
+      for (let i = 1; i < ride.samples.length; i++) {
+        maxCamStep = Math.max(maxCamStep, Math.abs(wrapPi(ride.samples[i].camHeading - ride.samples[i - 1].camHeading)));
+      }
+      console.log(`[VALIDATION] sky-slide: maxCamHeadingΔ=${Math.round((maxCamStep * 180) / Math.PI)}deg/sample`);
+      expect(maxCamStep, 'the slide camera does not spin (no ±π-wrap orbit)').toBeLessThan(1.2);
     } else {
       log('vista-skip (none in range — not a failure)');
     }

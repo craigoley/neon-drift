@@ -10,7 +10,7 @@
  */
 
 import { ZEN, ZEN_MINIMAP, cssHex } from '../utils/constants';
-import { smoothFollow } from '../utils/math';
+import { smoothFollow, wrapToPi } from '../utils/math';
 import {
   projectToRadar,
   biomeRadarColor,
@@ -77,13 +77,15 @@ export class ZenMinimap {
    *  are resampled only every resampleInterval frames (cheap rotation runs every frame). */
   update(carX: number, carZ: number, heading: number, dt: number): void {
     // Smooth the rotation toward the car heading (snap on the very first frame so it doesn't
-    // sweep in from 0). heading accumulates continuously in ZenVehicle (no wrap), so a plain
-    // ease is safe.
+    // sweep in from 0). Normal driving accumulates heading continuously, but the SKY-SLIDE feeds a
+    // WRAPPED atan2 heading — so the ease is WRAP-AWARE (shortest signed way + bounded), else the
+    // radar would whip a full turn when the slide heading crosses ±π (the camera-spin sibling, #150).
     if (!this.initialised) {
-      this.smoothedHeading = heading;
+      this.smoothedHeading = wrapToPi(heading);
       this.initialised = true;
     } else {
-      this.smoothedHeading += (heading - this.smoothedHeading) * smoothFollow(ZEN_MINIMAP.headingLerp, dt);
+      const f = smoothFollow(ZEN_MINIMAP.headingLerp, dt);
+      this.smoothedHeading = wrapToPi(this.smoothedHeading + wrapToPi(heading - this.smoothedHeading) * f);
     }
 
     if (this.framesSinceResample >= ZEN_MINIMAP.resampleInterval) {

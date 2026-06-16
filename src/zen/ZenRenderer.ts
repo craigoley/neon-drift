@@ -11,7 +11,7 @@
 
 import * as THREE from 'three';
 import { ZEN, ZEN_SLIDE, type CarDef } from '../utils/constants';
-import { clamp, smoothFollow } from '../utils/math';
+import { clamp, smoothFollow, wrapToPi } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
 import { ZenScenery } from './ZenScenery';
@@ -125,11 +125,13 @@ export class ZenRenderer {
    *  bounded-growth canaries). Mirrors live values; adds nothing to the render path. */
   get debugInfo(): {
     cam: { x: number; y: number; z: number };
+    camHeading: number;
     counts: { props: number; terrainVerts: number; landmarks: number; sceneChildren: number };
   } {
     const c = this.camera.position;
     return {
       cam: { x: c.x, y: c.y, z: c.z },
+      camHeading: this.boomHeading, // the camera's orbit angle — the slide-spin canary watches its Δ
       counts: {
         props: this.scenery.activePropCount,
         terrainVerts: this.terrain.vertexCount,
@@ -173,7 +175,7 @@ export class ZenRenderer {
    *  secret-area WARP so the rig doesn't ease across the teleport distance (it would slew for
    *  seconds). Mirrors the resting framing the per-frame ease converges to. */
   snapCamera(v: ZenVehicle): void {
-    this.boomHeading = v.heading;
+    this.boomHeading = wrapToPi(v.heading);
     this.speedFactor = 0;
     const { distance } = zenFraming(0);
     this.camera.position.set(
@@ -248,7 +250,11 @@ export class ZenRenderer {
     //   (2) SPEED FEEL: a small, eased distance pull-back + subtle FOV widen from speed
     //       (the explicit zenFraming curve), so cruising still reads as motion.
     const f = smoothFollow(camLerp, dt);
-    this.boomHeading += (v.heading - this.boomHeading) * f;
+    // WRAP-AWARE ease: step the SHORTEST signed way toward the (possibly ±π-wrapped) target heading,
+    // and keep boomHeading itself bounded. On the slide v.heading is a wrapped atan2 — a raw lerp
+    // unwound a full turn when it crossed ±π (the camera "spin", diagnosis #150). No-op for normal
+    // driving (continuous heading → the delta is already small → wrapToPi doesn't change it).
+    this.boomHeading = wrapToPi(this.boomHeading + wrapToPi(v.heading - this.boomHeading) * f);
 
     const targetFactor = clamp(v.speed / ZEN.maxSpeed, 0, 1);
     this.speedFactor += (targetFactor - this.speedFactor) * smoothFollow(ZEN.camSpeedLerp, dt);

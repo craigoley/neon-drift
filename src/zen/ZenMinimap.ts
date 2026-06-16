@@ -15,9 +15,11 @@ import {
   projectToRadar,
   biomeRadarColor,
   gatherMarkers,
+  nearestOfEachType,
   radarScale,
   type MinimapMarker,
   type RadarOffset,
+  type TypedNearest,
 } from './ZenMinimapModel';
 import { createZenBiomeState } from './ZenBiome';
 import { LANDMARK_TUNNEL } from './ZenLandmarkModel';
@@ -35,6 +37,8 @@ export class ZenMinimap {
 
   /** Cached markers (world positions) from the last resample. */
   private markers: MinimapMarker[] = [];
+  /** Cached nearest-of-each-type bearings (the per-type compass) from the last resample. */
+  private bearings: TypedNearest[] = [];
   /** Reused biome-state scratch for the wash sampling (no per-sample allocation). */
   private readonly biomeScratch = createZenBiomeState();
   /** Reused scratch for projectToRadar calls in the per-frame draw (no hot-loop allocation). */
@@ -114,6 +118,9 @@ export class ZenMinimap {
     }
     this.washCtx.putImageData(img, 0, 0);
     this.markers = gatherMarkers(ZEN.worldSeed, carX, carZ, R);
+    // The per-type compass: the nearest arch/ring/gateway/vista/tunnel to the car (for the edge
+    // bearing ticks). Throttled with the rest of the resample — it barely moves between samples.
+    this.bearings = nearestOfEachType(ZEN.worldSeed, carX, carZ);
   }
 
   /** Redraw the scope: rotated biome wash, markers, north tick, ring, and the centred car. */
@@ -151,10 +158,11 @@ export class ZenMinimap {
       const px = c + this.radarScratch.x * this.scale;
       const py = c + this.radarScratch.y * this.scale;
       if (m.kind === 'landmark') {
-        // Tunnels get a DISTINCT marker (a down-chevron in their gold) so you can navigate to one
-        // specifically — the diagnosed reason they were never found (all landmarks looked identical).
+        // Tunnels get a DISTINCT marker (a down-chevron in their gold); every other type draws in
+        // its own neon colour (matching the in-world structure + the compass edge tick), so an
+        // on-radar landmark already reads as "what kind" — no longer all one generic dot.
         if (m.landmarkType === LANDMARK_TUNNEL) this.drawTunnelMarker(px, py);
-        else this.drawLandmark(px, py);
+        else this.drawLandmark(px, py, ZEN_MINIMAP.compassColors[m.landmarkType ?? 0]);
       } else this.drawRamp(px, py);
     }
     ctx.restore(); // drop the circular clip
@@ -175,6 +183,10 @@ export class ZenMinimap {
     ctx.beginPath();
     ctx.arc(c, c, R, 0, Math.PI * 2);
     ctx.stroke();
+
+    // PER-TYPE COMPASS: a small type-coloured tick at the ring edge pointing toward the nearest of
+    // each landmark type that's beyond the scope — so you can pick a type and drive its bearing.
+    this.drawCompass(c, R, carX, carZ);
 
     // Car marker — a triangle at the centre, always pointing UP.
     const s = ZEN_MINIMAP.carSizePx;
@@ -205,12 +217,12 @@ export class ZenMinimap {
   }
 
   /** A landmark beacon: a bright hollow ring with a centre dot — bigger than a ramp dot, reads
-   *  as a "destination" you navigate to. */
-  private drawLandmark(px: number, py: number): void {
+   *  as a "destination" you navigate to. Coloured by its type (matches the compass + the structure). */
+  private drawLandmark(px: number, py: number, color: number): void {
     const ctx = this.ctx;
     const r = ZEN_MINIMAP.landmarkMarkerPx;
-    ctx.strokeStyle = cssHex(ZEN_MINIMAP.landmarkColor);
-    ctx.fillStyle = cssHex(ZEN_MINIMAP.landmarkColor);
+    ctx.strokeStyle = cssHex(color);
+    ctx.fillStyle = cssHex(color);
     ctx.lineWidth = ZEN_MINIMAP.landmarkLineWidth;
     ctx.beginPath();
     ctx.arc(px, py, r, 0, Math.PI * 2);
@@ -233,6 +245,30 @@ export class ZenMinimap {
     ctx.lineTo(px, py + r);
     ctx.lineTo(px + r, py - yOff);
     ctx.stroke();
+  }
+
+  /** Draw the per-type compass: for each landmark type whose nearest is BEYOND the scope, a small
+   *  tick at the ring edge in that type's neon colour, pointing toward it (rotated into the radar
+   *  frame). On-radar types are skipped — their coloured dot already shows them. Calm, not loud. */
+  private drawCompass(c: number, R: number, carX: number, carZ: number): void {
+    const ctx = this.ctx;
+    const tick = ZEN_MINIMAP.compassTickPx;
+    const inset = ZEN_MINIMAP.compassEdgeInsetPx;
+    ctx.lineWidth = ZEN_MINIMAP.compassTickWidth;
+    ctx.lineCap = 'round';
+    for (const b of this.bearings) {
+      if (b.dist <= ZEN_MINIMAP.worldRadius) continue; // on-radar → the dot already marks it
+      projectToRadar(b.x - carX, b.z - carZ, this.smoothedHeading, this.radarScratch);
+      const mag = Math.hypot(this.radarScratch.x, this.radarScratch.y) || 1;
+      const ux = this.radarScratch.x / mag;
+      const uy = this.radarScratch.y / mag;
+      ctx.strokeStyle = cssHex(ZEN_MINIMAP.compassColors[b.type]);
+      ctx.beginPath();
+      ctx.moveTo(c + ux * (R - inset - tick), c + uy * (R - inset - tick));
+      ctx.lineTo(c + ux * (R - inset), c + uy * (R - inset));
+      ctx.stroke();
+    }
+    ctx.lineCap = 'butt';
   }
 
   dispose(): void {

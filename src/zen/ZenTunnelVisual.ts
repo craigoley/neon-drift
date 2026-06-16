@@ -64,11 +64,6 @@ export function tunnelFloorRGB(p: number): RGB {
   ];
 }
 
-/** The DECORATION crystal colour (a constant magenta accent — the same everywhere). */
-export function tunnelDecorRGB(): RGB {
-  return hexRGB(ZEN_TUNNEL_VISUAL.decorColor);
-}
-
 /** Local floor Y at axial z (the descending road): −tunnelDepth · the SHARED depth factor. Mirrors
  *  ZenLandmarks.tunnelFloorY exactly (both key off tunnelDepthFactor — used here only to place the
  *  decorative crystals ABOVE the road, never to move the drivable surface). */

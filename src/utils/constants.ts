@@ -1801,6 +1801,8 @@ export const ZEN_TUNNEL_VISUAL = {
   decorSizeJitter: 0.4, // crystal size varies ±this fraction of decorSize, per crystal
   decorMotifs: 2, // number of crystal SHAPES (a per-tunnel choice: faceted diamond vs tall hex shard)
   decorRoadClearance: 1.0, // keep every crystal's lowest point at least this far ABOVE the road
+  decorHexZFrac: 0.6, // hex shard z-extent as a fraction of crystal size (narrower than the diamond)
+  decorHexYFrac: 0.35, // hex shard mid-point y-offset as a fraction of size (the waist pinch)
 } as const;
 
 /**

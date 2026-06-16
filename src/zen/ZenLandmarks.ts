@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_LANDMARK } from '../utils/constants';
+import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL } from '../utils/constants';
 import { smoothstep } from './ZenNoise';
 import { heightAt } from './ZenHeight';
 import { deflectPoint } from './ZenWorld';
@@ -621,7 +621,7 @@ export class ZenLandmarks {
         seg(cy + s, z, cy - s, z); seg(cy, z + s, cy, z - s);
       } else {
         // Tall HEX SHARD: a 6-point elongated crystal (narrower in z, taller in y) + a vertical spine.
-        const hz = s * 0.6, sy = s * 0.35;
+        const hz = s * ZEN_TUNNEL_VISUAL.decorHexZFrac, sy = s * ZEN_TUNNEL_VISUAL.decorHexYFrac;
         seg(cy + s, z, cy + sy, z + hz); seg(cy + sy, z + hz, cy - sy, z + hz); seg(cy - sy, z + hz, cy - s, z);
         seg(cy - s, z, cy - sy, z - hz); seg(cy - sy, z - hz, cy + sy, z - hz); seg(cy + sy, z - hz, cy + s, z);
         seg(cy + s, z, cy - s, z);

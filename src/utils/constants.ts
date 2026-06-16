@@ -1809,11 +1809,7 @@ export const ZEN_SLIDE = {
   // --- PATH GEOMETRY (local to the launch vista; absolute-Y) — BIG + TWISTY, all eased (C¹ at seams) ---
   /** Apex height above the vista deck — the big vertical soar. */
   climbHeight: 190,
-  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED 380→610 (~1.6×):
-   *  a LONGER soaring slide. Scaled together with bendWaves + pathLength so the bend WAVELENGTH
-   *  (forwardReach / bendWaves ≈ 254u) and the ride pacing are unchanged — same gentle #146 bends +
-   *  calm camera, just more of them over a longer ride (not denser/sharper). Altitude is unchanged. */
-  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED again 610→854
+  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED 380→610→854
    *  (×1.4) for an even longer soar. Scaled together with bendWaves + pathLength so the bend
    *  WAVELENGTH (forwardReach / bendWaves ≈ 254u) + the ride pacing are UNCHANGED — same gentle #146
    *  bends + #151 steady camera, just more of them over a longer ride (not denser/sharper). */

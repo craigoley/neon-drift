@@ -1794,8 +1794,11 @@ export const ZEN_SLIDE = {
   // --- PATH GEOMETRY (local to the launch vista; absolute-Y) — BIG + TWISTY, all eased (C¹ at seams) ---
   /** Apex height above the vista deck — the big vertical soar. */
   climbHeight: 190,
-  /** Horizontal distance from the vista to the landing (eased out + in). */
-  forwardReach: 380,
+  /** Horizontal distance from the vista to the landing (eased out + in). LENGTHENED 380→610 (~1.6×):
+   *  a LONGER soaring slide. Scaled together with bendWaves + pathLength so the bend WAVELENGTH
+   *  (forwardReach / bendWaves ≈ 254u) and the ride pacing are unchanged — same gentle #146 bends +
+   *  calm camera, just more of them over a longer ride (not denser/sharper). Altitude is unchanged. */
+  forwardReach: 610,
   /** Fraction of the path the catapult climb owns (the rest twists + descends). */
   ascentFrac: 0.16,
   /** How far BELOW the deck the path ends (≈ down to the ground at the vista base; the #118 soft
@@ -1805,9 +1808,11 @@ export const ZEN_SLIDE = {
    *  gentler bends (the big twist made Craig dizzy; the soar — climb/descent — felt good and is
    *  unchanged). A graceful sweep, not a violent swing. */
   bendAmplitude: 40,
-  /** Half-bend count along the slide. COMFORT-tuned 3→1.5: FEWER turns (a calm sweeping descent
-   *  with a couple of graceful bends, not a busy twisty slide). Some sweep stays — not a dead drop. */
-  bendWaves: 1.5,
+  /** Half-bend count along the slide. COMFORT-tuned 3→1.5 (#146); then 1.5→2.4 with the LONGER path
+   *  (forwardReach 380→610) to hold the bend WAVELENGTH constant (610/2.4 ≈ 380/1.5 ≈ 254u) — the
+   *  SAME gentle #146 bends at the SAME spacing, just more of them over the longer slide (NOT denser
+   *  or sharper). Amplitude (gentleness) is unchanged. */
+  bendWaves: 2.4,
   /** Windowed-sine ease (zero value + tangent at the ends) — same family as the tunnel bend. */
   bendEaseStart: 0.5,
   // --- CAMERA (comfort): the slide uses its OWN, calmer camera than normal driving (the global
@@ -1819,8 +1824,11 @@ export const ZEN_SLIDE = {
   /** Chassis bank while sliding (vs ZEN.leanMax 0.18) — much less horizon tilt → less dizziness. */
   leanMax: 0.06,
   // --- RIDE DYNAMICS ---
-  /** Nominal path length: the param u advances by (speed / pathLength)·dt → sets the ride duration. */
-  pathLength: 940,
+  /** Nominal path length: the param u advances by (speed / pathLength)·dt → sets the ride duration.
+   *  LENGTHENED 940→1500 (~1.6×, with forwardReach) so the longer slide keeps the SAME apparent
+   *  speed/pacing (you spend longer on it = more soar) — and the tube mesh's rib density (rings =
+   *  pathLength / ringSpacing) stays constant over the longer path. */
+  pathLength: 1500,
   /** Slide speed is clamped to this band; gas/brake modulate within it (the player still feels it). */
   rideMinSpeed: 60,
   rideMaxSpeed: 158, // a touch over maxSpeed (96) — the slide feels FAST

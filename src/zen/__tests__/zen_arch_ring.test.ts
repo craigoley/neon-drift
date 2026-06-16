@@ -18,6 +18,28 @@ const seqRng = (...vals: number[]): (() => number) => {
 };
 
 describe('Zen ARCH speed boost — the decay curve', () => {
+  it('the boost LINGERS — a substantially long duration (playtest dial, guards against re-shortening)', () => {
+    // Raised 6.5→11.0: the surge lasts noticeably longer before it has fully eased back to cruise.
+    expect(ZEN_ARCH.boostSeconds).toBeGreaterThanOrEqual(10);
+  });
+
+  it('a longer boost still eases gently the WHOLE way — half-time is still mid-surge, not snapped off', () => {
+    // The decay is smoothstep over [0, boostSeconds], so stretching the duration keeps the same gentle
+    // shape: at half the (now longer) timer the cap is still meaningfully above cruise and below the top.
+    const half = boostedMaxSpeed(ZEN_ARCH.boostSeconds * 0.5);
+    expect(half).toBeGreaterThan(ZEN.maxSpeed + 10);
+    expect(half).toBeLessThan(ZEN_ARCH.boostMaxSpeed);
+    // No single 0.25s step in the cap exceeds a gentle bound across the whole decay (a fade, not a jump).
+    let prev = boostedMaxSpeed(0);
+    let maxStep = 0;
+    for (let t = 0.25; t <= ZEN_ARCH.boostSeconds + 1e-9; t += 0.25) {
+      const m = boostedMaxSpeed(t);
+      maxStep = Math.max(maxStep, Math.abs(m - prev));
+      prev = m;
+    }
+    expect(maxStep, 'the eased cap moves gently per 0.25s — no snap').toBeLessThan(8);
+  });
+
   it('intensity is 0 at/under rest and 1 right after a crossing', () => {
     expect(boostIntensity(0)).toBe(0);
     expect(boostIntensity(-2)).toBe(0);

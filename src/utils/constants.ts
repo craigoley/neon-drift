@@ -1543,9 +1543,16 @@ export const ZEN_LANDMARK = {
    *  reliably find something cool on a drive without it feeling everywhere. The clear tunable knob:
    *  raise this (and/or lower cellSize) to find them more often, lower it to keep them special. */
   chance: 0.48,
-  /** Keep the landmark this far (world units) off the cell edges — ≥ the biggest footprint (the
-   *  curved tunnel reaches ~810u along + ~53u laterally at max scale ≈ 812u), so a structure lives
-   *  wholly inside its cell (the scan checks one cell). RAISED with the longer, curved tunnel. */
+  /** Keep the landmark CENTRE this far (world units) off the cell edges — inset toward the cell
+   *  centre so structures don't crowd the edges. KEPT 840 through the longer-tunnel dial (deliberately
+   *  NOT co-scaled): the long tunnel's along-footprint (tunnelLength·scaleMax·0.5 ≈ 1755u) exceeds the
+   *  cell half (cellSize/2 = 1125u) at ANY valid margin, so margin can't contain it — the drivable
+   *  surface override is resolved by the MULTI-CELL surfaceQueryRadius scan (co-scaled above), which
+   *  spans the neighbouring cells the footprint reaches into. edgeMargin is therefore placement-only
+   *  (spacing), not load-bearing; and because it sets WHERE every landmark lands, nudging it reshuffles
+   *  tunnels onto different terrain — measured to push some mouths onto steeper ground, worsening the
+   *  #118 eased-mouth handoff step. So it stays put: smooth mouths win over a cosmetic co-scale. (Must
+   *  stay < cellSize/2 = 1125 to keep a valid placement band [m, cellSize−m].) */
   edgeMargin: 840,
   /** Landmarks only place where the mountain mask is at/below this (GENTLE, reachable ground) so
    *  you can drive up to / through / onto them — never buried in a mountain. */
@@ -1664,13 +1671,18 @@ export const ZEN_LANDMARK = {
   //     the terrain stays the "roof". Crest physics are suppressed inside; entry/exit ease (no snap). ---
   /** Tunnel length along its through-axis; half-width of the floor; how far BELOW the terrain the
    *  floor dips at the deepest; headroom (ceiling above the floor — must exceed the camera height so
-   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 380→1200→1800 — a MUCH longer underground
-   *  JOURNEY. The descent/ascent ramps lengthen WITH it, so a deeper floor (see tunnelDepth) is still a
-   *  gentle ramp, not a cliff. (surfaceQueryRadius co-scaled below so the override resolves from the far
-   *  mouth.) The #149 unified floor (tunnelDepthFactor, shared mesh+surface) + curve-fits-tube
-   *  (tunnelHalfWidth ≥ tunnelBendAmplitude) invariants hold at any length/depth (both are normalized /
-   *  length-independent). */
-  tunnelLength: 1800,
+   *  the chase cam doesn't clip the ceiling). LENGTH RAISED 380→1200→1800→2600 — a MUCH longer
+   *  underground JOURNEY. The descent/ascent ramps lengthen WITH it, so the (now deeper) floor is still
+   *  a gentle ramp, not a cliff — depth was raised in step (28→40, ×1.43 vs length's ×1.44), holding the
+   *  grade ≈6% (depth / (halfL·(1−tunnelDepthEaseStart)) is scale-invariant). (surfaceQueryRadius
+   *  co-scaled below so the override still resolves from the far mouth; edgeMargin deliberately left as
+   *  is — see its note — since nudging it reshuffles tunnels onto worse mouth terrain.)
+   *  The #149 unified floor (tunnelDepthFactor, shared mesh+surface) + curve-fits-tube + #154 corridor
+   *  (tunnelHalfWidth − tunnelBendAmplitude ≥ 25) invariants hold at any length/depth: the bend amplitude
+   *  is a fixed pre-scale width that does NOT grow with length, so a longer tunnel only makes the bend
+   *  GENTLER (same lateral spread over more length) — the corridor is unchanged + the Frenet membership
+   *  only eases. */
+  tunnelLength: 2600,
   /** Half-width of the tube/floor (world units, pre-scale). The car is "in the tube" iff its TRUE
    *  perpendicular distance to the curved centreline is ≤ this (path-relative / Frenet membership —
    *  ZenLandmarkSurface), so the WHOLE width is drivable. The straight-driving CORRIDOR is
@@ -1680,11 +1692,12 @@ export const ZEN_LANDMARK = {
    *  no pop. */
   tunnelHalfWidth: 46,
   /** How far (world units, pre-scale) the floor drops below the surface at the deepest. DEEPER
-   *  16→28 — a more dramatic plunge into the neon underworld. The drop is spread over the (now longer)
-   *  descent ramp, so the grade stays gentle (≈6% — a smooth ramp, not a cliff) and the #118-class
-   *  eased entry/exit at the mouths stays snap-free. Shared by the floor mesh + the followed surface
-   *  via tunnelDepthFactor (#149), so both deepen together — the car still rides exactly on the road. */
-  tunnelDepth: 28,
+   *  16→28→40 — a more dramatic plunge into the neon underworld. The drop is spread over the (now
+   *  longer, raised in step — see tunnelLength) descent ramp, so the grade stays gentle (≈6% — a smooth
+   *  ramp, not a cliff) and the #118-class eased entry/exit at the mouths stays snap-free over the bigger
+   *  Y drop. Shared by the floor mesh + the followed surface via tunnelDepthFactor (#149), so both deepen
+   *  together — the car still rides exactly on the road. */
+  tunnelDepth: 40,
   tunnelHeadroom: 13,
   /** The tunnel's gentle LATERAL CURVE: peak sideways offset of the centreline (world units, pre-scale)
    *  + how many sine half-bends span the length. A calm sweeping S (waves 1), windowed to be straight +
@@ -1735,11 +1748,11 @@ export const ZEN_LANDMARK = {
   tunnelBeaconChevronStartFrac: 0.75,
   tunnelBeaconChevronStepFrac: 0.22,
   /** Query radius (world units) for the drivable-surface override scan — ≥ the biggest surface
-   *  footprint. RAISED 840→1300 with the LONGER tunnel: at max scale the tube reaches
-   *  tunnelLength·scaleMax·0.5 ≈ 1215u along from centre, so the override must still be found from the
-   *  far mouth. (Cost is a slightly larger cell scan per query — still a handful of cells; throttled
-   *  callers aside, it's a bounded scalar scan.) */
-  surfaceQueryRadius: 1300,
+   *  footprint. RAISED 840→1300→1850 with the LONGER tunnel: at max scale the tube reaches
+   *  tunnelLength·scaleMax·0.5 = 2600·1.35·0.5 ≈ 1755u along from centre, so the override must still be
+   *  found from the far mouth (1850 leaves headroom). (Cost is a slightly larger cell scan per query —
+   *  still a handful of cells; throttled callers aside, it's a bounded scalar scan.) */
+  surfaceQueryRadius: 1850,
 } as const;
 
 /**
@@ -1751,8 +1764,12 @@ export const ZEN_LANDMARK = {
 export const ZEN_ARCH = {
   /** Boosted top speed (cruise is 96) — a big, lovely surge. */
   boostMaxSpeed: 170,
-  /** How long the boost lasts before it has fully eased back to cruise. */
-  boostSeconds: 6.5,
+  /** How long the boost lasts before it has fully eased back to cruise. RAISED 6.5→11.0 — the surge
+   *  LINGERS noticeably longer (playtest dial). The decay shape is unchanged: boostIntensity is
+   *  smoothstep(0, boostSeconds, timeLeft), so a longer boostSeconds just STRETCHES the same gentle
+   *  ease — the cap still glides back to cruise, never snaps. Magnitude (boostMaxSpeed) + the streak
+   *  visual are untouched. */
+  boostSeconds: 11.0,
   /** Instant kick on crossing as a fraction of the boosted top (you feel it immediately). */
   boostKickFrac: 0.96,
   // --- SPEED STREAKS (the "I'm boosting" visual): thin neon lines streaming past, bloom-lit, that

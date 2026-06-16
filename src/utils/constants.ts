@@ -1671,12 +1671,14 @@ export const ZEN_LANDMARK = {
    *  (tunnelHalfWidth ≥ tunnelBendAmplitude) invariants hold at any length/depth (both are normalized /
    *  length-independent). */
   tunnelLength: 1800,
-  /** Half-width of the tube/floor (world units, pre-scale). WIDENED 13→34 so it comfortably CONTAINS
-   *  its own curve: the centreline swings ±tunnelBendAmplitude (26), so a car driving straight sits at
-   *  lat up to 26 from the curved centre — with hw 13 that exceeded the wall (lat ≥ hw) and the drivable
-   *  override dropped to null → the car POPPED to normal ground (diagnosis #148). hw 34 ≥ bendAmplitude
-   *  26 + an ~8u drive margin, so a normal path never reaches the wall (no null-flip). */
-  tunnelHalfWidth: 34,
+  /** Half-width of the tube/floor (world units, pre-scale). The car is "in the tube" iff its TRUE
+   *  perpendicular distance to the curved centreline is ≤ this (path-relative / Frenet membership —
+   *  ZenLandmarkSurface), so the WHOLE width is drivable. The straight-driving CORRIDOR is
+   *  hw − bendAmplitude: #149 set hw 34 / bendAmp 26 → only 8u, so a normal off-centre line still left
+   *  the curving tube and POPPED to the surface (diagnoses #148/#153 — the bump, 3×). WIDENED 34→46 +
+   *  the gentler bend below give a real ~32u corridor — drive straight or weave anywhere in the tube,
+   *  no pop. */
+  tunnelHalfWidth: 46,
   /** How far (world units, pre-scale) the floor drops below the surface at the deepest. DEEPER
    *  16→28 — a more dramatic plunge into the neon underworld. The drop is spread over the (now longer)
    *  descent ramp, so the grade stays gentle (≈6% — a smooth ramp, not a cliff) and the #118-class
@@ -1686,8 +1688,10 @@ export const ZEN_LANDMARK = {
   tunnelHeadroom: 13,
   /** The tunnel's gentle LATERAL CURVE: peak sideways offset of the centreline (world units, pre-scale)
    *  + how many sine half-bends span the length. A calm sweeping S (waves 1), windowed to be straight +
-   *  tangent at the mouths (see tunnelBendShape). The tube, floor, and drivable surface all follow it. */
-  tunnelBendAmplitude: 26,
+   *  tangent at the mouths (see tunnelBendShape). REDUCED 26→14 so a STRAIGHT drive stays well within
+   *  the (widened) tube — corridor hw − bendAmplitude = 46 − 14 = 32u (vs #149's 8u). Still a visible
+   *  sweep, just gentler. The tube, floor, and drivable surface all follow it. */
+  tunnelBendAmplitude: 14,
   tunnelBendWaves: 1,
   /** Dip (world units) beyond which the car counts as ENCLOSED (deep inside) — for the in-tunnel feel. */
   tunnelEnclosedDepth: 6,

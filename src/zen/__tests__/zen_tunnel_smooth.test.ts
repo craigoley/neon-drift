@@ -28,6 +28,35 @@ const centreGround = heightAt(seed, tun.x, tun.z);
 const at = (along: number, perp: number) => ({ x: tun.x + along * tx - perp * tz, z: tun.z + along * tz + perp * tx });
 const bendOff = (along: number) => ZEN_LANDMARK.tunnelBendAmplitude * tun.scale * tunnelBendShape(along / halfL);
 
+describe('Zen tunnel — DEEPER + LONGER dial (playtest), fixes preserved', () => {
+  it('the tunnel is substantially LONGER and DEEPER (guards against the dial being reverted)', () => {
+    expect(ZEN_LANDMARK.tunnelLength).toBeGreaterThanOrEqual(2400); // raised 1800→2600
+    expect(ZEN_LANDMARK.tunnelDepth).toBeGreaterThanOrEqual(36); // raised 28→40
+  });
+
+  it('the #154 corridor invariant STILL holds at the new length/depth (hw − bendAmp ≥ 25)', () => {
+    expect(ZEN_LANDMARK.tunnelHalfWidth - ZEN_LANDMARK.tunnelBendAmplitude).toBeGreaterThanOrEqual(25);
+  });
+
+  it('DEEPER paired WITH longer keeps the descent a GENTLE ramp, not a cliff (grade stays ~6%)', () => {
+    // Grade = deepest drop / descent-ramp length. The ramp is the outer (1 − tunnelDepthEaseStart)
+    // fraction of each half; both depth and length scale by lm.scale, so the grade is scale-invariant.
+    const rampLen = halfL * (1 - ZEN_LANDMARK.tunnelDepthEaseStart);
+    const drop = ZEN_LANDMARK.tunnelDepth * tun.scale;
+    const grade = drop / rampLen;
+    expect(grade, 'deeper + longer → still a gentle ramp').toBeLessThan(0.09);
+  });
+
+  it('surfaceQueryRadius reaches the far mouth at max scale (the override resolves over the longer tube)', () => {
+    const farMouthReach = ZEN_LANDMARK.tunnelLength * ZEN_LANDMARK.scaleMax * 0.5;
+    expect(ZEN_LANDMARK.surfaceQueryRadius).toBeGreaterThanOrEqual(farMouthReach);
+  });
+
+  it('edgeMargin keeps a VALID central placement band (< cellSize/2) at the new length', () => {
+    expect(ZEN_LANDMARK.edgeMargin).toBeLessThan(ZEN_LANDMARK.cellSize / 2);
+  });
+});
+
 describe('Zen tunnel — followed surface == the visible floor (ONE definition)', () => {
   it('the tube is wide enough to contain its own curve (hw ≥ bendAmplitude)', () => {
     // The whole fix hinges on this: a straight path sits at lat up to bendAmplitude from the curved

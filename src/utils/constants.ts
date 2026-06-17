@@ -1456,6 +1456,12 @@ export const ZEN_DRIVEDOWN = {
    *  (the room "wall"). MUST stay < tunnelDepthEaseStart·halfL so the basin only ever abuts the tube
    *  where the tube is at full depth (the seam-rule guarantee). 520 < 650 (scale 1); 702 < 877 (max). */
   basinRimRadius: 520,
+  /** Radial spokes in the basin floor mesh (the "drive here" reads from centre to rim). */
+  basinSpokes: 16,
+  /** Basin ring segment count = tunnelArcSegments × this (more segments → smoother concentric rings). */
+  basinArcSegmentScale: 3,
+  /** Basin ring spacing = tunnelFloorRungSpacing × this (wider rings → less visual clutter at scale). */
+  basinRingSpacingScale: 2,
 } as const;
 
 export const ZEN_SECRET = {

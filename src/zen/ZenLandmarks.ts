@@ -714,8 +714,8 @@ export class ZenLandmarks {
     const p: number[] = [];
     const rim = ZEN_DRIVEDOWN.basinRimRadius;
     const localY = (r: number) => -ZEN_LANDMARK.tunnelDepth * tunnelBasinDepthFactor(r, 1);
-    const seg = ZEN_LANDMARK.tunnelArcSegments * 3; // smooth rings
-    const ringStep = ZEN_LANDMARK.tunnelFloorRungSpacing * 2;
+    const seg = ZEN_LANDMARK.tunnelArcSegments * ZEN_DRIVEDOWN.basinArcSegmentScale;
+    const ringStep = ZEN_LANDMARK.tunnelFloorRungSpacing * ZEN_DRIVEDOWN.basinRingSpacingScale;
     // Concentric rings (radius r), each at its basin-depth Y.
     for (let r = ringStep; r <= rim + 1e-6; r += ringStep) {
       const y = localY(r);
@@ -728,7 +728,7 @@ export class ZenLandmarks {
       }
     }
     // Radial spokes from centre to rim (each a depth-following polyline) — the "drive here" floor reads.
-    const spokes = 16;
+    const spokes = ZEN_DRIVEDOWN.basinSpokes;
     for (let k = 0; k < spokes; k++) {
       const a = (k / spokes) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
       let pr = 0;

@@ -1872,13 +1872,21 @@ export const ZEN_TUNNEL_VISUAL = {
   /** Progress p at which the MID stop sits (the gradient is two linear ramps: shallow→mid→deep). */
   gradientMidPoint: 0.5,
   /** Extra brightness added at the deepest (×(1 + deepBrightness·p)) — a subtle bloom RAMP so the deep
-   *  end glows more as you descend (recon Kind 1b). Keep subtle. */
-  deepBrightness: 0.3,
+   *  end glows more as you descend (recon Kind 1b). LOWERED 0.3→0.12: 0.3 pushed the gold channel to
+   *  ~1.3 (over 1.0), and in the ENCLOSED tunnel the dense converging neon stacked under bloom (#128)
+   *  into a white blow-out (Craig's photo). Now the deep end still reads BRIGHTEST without clipping. */
+  deepBrightness: 0.12,
   /** The ROAD stays cyan-readable: its colour is lerped back TOWARD cyan by this fraction (1 = pure
    *  cyan always, 0 = the full tube gradient). Keeps the bright ribbon legible deep down. */
   floorCyanHold: 0.55,
-  /** The road glows a touch brighter than the tube walls (×) so it reads as the "drive here" line. */
-  floorBrightness: 1.2,
+  /** Master brightness of the TUBE walls/ceiling vertex colours (×). Held UNDER 1.0 so the rich neon
+   *  GLOWS (bloom #128, threshold 0.4) without the dense enclosed lines clipping to white. */
+  tubeBrightness: 0.8,
+  /** The road glows a touch brighter than the tube walls (×) so it reads as the "drive here" line.
+   *  LOWERED 1.2→0.9: at 1.2 the cyan floor was (0,1.2,1.2) — over 1.0 — and the perspective-compressed
+   *  rungs toward the mouth bloomed to the solid white-blue blob. 0.9 keeps it the brightest element
+   *  (still > tubeBrightness) but below saturation, so you SEE the cyan road, not glare. */
+  floorBrightness: 0.9,
   // --- DECORATIVE crystals: faceted neon shapes set INTO the tube walls at intervals, that you PASS
   //     but never drive into (purely visual — never seen by the drivable surface). They sit out by the
   //     walls, well above the road, only where the arch is tall enough (the deep, novel stretch). ---

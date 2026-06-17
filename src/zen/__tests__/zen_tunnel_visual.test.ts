@@ -35,11 +35,14 @@ describe('Zen tunnel — colour gradient evolves cyan → violet → gold', () =
     expect(g).toBeGreaterThan(r);
   });
 
-  it('deep (p=1) is GOLD/warm: red dominates blue, and is BRIGHTENED (the bloom ramp lifts it >1)', () => {
+  it('deep (p=1) is GOLD/warm: red dominates blue, the brightest stop — but NOT over-saturated', () => {
     const [r, g, b] = tunnelTubeRGB(1);
     expect(r).toBeGreaterThan(b);
     expect(g).toBeGreaterThan(b);
-    expect(r).toBeGreaterThan(1); // deepBrightness ramp pushes the gold channel above 1 → bloom flares
+    // It's the brightest part of the tube (the deep glow ramp)...
+    expect(r).toBeGreaterThan(tunnelTubeRGB(0)[1]);
+    // ...but stays UNDER 1.0 so the dense enclosed tunnel doesn't bloom to a white blow-out (the fix).
+    expect(r).toBeLessThanOrEqual(1);
   });
 
   it('mid (p≈midpoint) is VIOLET: red + blue both present, distinct from the two ends', () => {
@@ -51,6 +54,20 @@ describe('Zen tunnel — colour gradient evolves cyan → violet → gold', () =
   it('the deep end is brighter than the shallow end (intensity ramps DOWN the descent)', () => {
     const sumAt = (p: number) => tunnelTubeRGB(p).reduce((a, c) => a + c, 0);
     expect(sumAt(1)).toBeGreaterThan(sumAt(0));
+  });
+
+  it('NO blow-out: every tube + floor channel stays ≤ 1 across the whole descent (the white-glare fix)', () => {
+    // The reported bug: over-1.0 vertex colours (floor 1.2, deep ramp 1.3) clipped to a solid white-blue
+    // blob under bloom in the dense enclosed tunnel. Guard that the gradient now reads as rich neon that
+    // GLOWS (bloom catches anything > the 0.4 threshold) without any channel saturating to white.
+    for (let p = 0; p <= 1.0001; p += 0.05) {
+      for (const ch of [...tunnelTubeRGB(p), ...tunnelFloorRGB(p)]) {
+        expect(ch).toBeLessThanOrEqual(1 + 1e-9);
+      }
+    }
+    // ...and still bright enough to bloom (above the 0.4 threshold) — a glow, not a dim line.
+    expect(Math.max(...tunnelFloorRGB(0))).toBeGreaterThan(0.4);
+    expect(Math.max(...tunnelTubeRGB(1))).toBeGreaterThan(0.4);
   });
 });
 

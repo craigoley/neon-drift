@@ -70,7 +70,7 @@ export function cavernLayout(seed: number, portal: Landmark): CavernLayout {
       z,
       baseY: heightAt(seed, x, z),
       height: lerp(C.monumentMinHeight, C.monumentMaxHeight, unit(seed, i, 2)),
-      radius: lerp(8, 18, unit(seed, i, 3)),
+      radius: lerp(C.monumentMinBaseRadius, C.monumentMaxBaseRadius, unit(seed, i, 3)),
       rot: unit(seed, i, 4) * Math.PI * 2,
       hue: Math.floor(unit(seed, i, 5) * C.amberPalette.length) % C.amberPalette.length,
     });
@@ -86,7 +86,7 @@ export function cavernLayout(seed: number, portal: Landmark): CavernLayout {
       z,
       baseY: heightAt(seed, x, z),
       height: C.shellHeight,
-      radius: 14,
+      radius: C.shellPillarRadius,
       rot: ang,
       hue: 0,
     });

@@ -104,8 +104,8 @@ export class ZenCavern {
     // ENCLOSING SHELL: a far ring of tall thin pillars (a vertical line + a couple of cross rings).
     for (const p of layout.shell) {
       b.seg(amber[2], p.x, p.baseY, p.z, p.x, p.baseY + p.height, p.z);
-      b.ring(amber[2], p.x, p.baseY + p.height * 0.5, p.z, p.radius, 5);
-      b.ring(amber[2], p.x, p.baseY + p.height, p.z, p.radius * 0.6, 5);
+      b.ring(amber[2], p.x, p.baseY + p.height * 0.5, p.z, p.radius, C.shellPillarSegments);
+      b.ring(amber[2], p.x, p.baseY + p.height, p.z, p.radius * 0.6, C.shellPillarSegments);
     }
 
     // CEILING DOME overhead (latitude rings + meridian arcs converging to an apex) — the cavern "roof".
@@ -118,8 +118,8 @@ export class ZenCavern {
     for (let m = 0; m < C.ceilingMeridians; m++) {
       const a = (m / C.ceilingMeridians) * Math.PI * 2;
       let px = cen.x + Math.cos(a) * C.ceilingRadius, pz = cen.z + Math.sin(a) * C.ceilingRadius, py = rimY;
-      for (let s = 1; s <= 6; s++) {
-        const t = s / 6;
+      for (let s = 1; s <= C.ceilingMeridianSteps; s++) {
+        const t = s / C.ceilingMeridianSteps;
         const rr = C.ceilingRadius * (1 - t);
         const x = cen.x + Math.cos(a) * rr, z = cen.z + Math.sin(a) * rr, y = rimY + (apexY - rimY) * t;
         b.seg(amber[1], px, py, pz, x, y, z);
@@ -128,11 +128,11 @@ export class ZenCavern {
     }
 
     // RETURN-PORTAL marker: a bright cyan halo + uprights at the portal, so the way back READS.
-    b.ring(C.portalMarkerColor, portal.x, layout.center.baseY + 1, portal.z, C.portalMarkerRadius, 24);
-    for (let i = 0; i < 8; i++) {
-      const a = (i / 8) * Math.PI * 2;
+    b.ring(C.portalMarkerColor, portal.x, layout.center.baseY + 1, portal.z, C.portalMarkerRadius, C.portalMarkerSegments);
+    for (let i = 0; i < C.portalMarkerUprights; i++) {
+      const a = (i / C.portalMarkerUprights) * Math.PI * 2;
       const mx = portal.x + Math.cos(a) * C.portalMarkerRadius, mz = portal.z + Math.sin(a) * C.portalMarkerRadius;
-      b.seg(C.portalMarkerColor, mx, layout.center.baseY + 1, mz, mx, layout.center.baseY + 16, mz);
+      b.seg(C.portalMarkerColor, mx, layout.center.baseY + 1, mz, mx, layout.center.baseY + C.portalMarkerHeight, mz);
     }
 
     this.group = b.build();

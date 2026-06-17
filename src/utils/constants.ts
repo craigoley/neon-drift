@@ -1407,8 +1407,19 @@ export const ZEN_TUNNEL_CAVERN = {
   ceilingRings: 4, // latitude arcs
   ceilingMeridians: 16, // longitude arcs
   ceilingSegments: 24,
+  /** Monument cross-section radius range (the footprint of each scattered obelisk). */
+  monumentMinBaseRadius: 8,
+  monumentMaxBaseRadius: 18,
+  /** Enclosing shell pillar cross-section radius + ring segment count. */
+  shellPillarRadius: 14,
+  shellPillarSegments: 5,
+  /** Meridian arc subdivision steps (how many segments each longitude arc uses). */
+  ceilingMeridianSteps: 6,
   /** A bright halo ring around the RETURN PORTAL so it READS as the clear way back amid the amber. */
   portalMarkerRadius: 62,
+  portalMarkerSegments: 24,
+  portalMarkerUprights: 8,
+  portalMarkerHeight: 16,
   portalMarkerColor: 0x00ffff, // cyan — pops against the all-amber cavern (= "the exit")
   /** Amber/gold palette the cavern neon is drawn from (per-structure pick, bloom-lit). */
   amberPalette: [0xffcc33, 0xff9a3c, 0xffe08a],

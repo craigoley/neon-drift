@@ -1425,6 +1425,45 @@ export const ZEN_TUNNEL_CAVERN = {
   amberPalette: [0xffcc33, 0xff9a3c, 0xffe08a],
 } as const;
 
+/**
+ * Zen TUNNEL DRIVE-DOWN (Stage A: PROVE THE SEAM) — docs/zen-tunnel-drivedown-recon.md. The goal of
+ * this slice is to prove a continuous drive from the tunnel floor onto a DEEP DRIVABLE BASIN (a sunken
+ * drive-around room at the tunnel's deep centre) can be made POP-FREE — re-opening surfaceUnder (the
+ * #148/#149/#153/#154 bump-saga code). FLAG-GATED + OFF by default: production keeps the #158 warp and
+ * the normal tunnel surface is byte-identical (surfaceUnder returns null outside the tube exactly as
+ * before). The extended seam canary flips `enabled` on to drive the actual seam.
+ *
+ * THE SEAM RULE (why this is pop-free):
+ *  (1) Y-EQUALITY by CROSS-ANCHORING: the basin floor Y uses the SAME reference as the tube's deepest
+ *      floor — heightAt(tunnel CENTRE) − tunnelDepth·scale — NOT heightAt(basin point). So where the
+ *      basin meets the tube wall (and the tube is at FULL depth there, see (3)) the Y is EQUAL.
+ *  (2) COVERAGE: covered = (in tube) OR (in basin) — the basin surrounds the tube's deep core, so
+ *      leaving the tube sideways lands on the basin (never a frame of terrain → no pop).
+ *  (3) The whole basin is kept INSIDE the tube's deep core: basinRimRadius·scale < tunnelDepthEaseStart
+ *      · halfL (650 @ scale 1, 877 @ scaleMax). So the tube is at FULL depth (tunnelDepthFactor = 1)
+ *      everywhere the basin touches it → the wall seam is Y-equal by construction.
+ *  (4) UNIFIED MESH: the basin floor mesh + the followed surface BOTH key off tunnelBasinDepthFactor
+ *      (one definition — the #149 rule extended to the new floor).
+ */
+export const ZEN_DRIVEDOWN = {
+  /** Master flag. OFF = production (the #158 warp; the tunnel surface is byte-identical to before).
+   *  The seam canary sets this true to drive the basin. */
+  enabled: false,
+  /** Dead-flat deep floor radius (the drive-around room core), pre-scale (× lm.scale like the tube).
+   *  The tube wall (≤ halfWidth 46 from the axis) sits well inside this → the seam is flat-deep. */
+  basinFlatRadius: 280,
+  /** Room rim radius — the basin eases UP from the deep floor to terrain between flatRadius and here
+   *  (the room "wall"). MUST stay < tunnelDepthEaseStart·halfL so the basin only ever abuts the tube
+   *  where the tube is at full depth (the seam-rule guarantee). 520 < 650 (scale 1); 702 < 877 (max). */
+  basinRimRadius: 520,
+  /** Radial spokes in the basin floor mesh (the "drive here" reads from centre to rim). */
+  basinSpokes: 16,
+  /** Basin ring segment count = tunnelArcSegments × this (more segments → smoother concentric rings). */
+  basinArcSegmentScale: 3,
+  /** Basin ring spacing = tunnelFloorRungSpacing × this (wider rings → less visual clutter at scale). */
+  basinRingSpacingScale: 2,
+} as const;
+
 export const ZEN_SECRET = {
   /** Far base coordinate the secret region sits near — well beyond normal roam (its nearest
    *  GATEWAY becomes the arrival + return portal). Fixed for the slice. */

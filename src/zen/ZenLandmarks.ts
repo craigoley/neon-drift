@@ -15,7 +15,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL } from '../utils/constants';
+import { ZEN_LANDMARK, ZEN_TUNNEL_VISUAL, ZEN_DRIVEDOWN } from '../utils/constants';
 import { smoothstep } from './ZenNoise';
 import { heightAt } from './ZenHeight';
 import { deflectPoint } from './ZenWorld';
@@ -30,6 +30,7 @@ import {
   openingRadius,
   tunnelBendShape,
   tunnelDepthFactor,
+  tunnelBasinDepthFactor,
   type Landmark,
   type LandmarkType,
   LANDMARK_RING,
@@ -76,6 +77,10 @@ interface Active {
   //     id so each tunnel looks distinct. Per-instance geometry (NOT shared) → disposed on cull. ---
   decorMesh: THREE.LineSegments | null;
   decorMaterial: THREE.LineBasicMaterial | null;
+  // --- drive-down BASIN floor (tunnel only, FLAG-GATED; null otherwise): the deep drive-around room
+  //     floor mesh, built from the SAME tunnelBasinDepthFactor as the followed surface (#149 unify). ---
+  basinMesh: THREE.LineSegments | null;
+  basinMaterial: THREE.LineBasicMaterial | null;
 }
 
 const _white = new THREE.Color(0xffffff);
@@ -90,6 +95,9 @@ export class ZenLandmarks {
   private readonly rippleGeo: THREE.RingGeometry;
   /** Shared TUNNEL FLOOR geometry (the cyan road) — built once, referenced by every tunnel instance. */
   private readonly tunnelFloorGeo: THREE.BufferGeometry;
+  /** Shared drive-down BASIN floor geometry (the deep room floor) — built once, referenced by every
+   *  tunnel instance when the drive-down flag is on. */
+  private readonly tunnelBasinGeo: THREE.BufferGeometry;
   private readonly active = new Map<number, Active>();
   /** Reused resolve scratch (no per-frame allocation). */
   private readonly _resolve = { x: 0, z: 0 };
@@ -107,6 +115,7 @@ export class ZenLandmarks {
     this.rippleGeo = new THREE.RingGeometry(ZEN_LANDMARK.gateRippleInnerRatio, 1, ZEN_LANDMARK.gateSegments);
     // The cyan tunnel road (shared across tunnel instances).
     this.tunnelFloorGeo = this.buildTunnelFloor();
+    this.tunnelBasinGeo = this.buildTunnelBasinFloor();
   }
 
   /** Count of in-range landmark instances currently streamed in (read-only; the validation sweep's
@@ -142,6 +151,8 @@ export class ZenLandmarks {
         if (a.floorMaterial) a.floorMaterial.dispose();
         if (a.decorMesh) { a.decorMesh.removeFromParent(); a.decorMesh.geometry.dispose(); }
         if (a.decorMaterial) a.decorMaterial.dispose();
+        if (a.basinMesh) a.basinMesh.removeFromParent(); // shared geo (tunnelBasinGeo) — don't dispose here
+        if (a.basinMaterial) a.basinMaterial.dispose();
         this.active.delete(id);
       }
     }
@@ -208,9 +219,10 @@ export class ZenLandmarks {
         ZEN_LANDMARK.drawRadius,
         dist,
       );
-      // The tunnel road + the wall crystals fade with the tube (same distance emerge).
+      // The tunnel road + the wall crystals + the basin floor fade with the tube (same distance emerge).
       if (a.floorMaterial) a.floorMaterial.opacity = a.material.opacity;
       if (a.decorMaterial) a.decorMaterial.opacity = a.material.opacity;
+      if (a.basinMaterial) a.basinMaterial.opacity = a.material.opacity;
     }
 
     // Remember the car position for next frame's gate plane-crossing test.
@@ -351,6 +363,27 @@ export class ZenLandmarks {
       }
     }
 
+    // DRIVE-DOWN BASIN FLOOR (tunnel only, FLAG-GATED) — the deep room floor, SHARED geometry built
+    // from the same tunnelBasinDepthFactor as the followed surface (#149). Same centre-anchor transform
+    // as the tube floor (position.y = groundY = heightAt(centre)), so it sits exactly where the car drives.
+    let basinMesh: THREE.LineSegments | null = null;
+    let basinMaterial: THREE.LineBasicMaterial | null = null;
+    if (lm.type === LANDMARK_TUNNEL && ZEN_DRIVEDOWN.enabled) {
+      basinMaterial = new THREE.LineBasicMaterial({
+        color: ZEN_LANDMARK.tunnelFloorColor, // cyan road, like the tube floor
+        transparent: true,
+        opacity: 1,
+        fog: false,
+        depthWrite: false,
+      });
+      basinMesh = new THREE.LineSegments(this.tunnelBasinGeo, basinMaterial);
+      basinMesh.position.set(lm.x, groundY, lm.z);
+      basinMesh.rotation.y = lm.rotationY;
+      basinMesh.scale.setScalar(lm.scale);
+      basinMesh.frustumCulled = false;
+      this.scene.add(basinMesh);
+    }
+
     this.active.set(lm.id, {
       landmark: lm,
       mesh,
@@ -367,6 +400,8 @@ export class ZenLandmarks {
       floorMaterial,
       decorMesh,
       decorMaterial,
+      basinMesh,
+      basinMaterial,
     });
   }
 
@@ -380,11 +415,14 @@ export class ZenLandmarks {
       if (a.floorMaterial) a.floorMaterial.dispose();
       if (a.decorMesh) { a.decorMesh.removeFromParent(); a.decorMesh.geometry.dispose(); }
       if (a.decorMaterial) a.decorMaterial.dispose();
+      if (a.basinMesh) a.basinMesh.removeFromParent();
+      if (a.basinMaterial) a.basinMaterial.dispose();
     }
     this.active.clear();
     for (const g of this.geo) g.dispose();
     this.rippleGeo.dispose();
     this.tunnelFloorGeo.dispose();
+    this.tunnelBasinGeo.dispose();
   }
 
   // --- geometry builders (local space, before the per-landmark scale; base sits at y=0) ---
@@ -666,6 +704,40 @@ export class ZenLandmarks {
       prev = { l, m, r, y: fy };
     }
     return ZenLandmarks.lineGeo(p, c);
+  }
+
+  /** DRIVE-DOWN BASIN FLOOR (Stage A) — the cyan neon ROAD of the deep drive-around room at the
+   *  tunnel's deep centre. Concentric rings + radial spokes at local Y = −tunnelDepth·basinDepthFactor(r)
+   *  — the SAME tunnelBasinDepthFactor the followed surface uses (the #149 unify, extended). Built at
+   *  scale 1 (radii pre-scale); the instance mesh.scale matches the surface's scaled radii. */
+  private buildTunnelBasinFloor(): THREE.BufferGeometry {
+    const p: number[] = [];
+    const rim = ZEN_DRIVEDOWN.basinRimRadius;
+    const localY = (r: number) => -ZEN_LANDMARK.tunnelDepth * tunnelBasinDepthFactor(r, 1);
+    const seg = ZEN_LANDMARK.tunnelArcSegments * ZEN_DRIVEDOWN.basinArcSegmentScale;
+    const ringStep = ZEN_LANDMARK.tunnelFloorRungSpacing * ZEN_DRIVEDOWN.basinRingSpacingScale;
+    // Concentric rings (radius r), each at its basin-depth Y.
+    for (let r = ringStep; r <= rim + 1e-6; r += ringStep) {
+      const y = localY(r);
+      let px = r, pz = 0;
+      for (let i = 1; i <= seg; i++) {
+        const a = (i / seg) * Math.PI * 2;
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        p.push(px, y, pz, x, y, z);
+        px = x; pz = z;
+      }
+    }
+    // Radial spokes from centre to rim (each a depth-following polyline) — the "drive here" floor reads.
+    const spokes = ZEN_DRIVEDOWN.basinSpokes;
+    for (let k = 0; k < spokes; k++) {
+      const a = (k / spokes) * Math.PI * 2, ca = Math.cos(a), sa = Math.sin(a);
+      let pr = 0;
+      for (let r = ringStep; r <= rim + 1e-6; r += ringStep) {
+        p.push(ca * pr, localY(pr), sa * pr, ca * r, localY(r), sa * r);
+        pr = r;
+      }
+    }
+    return ZenLandmarks.lineGeo(p);
   }
 
   /** RING / PORTAL — a vertical neon ring (hole faces ±Z) you drive through; bottom dips below

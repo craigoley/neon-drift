@@ -23,6 +23,7 @@ import { ZenSpeedStreaks } from './ZenSpeedStreaks';
 import { ZenBiomeView } from './ZenBiomeView';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
 import { ZenLandmarks } from './ZenLandmarks';
+import { ZenCavern } from './ZenCavern';
 import { ZenPost } from './ZenPost';
 import { drivableSurfaceY, surfaceSlopeAlong } from './ZenLandmarkSurface';
 import { buildSlideMesh, disposeSlideMesh } from './ZenSkySlide';
@@ -38,6 +39,9 @@ export class ZenRenderer {
   private readonly terrain: ZenTerrain;
   private readonly scenery: ZenScenery;
   private readonly landmarks: ZenLandmarks;
+  /** The beautiful tunnel-payoff CAVERN (centerpiece + monuments + shell + ceiling) — built once,
+   *  shown only while inside the tunnel space. Visual decoration on the existing ground. */
+  private readonly cavern: ZenCavern;
   private readonly shadow: ZenShadow;
   private readonly stars: ZenStarfield;
   private readonly biomeView: ZenBiomeView;
@@ -90,6 +94,9 @@ export class ZenRenderer {
 
     // Rare neon LANDMARKS — beacons you spot from afar + journey to (streamed + reach pulses).
     this.landmarks = new ZenLandmarks(this.scene, ZEN.worldSeed);
+
+    // The tunnel payoff CAVERN — a vast amber space at the tunnel region (hidden until you warp in).
+    this.cavern = new ZenCavern(this.scene, ZEN.worldSeed);
 
     // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
     this.shadow = new ZenShadow(this.scene);
@@ -178,6 +185,7 @@ export class ZenRenderer {
   setTunnelSecret(active: boolean): void {
     this.tunnelSecretActive = active;
     this.terrain.setTunnelSecret(active); // force the GRID floor amber too
+    this.cavern.setActive(active); // reveal the cavern (centerpiece + monuments + ceiling)
   }
 
   /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a
@@ -330,6 +338,7 @@ export class ZenRenderer {
     this.terrain.dispose();
     this.scenery.dispose();
     this.landmarks.dispose();
+    this.cavern.dispose();
     this.stars.dispose();
     this.streaks.dispose();
     this.post.dispose();

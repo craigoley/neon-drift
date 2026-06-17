@@ -13,7 +13,7 @@
 
 import { hashNoise } from '../utils/rng';
 import { lerp } from '../utils/math';
-import { ZEN, ZEN_LANDMARK } from '../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_DRIVEDOWN } from '../utils/constants';
 import { chunkKey } from './ZenWorld';
 import { maskAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
@@ -102,6 +102,17 @@ export function tunnelBendShape(t: number): number {
  */
 export function tunnelDepthFactor(tNorm: number): number {
   return 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(tNorm));
+}
+
+/**
+ * The DRIVE-DOWN BASIN's depth factor at radial distance `r` (world units) from the tunnel centre, for
+ * a landmark of `scale` — 1 on the flat-deep room floor (r ≤ basinFlatRadius·scale), easing to 0 at the
+ * room rim (basinRimRadius·scale). The ONE source of truth for the basin floor — BOTH the followed
+ * surface (ZenLandmarkSurface) AND the rendered basin mesh (ZenLandmarks) call this, the #149
+ * unified-floor rule extended to the new floor. Multiply by `tunnelDepth·scale` for the drop below the
+ * SAME centre anchor the tube uses (heightAt(centre)) → the wall seam is Y-equal (the SEAM RULE). */
+export function tunnelBasinDepthFactor(r: number, scale: number): number {
+  return 1 - smoothstep(ZEN_DRIVEDOWN.basinFlatRadius * scale, ZEN_DRIVEDOWN.basinRimRadius * scale, r);
 }
 
 /**

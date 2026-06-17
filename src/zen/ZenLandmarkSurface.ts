@@ -14,10 +14,10 @@
  * Only VISTA + TUNNEL landmarks reshape the surface; everywhere else this is just `heightAt`.
  */
 
-import { ZEN, ZEN_LANDMARK, ZEN_SLIDE } from '../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_SLIDE, ZEN_DRIVEDOWN } from '../utils/constants';
 import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
-import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
+import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, tunnelBasinDepthFactor, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
 
 /** Reused scratch for surfaceUnder results (no per-frame allocation). */
 const _su = { y: 0, enclosed: false };
@@ -66,7 +66,26 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
   const eps = halfL * 1e-3;
   const bendSlope = (amp * tunnelBendShape((along + eps) / halfL) - amp * tunnelBendShape((along - eps) / halfL)) / (2 * eps);
   const d = Math.abs(perp - bendOff) / Math.sqrt(1 + bendSlope * bendSlope);
-  if (s >= halfL || d >= hw) return null;
+  if (s >= halfL || d >= hw) {
+    // OUTSIDE the tube. Normally → null (terrain). STAGE A DRIVE-DOWN (flag-gated, OFF in production):
+    // a DEEP DRIVABLE BASIN — a sunken drive-around room at the tunnel's deep centre that the tube
+    // floor hands off to with NO pop (the SEAM RULE). When the flag is OFF this block is skipped and
+    // the tunnel branch is byte-identical to before (the normal tunnel + the #154 canary unchanged).
+    if (ZEN_DRIVEDOWN.enabled) {
+      const r = Math.sqrt(along * along + perp * perp); // distance from the tunnel CENTRE (the deep point)
+      if (r < ZEN_DRIVEDOWN.basinRimRadius * lm.scale) {
+        // CROSS-ANCHOR (the critical line): the basin drops below the SAME heightAt(tunnel CENTRE) the
+        // tube's deepest floor uses — NOT heightAt(this point). The whole basin sits inside the tube's
+        // deep core (basinRim < easeStart·halfL, see constants), so where it abuts the tube wall the
+        // tube is at FULL depth (tunnelDepthFactor = 1) → basin Y EQUALS tube floor Y → pop-free.
+        const basinDepth = ZEN_LANDMARK.tunnelDepth * lm.scale * tunnelBasinDepthFactor(r, lm.scale);
+        _su.y = heightAt(seed, lm.x, lm.z) - basinDepth;
+        _su.enclosed = basinDepth >= ZEN_LANDMARK.tunnelEnclosedDepth;
+        return _su;
+      }
+    }
+    return null;
+  }
   // The floor: terrain at the tunnel CENTRE minus the shared depth profile — EXACTLY the rendered
   // mesh's world Y (heightAt(centre) + scale·localFloorY), at any lateral offset within the tube.
   const depth = ZEN_LANDMARK.tunnelDepth * lm.scale * tunnelDepthFactor(along / halfL);

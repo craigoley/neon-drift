@@ -43,10 +43,11 @@ function gradientBase(p: number): RGB {
   return [lerp(MID[0], DEEP[0], t), lerp(MID[1], DEEP[1], t), lerp(MID[2], DEEP[2], t)];
 }
 
-/** The TUBE wall/ceiling colour at descent progress p: the full gradient, brightened toward the deep
- *  end (the subtle bloom ramp). Components may exceed 1 (HDR-ish → bloom flares them). */
+/** The TUBE wall/ceiling colour at descent progress p: the full gradient, scaled by tubeBrightness and
+ *  brightened toward the deep end (the subtle bloom ramp). Held UNDER 1.0 (rich neon that GLOWS via
+ *  bloom #128 without the dense enclosed lines clipping to a white blow-out). */
 export function tunnelTubeRGB(p: number): RGB {
-  const b = 1 + ZEN_TUNNEL_VISUAL.deepBrightness * p;
+  const b = ZEN_TUNNEL_VISUAL.tubeBrightness * (1 + ZEN_TUNNEL_VISUAL.deepBrightness * p);
   const g = gradientBase(p);
   return [g[0] * b, g[1] * b, g[2] * b];
 }

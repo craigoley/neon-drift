@@ -1371,6 +1371,60 @@ export const ZEN_TUNNEL_SECRET = {
   returnGuardDistance: 160,
 } as const;
 
+/**
+ * Zen TUNNEL CAVERN — the BEAUTIFUL build of the tunnel payoff space (Stage 4 follow-up). A vast
+ * amber/gold underground cavern you EMERGE into: a striking CENTERPIECE spire straight ahead (the awe
+ * moment), MONUMENTS scattered around the open floor to drive toward + carve around, and a distant
+ * enclosing SHELL of pillars + an overhead ceiling dome that sells the "huge enclosed space". ALL
+ * visual/decorative neon line-work on the EXISTING flat drivable ground (anchored to heightAt) — NO
+ * terrain sculpting, NO new drivable surface (surfaceUnder untouched). Bloom-lit (#128); fog:false so
+ * the gold reads across the haze. Built once, shown only while inside the tunnel space.
+ */
+export const ZEN_TUNNEL_CAVERN = {
+  /** Centerpiece distance from the return portal along its through-axis (the inward direction the car
+   *  FACES on arrival — arrivalPose) so you emerge looking straight at it. (Arrival sits 80u in.) */
+  centerDist: 460,
+  /** The CENTERPIECE spire: a tall tapering stack of amber rings + vertical edges + a base halo. */
+  centerpieceHeight: 130,
+  centerpieceBaseRadius: 34,
+  centerpieceRings: 7,
+  centerpieceSegments: 16,
+  centerpieceHaloRadius: 60,
+  /** MONUMENTS: structures scattered (seeded) around the centerpiece — landmarks to weave through. */
+  monumentCount: 12,
+  monumentMinRadius: 180, // keep them off the centerpiece...
+  monumentMaxRadius: 760, // ...and within the open inner floor
+  monumentMinHeight: 30,
+  monumentMaxHeight: 92,
+  monumentSegments: 6, // a faceted obelisk cross-section
+  /** Enclosing SHELL: a far ring of tall pillars that walls the vast space (visual only — no collision). */
+  shellCount: 28,
+  shellRadius: 1900,
+  shellHeight: 260,
+  /** Overhead CEILING dome (line arcs converging above the centre) — the "roof" of the cavern. */
+  ceilingRadius: 2000,
+  ceilingHeight: 640,
+  ceilingRings: 4, // latitude arcs
+  ceilingMeridians: 16, // longitude arcs
+  ceilingSegments: 24,
+  /** Monument cross-section radius range (the footprint of each scattered obelisk). */
+  monumentMinBaseRadius: 8,
+  monumentMaxBaseRadius: 18,
+  /** Enclosing shell pillar cross-section radius + ring segment count. */
+  shellPillarRadius: 14,
+  shellPillarSegments: 5,
+  /** Meridian arc subdivision steps (how many segments each longitude arc uses). */
+  ceilingMeridianSteps: 6,
+  /** A bright halo ring around the RETURN PORTAL so it READS as the clear way back amid the amber. */
+  portalMarkerRadius: 62,
+  portalMarkerSegments: 24,
+  portalMarkerUprights: 8,
+  portalMarkerHeight: 16,
+  portalMarkerColor: 0x00ffff, // cyan — pops against the all-amber cavern (= "the exit")
+  /** Amber/gold palette the cavern neon is drawn from (per-structure pick, bloom-lit). */
+  amberPalette: [0xffcc33, 0xff9a3c, 0xffe08a],
+} as const;
+
 export const ZEN_SECRET = {
   /** Far base coordinate the secret region sits near — well beyond normal roam (its nearest
    *  GATEWAY becomes the arrival + return portal). Fixed for the slice. */

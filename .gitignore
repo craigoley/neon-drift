@@ -32,3 +32,6 @@ e2e/**/*-darwin.png
 *.njsproj
 *.sln
 *.sw?
+
+# Lighthouse CI reports (generated)
+.lighthouseci

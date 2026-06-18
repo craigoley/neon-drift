@@ -1446,16 +1446,36 @@ export const ZEN_TUNNEL_CAVERN = {
  *      (one definition — the #149 rule extended to the new floor).
  */
 export const ZEN_DRIVEDOWN = {
-  /** Master flag. OFF = production (the #158 warp; the tunnel surface is byte-identical to before).
-   *  The seam canary sets this true to drive the basin. */
-  enabled: false,
+  /** Master flag — now the DEFAULT (Stage C1): the continuous drive-down (asymmetric tunnel + the deep
+   *  drivable basin + the relocated cavern + the POSITIONAL amber state) is the shipping tunnel payoff.
+   *  Set to FALSE to fall back to the #158 WARP (the symmetric tunnel + teleport), which is RETAINED in
+   *  the code (doTeleport 'tunnel' branch + inTunnelSpace) — re-enableable, not deleted. The seam/asym
+   *  canaries set this explicitly per-test; this default is what the rest of the suite runs under. */
+  enabled: true,
   /** Dead-flat deep floor radius (the drive-around room core), pre-scale (× lm.scale like the tube).
    *  The tube wall (≤ halfWidth 46 from the axis) sits well inside this → the seam is flat-deep. */
   basinFlatRadius: 280,
   /** Room rim radius — the basin eases UP from the deep floor to terrain between flatRadius and here
-   *  (the room "wall"). MUST stay < tunnelDepthEaseStart·halfL so the basin only ever abuts the tube
-   *  where the tube is at full depth (the seam-rule guarantee). 520 < 650 (scale 1); 702 < 877 (max). */
+   *  (the room "wall"). MUST stay < tunnelDepthEaseStart·halfL so the CENTRE disc only ever abuts the
+   *  tube where the tube is at full depth (the seam-rule guarantee). 520 < 650 (scale 1); 702 < 877. */
   basinRimRadius: 520,
+  /** STAGE C1 — FAR-TERMINUS coverage. The Stage B asymmetric tunnel holds full depth to the far mouth,
+   *  which (Stage A's centre disc alone) left the far end terminating at the deep floor against terrain
+   *  (B's flagged latent step). The far coverage extends the deep-flat region from the disc THROUGH the
+   *  held-deep far half and just PAST the far mouth, then eases up to terrain over this back-wall margin
+   *  (world units, pre-scale). Same grade family as the disc rim (basinRimRadius − basinFlatRadius = 240)
+   *  so the back wall is as gentle as the proven room wall. The lateral ease of the far corridor REUSES
+   *  basinFlatRadius/basinRimRadius (the corridor is the disc swept along the far axis), so at along = 0
+   *  the far profile == the disc → seamless union (max) with the Stage A centre disc (unchanged). */
+  basinFarMargin: 240,
+  /** STAGE C1 — POSITIONAL cavern/palette state (replaces the warp-event trigger). You are "in the
+   *  cavern" when the drivable surface sits this far BELOW the local terrain roof (world units) — i.e.
+   *  you've descended into the deep tube/basin. Hysteresis dead-band (enter deeper than exit) so the
+   *  amber palette + cavern don't flicker at the threshold: ENTER past cavernEnterDepth, REVERT only
+   *  once shallower than cavernExitDepth. tunnelDepth·scale ≈ 40–54, so ~28/16 sits firmly in the deep
+   *  half (depthFactor ≳ 0.6) to enter and well up the ramp to leave. */
+  cavernEnterDepth: 28,
+  cavernExitDepth: 16,
   /** Radial spokes in the basin floor mesh (the "drive here" reads from centre to rim). */
   basinSpokes: 16,
   /** Basin ring segment count = tunnelArcSegments × this (more segments → smoother concentric rings). */

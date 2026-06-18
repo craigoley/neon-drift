@@ -35,7 +35,19 @@ import { createZenVehicle, updateVertical } from '../ZenVehicle';
 import { rampCenterForCell, maskAt, heightAt } from '../ZenHeight';
 import { deflectPoint } from '../ZenWorld';
 import { gatherMarkers } from '../ZenMinimapModel';
-import { ZEN, ZEN_LANDMARK } from '../../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_DRIVEDOWN } from '../../utils/constants';
+
+/** Run `fn` with the drive-down basin OFF (the WARP-fallback symmetric tunnel: both mouths ease to
+ *  terrain). The far mouth's "resurface" + "back to terrain at the mouth" are fallback behaviours now
+ *  that the drive-down DEFAULT holds the far half deep + covers the terminus with the basin. */
+function withSymmetricTunnel(fn: () => void): void {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const prev = (ZEN_DRIVEDOWN as any).enabled;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (ZEN_DRIVEDOWN as any).enabled = false;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  try { fn(); } finally { (ZEN_DRIVEDOWN as any).enabled = prev; }
+}
 
 const SEED = ZEN.worldSeed;
 
@@ -400,19 +412,24 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
 
   it('TUNNEL: the car goes BELOW the terrain (a first), eased to the terrain at the mouth', () => {
     const t = findType(LANDMARK_TUNNEL);
-    // Centre: the drivable surface is BELOW heightAt by ~tunnelDepth — the car is underground.
+    // Centre: the drivable surface is BELOW heightAt by ~tunnelDepth — the car is underground. (Deep at
+    // the centre is true under BOTH the drive-down default and the warp fallback.)
     expect(onLandmarkSurface(SEED, t.x, t.z)).toBe(true);
     const drop = heightAt(SEED, t.x, t.z) - drivableSurfaceY(SEED, t.x, t.z);
     expect(drop).toBeGreaterThan(ZEN_LANDMARK.tunnelDepth * t.scale * 0.85);
     expect(inEnclosedTunnel(SEED, t.x, t.z)).toBe(true); // deep → enclosed
     // At the mouth (half-length along the through-axis): back to terrain level (eased entry, no snap).
-    const tx = Math.sin(t.rotationY);
-    const tz = Math.cos(t.rotationY);
-    const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
-    const mouthX = t.x + tx * (halfL + 4);
-    const mouthZ = t.z + tz * (halfL + 4);
-    expect(onLandmarkSurface(SEED, mouthX, mouthZ)).toBe(false);
-    expect(drivableSurfaceY(SEED, mouthX, mouthZ)).toBe(heightAt(SEED, mouthX, mouthZ));
+    // This is the SYMMETRIC tunnel (warp fallback) — under the drive-down default the FAR mouth holds
+    // deep + the basin covers it (no resurface there); the eased-mouth check is the fallback's.
+    withSymmetricTunnel(() => {
+      const tx = Math.sin(t.rotationY);
+      const tz = Math.cos(t.rotationY);
+      const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
+      const mouthX = t.x + tx * (halfL + 4);
+      const mouthZ = t.z + tz * (halfL + 4);
+      expect(onLandmarkSurface(SEED, mouthX, mouthZ)).toBe(false);
+      expect(drivableSurfaceY(SEED, mouthX, mouthZ)).toBe(heightAt(SEED, mouthX, mouthZ));
+    });
   });
 
   it('the tunnel PATH CURVES, and the tube CONTAINS its own curve (no pop off the straight axis — #148)', () => {
@@ -456,7 +473,10 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     expect(enclosedSpan / ZEN.maxSpeed).toBeGreaterThan(6); // seconds enclosed
   });
 
-  it('a FULL traverse following the CURVE (descend → enclosed → ascend → resurface) never snaps', () => {
+  // SYMMETRIC tunnel (warp fallback): the original descend→enclosed→ascend→RESURFACE-at-the-far-mouth
+  // traverse. Under the drive-down default the far half holds deep + the basin covers the terminus, so
+  // there's no far-mouth resurface — that's the new drive-down canary's job. Asserted with the basin off.
+  it('a FULL traverse following the CURVE (descend → enclosed → ascend → resurface) never snaps', () => withSymmetricTunnel(() => {
     const t = findType(LANDMARK_TUNNEL);
     const halfL = ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
     const dt = 1 / 60;
@@ -486,7 +506,7 @@ describe('Zen landmarks — VISTA raises + TUNNEL lowers the drivable surface (t
     expect(onCurveDeep).toBe(true); // stayed on the floor through the curved deep section
     expect(resurfaced).toBe(true); // and came back out the far mouth
     expect(maxStep).toBeLessThanOrEqual(ZEN.maxLandStep + 1e-6); // eased the whole way — no teleport
-  });
+  }));
 
   it('crest-detach is SUPPRESSED on a landmark surface (allowAir=false never goes airborne)', () => {
     const dt = 1 / 60;

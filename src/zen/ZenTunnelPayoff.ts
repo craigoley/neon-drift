@@ -69,6 +69,23 @@ export function passedDeepPoint(prevAlong: number | null, along: number): boolea
   return (prevAlong > 0 && along <= 0) || (prevAlong < 0 && along >= 0);
 }
 
+/** The TUNNEL whose deep end the car is at/near (Stage C1 drive-down cavern placement). Unlike
+ *  coveringTunnel (tube membership only — null once you leave the tube sideways onto the basin), this
+ *  returns the nearest tunnel landmark by CENTRE distance within the surface query radius, so it still
+ *  resolves while you're driving the deep basin/cavern floor outside the tube. Tunnels are rare → at
+ *  most one is in range; null if none. Used to place the cavern decoration at this tunnel's deep floor. */
+export function nearestTunnel(seed: number, x: number, z: number): Landmark | null {
+  const near = landmarksInRadius(seed, x, z, ZEN_LANDMARK.surfaceQueryRadius);
+  let best: Landmark | null = null;
+  let bestD2 = Infinity;
+  for (const lm of near) {
+    if (lm.type !== LANDMARK_TUNNEL) continue;
+    const d2 = (lm.x - x) * (lm.x - x) + (lm.z - z) * (lm.z - z);
+    if (d2 < bestD2) { bestD2 = d2; best = lm; }
+  }
+  return best;
+}
+
 /** The tunnel-payoff region's arrival + RETURN portal — the GATEWAY nearest its far coordinate band.
  *  Deterministic (reuses the secret-area Chebyshev scan, pointed at the DISTINCT tunnel region). */
 export function tunnelReturnPortal(seed: number): Landmark {

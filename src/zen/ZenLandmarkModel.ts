@@ -132,6 +132,33 @@ export function tunnelBasinDepthFactor(r: number, scale: number): number {
 }
 
 /**
+ * The DRIVE-DOWN BASIN's combined depth factor at axial `along` + perpendicular `perp` (world units)
+ * from the tunnel centre, for a landmark of `scale` — the ONE source of truth for the deep drive-around
+ * room AND its far-terminus coverage (Stage C1), shared by the followed surface (ZenLandmarkSurface) and
+ * any basin mesh. It is the MAX of two profiles, both dropping below the SAME heightAt(centre) anchor the
+ * tube uses (so every wall seam is Y-equal — the SEAM RULE):
+ *   • the CENTRE DISC (Stage A): tunnelBasinDepthFactor(r) — the radial room at the tunnel centre,
+ *     unchanged, so the proven Stage A/B probes are byte-identical.
+ *   • the FAR CORRIDOR (Stage C1, far half only — clipped to along ≥ 0 so the proven entry side is
+ *     untouched): the held-deep far half swept into a room — the tube's own along profile
+ *     (tunnelDepthFactor, = 1 across the deep far half under the asymmetric flag) × a lateral ease that
+ *     REUSES the disc radii (so at along = 0 it equals the disc → seamless union) × a far back-wall ease
+ *     that holds deep to the far mouth (along = halfL) then eases to terrain over basinFarMargin. This
+ *     COVERS Stage B's latent far-mouth terminus: leaving the far end lands on the deep room, no step.
+ * Multiply by tunnelDepth·scale for the drop below heightAt(centre). 0 ⇒ this point is plain terrain.
+ */
+export function tunnelBasinCoverageFactor(along: number, perp: number, halfL: number, scale: number): number {
+  const r = Math.sqrt(along * along + perp * perp);
+  const disc = tunnelBasinDepthFactor(r, scale);
+  if (along < 0) return disc; // entry side: the centre disc only (the proven Stage A/B behaviour)
+  // FAR corridor: deep through the held-deep far half + just past the far mouth, eased to the back wall.
+  const lateral = tunnelBasinDepthFactor(Math.abs(perp), scale);
+  const backWall = 1 - smoothstep(halfL, halfL + ZEN_DRIVEDOWN.basinFarMargin * scale, along);
+  const far = tunnelDepthFactor(along / halfL) * lateral * backWall;
+  return Math.max(disc, far);
+}
+
+/**
  * The landmark in a given cell, or null if the cell carries none (the common case — landmarks
  * are RARE). Deterministic: depends only on (seed, cellX, cellZ). Gated to gentle terrain so the
  * structure is reachable (you can drive up to / through it).

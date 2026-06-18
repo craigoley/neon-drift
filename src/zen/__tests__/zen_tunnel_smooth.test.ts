@@ -8,12 +8,15 @@
  *       lateral offset never reaches the wall → the override never drops to null → no pop to terrain.
  * The FEEL is a phone playtest; "the Y is smooth + on the road" is what's unit-testable.
  */
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, beforeAll, afterAll } from 'vitest';
 import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, LANDMARK_TUNNEL } from '../ZenLandmarkModel';
 import { queryDrivableSurface, surfaceSlopeAlong } from '../ZenLandmarkSurface';
 import { createZenVehicle, updateZen, updateVertical } from '../ZenVehicle';
 import { heightAt } from '../ZenHeight';
-import { ZEN, ZEN_LANDMARK } from '../../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_DRIVEDOWN } from '../../utils/constants';
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const setDriveDown = (on: boolean) => { (ZEN_DRIVEDOWN as any).enabled = on; };
 
 const seed = ZEN.worldSeed;
 const tun = landmarksInRadius(seed, 0, 0, 40000)
@@ -201,6 +204,12 @@ describe('Zen tunnel — driving OFF-CENTRE is SMOOTH (the line a player actuall
 });
 
 describe('Zen tunnel — path-relative membership: in iff TRUE perpendicular distance ≤ halfWidth', () => {
+  // The PURE Frenet tube boundary (#153): "just outside hw → terrain". Under the drive-down DEFAULT the
+  // deep basin extends beyond the tube wall (just-outside is the basin, not terrain — that's the SEAM,
+  // proven pop-free by the drive-down canary). This boundary check is the tube in isolation = the WARP
+  // FALLBACK, so assert it with the basin OFF; the membership maths itself is flag-independent.
+  beforeAll(() => setDriveDown(false));
+  afterAll(() => setDriveDown(true));
   // Place the car at a known PERPENDICULAR distance d from the curved centreline (along its local
   // normal), at several axial positions incl. the bend peak, and assert membership is |d| ≤ hw — the
   // true distance, not the axis-relative gap (#153). Robust to curve steepness (curvature-invariant).

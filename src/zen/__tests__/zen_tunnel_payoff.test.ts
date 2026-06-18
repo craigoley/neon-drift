@@ -12,9 +12,10 @@
  */
 import { describe, expect, it } from 'vitest';
 import { coveringTunnel, passedDeepPoint, tunnelReturnPortal } from '../ZenTunnelPayoff';
-import { snapshot, restore, arrivalPose, findReturnPortal } from '../ZenSecret';
+import { snapshot, arrivalPose, findReturnPortal } from '../ZenSecret';
 import { landmarksInRadius, LANDMARK_TUNNEL, LANDMARK_GATEWAY } from '../ZenLandmarkModel';
 import { createZenVehicle } from '../ZenVehicle';
+import { wrapToPi } from '../../utils/math';
 import { ZEN, ZEN_LANDMARK, ZEN_SECRET_BIOME, ZEN_TUNNEL_SECRET_BIOME } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
@@ -118,24 +119,38 @@ describe('Zen tunnel payoff — the payoff region is a real, deterministic, DIST
   });
 });
 
-describe('Zen tunnel payoff — ENTER → RETURN lands back near the ENTRANCE (not the deep point)', () => {
-  it('save the entrance + warp to the tunnel region + restore = back at the entrance', () => {
-    // The car descends to the deep point; the ENTRANCE was recorded near the mouth (along ~ +halfL).
+describe('Zen tunnel payoff — EXIT warps back to the tunnel ENTRANCE, FACING OUT (the loop closes)', () => {
+  it('returns to the entrance position with the heading REVERSED (pointed out of the tunnel)', () => {
+    // The car enters near the + mouth heading INWARD (forward = −axis, toward the deep centre), descends,
+    // and the ENTRANCE is recorded there (the return target). Forward = (sin h, −cos h).
     const v = createZenVehicle();
     const entrancePt = at(halfL * 0.95); // near the mouth — where the entrance is recorded
-    v.x = entrancePt.x; v.z = entrancePt.z; v.heading = Math.PI - tunnel.rotationY; v.speed = 70;
+    v.x = entrancePt.x; v.z = entrancePt.z;
+    v.heading = -tunnel.rotationY; // forward = (−tx, −tz) = INWARD (toward the deep centre)
+    v.speed = 70;
     const entrance = snapshot(v); // saved at entry (the return target)
+    const inwardFwd = { x: Math.sin(entrance.heading), z: -Math.cos(entrance.heading) };
+    expect(inwardFwd.x * tx + inwardFwd.z * tz).toBeLessThan(0); // sanity: entered heading inward
 
-    // ENTER: at the deep-point trigger, warp to the tunnel region in front of its portal.
+    // ENTER: at the deep-point trigger, warp to the segregated tunnel region in front of its portal.
     const pose = arrivalPose(tunnelReturnPortal(SEED));
     v.x = pose.x; v.z = pose.z; v.heading = pose.heading; v.speed = 0;
     expect(Math.hypot(v.x - entrance.x, v.z - entrance.z)).toBeGreaterThan(100000); // really teleported
 
-    // RETURN: restore the ENTRANCE (near the mouth) — NOT the deep point at along ~ 0.
-    restore(v, entrance);
+    // EXIT (the new hybrid close): warp to the ENTRANCE position, heading REVERSED → facing OUT.
+    v.x = entrance.x; v.z = entrance.z;
+    v.heading = wrapToPi(entrance.heading + Math.PI);
+    v.speed = 0; v.vy = 0; v.airborne = false;
+
+    // Back AT the entrance (near the mouth, far from the deep point)…
     expect(v.x).toBe(entrance.x);
     expect(v.z).toBe(entrance.z);
     const backAlong = (v.x - tunnel.x) * tx + (v.z - tunnel.z) * tz;
-    expect(Math.abs(backAlong)).toBeGreaterThan(halfL * 0.9); // near the entrance, far from the bottom
+    expect(Math.abs(backAlong)).toBeGreaterThan(halfL * 0.9);
+    // …and FACING OUT: the exit forward vector points AWAY from the deep centre (out of the + mouth),
+    // i.e. the exact reverse of the inward entry heading.
+    const outFwd = { x: Math.sin(v.heading), z: -Math.cos(v.heading) };
+    expect(outFwd.x * tx + outFwd.z * tz).toBeGreaterThan(0.999); // points out along +axis (the mouth)
+    expect(outFwd.x * inwardFwd.x + outFwd.z * inwardFwd.z).toBeLessThan(-0.999); // opposite of entry
   });
 });

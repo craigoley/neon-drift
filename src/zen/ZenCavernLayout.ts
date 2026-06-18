@@ -51,18 +51,13 @@ export interface CavernLayout {
  * straight at the centerpiece (the awe moment). Monuments are seeded into the open inner floor; the
  * shell is an even ring of distant pillars. Deterministic in (seed, portal): the same cavern every time.
  */
-export function cavernLayout(seed: number, portal: Landmark, floorBaseY?: number): CavernLayout {
+export function cavernLayout(seed: number, portal: Landmark): CavernLayout {
   const C = ZEN_TUNNEL_CAVERN;
   // The portal through-axis (matches arrivalPose's forward = (sin rot, cos rot)).
   const ax = Math.sin(portal.rotationY);
   const az = Math.cos(portal.rotationY);
   const cx = portal.x + ax * C.centerDist;
   const cz = portal.z + az * C.centerDist;
-  // baseY source: the WARP path leaves structures anchored to the existing terrain (heightAt, default).
-  // The DRIVE-DOWN (Stage C1) passes a FLAT floorBaseY (the deep basin floor is dead-flat at the
-  // cross-anchored deep Y), so every structure sits exactly on the basin floor — and the whole cavern
-  // can then be rigidly RE-PLACED (a Group translation) at the active tunnel's deep centre.
-  const baseAt = (x: number, z: number) => (floorBaseY ?? heightAt(seed, x, z));
 
   const monuments: CavernStructure[] = [];
   for (let i = 0; i < C.monumentCount; i++) {
@@ -73,7 +68,7 @@ export function cavernLayout(seed: number, portal: Landmark, floorBaseY?: number
     monuments.push({
       x,
       z,
-      baseY: baseAt(x, z),
+      baseY: heightAt(seed, x, z),
       height: lerp(C.monumentMinHeight, C.monumentMaxHeight, unit(seed, i, 2)),
       radius: lerp(C.monumentMinBaseRadius, C.monumentMaxBaseRadius, unit(seed, i, 3)),
       rot: unit(seed, i, 4) * Math.PI * 2,
@@ -89,7 +84,7 @@ export function cavernLayout(seed: number, portal: Landmark, floorBaseY?: number
     shell.push({
       x,
       z,
-      baseY: baseAt(x, z),
+      baseY: heightAt(seed, x, z),
       height: C.shellHeight,
       radius: C.shellPillarRadius,
       rot: ang,
@@ -98,7 +93,7 @@ export function cavernLayout(seed: number, portal: Landmark, floorBaseY?: number
   }
 
   return {
-    center: { x: cx, z: cz, baseY: baseAt(cx, cz) },
+    center: { x: cx, z: cz, baseY: heightAt(seed, cx, cz) },
     axis: { x: ax, z: az },
     centerpieceHeight: C.centerpieceHeight,
     monuments,

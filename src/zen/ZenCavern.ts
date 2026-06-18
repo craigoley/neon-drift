@@ -12,7 +12,6 @@ import * as THREE from 'three';
 import { ZEN_TUNNEL_CAVERN } from '../utils/constants';
 import { tunnelReturnPortal } from './ZenTunnelPayoff';
 import { cavernLayout, type CavernStructure } from './ZenCavernLayout';
-import { heightAt } from './ZenHeight';
 
 /** Accumulates line segments per colour, then bakes one LineSegments per colour (few draw calls). */
 class LineBucket {
@@ -71,21 +70,12 @@ function obelisk(b: LineBucket, color: number, s: CavernStructure, segs: number)
 export class ZenCavern {
   private readonly scene: THREE.Scene;
   private readonly group: THREE.Group;
-  /** The cavern centre the geometry is built around (world x/z; the flat build puts every structure at
-   *  y = 0). Placement is a rigid Group translation off this centre — see placeAtFloor. */
-  private readonly centerX: number;
-  private readonly centerZ: number;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.scene = scene;
     const C = ZEN_TUNNEL_CAVERN;
     const portal = tunnelReturnPortal(seed);
-    // Build the cavern on a FLAT floor (baseY = 0): the deep basin floor it now stands on is dead-flat,
-    // and a flat build lets the whole cavern be RE-PLACED at the active tunnel's deep centre with a
-    // single Group translation (placeAtFloor) — for the drive-down (default) and the warp fallback alike.
-    const layout = cavernLayout(seed, portal, 0);
-    this.centerX = layout.center.x;
-    this.centerZ = layout.center.z;
+    const layout = cavernLayout(seed, portal);
     const amber = C.amberPalette;
     const b = new LineBucket();
 
@@ -147,24 +137,12 @@ export class ZenCavern {
 
     this.group = b.build();
     this.group.visible = false; // shown only while inside the tunnel space
-    // Default placement = the WARP fallback's home: the far region at its terrain surface (the flat
-    // build sat at y = 0). The drive-down (default) re-places it per-tunnel via placeAtFloor.
-    this.group.position.y = heightAt(seed, this.centerX, this.centerZ);
     this.scene.add(this.group);
   }
 
   /** Show / hide the cavern (driven by ZenRenderer.setTunnelSecret). */
   setActive(active: boolean): void {
     this.group.visible = active;
-  }
-
-  /** RE-PLACE the cavern so its centre (the centerpiece) sits at world (x, z) on a floor at height y —
-   *  a rigid translation of the flat-built geometry. The DRIVE-DOWN (Stage C1) calls this with the
-   *  active tunnel's deep centre + the cross-anchored deep basin floor Y, so the cavern stands ON the
-   *  basin you drive onto; the warp fallback calls it with the far region's surface Y (its original
-   *  home). Y-only translation keeps the dead-flat floor flat. */
-  placeAtFloor(x: number, z: number, y: number): void {
-    this.group.position.set(x - this.centerX, y, z - this.centerZ);
   }
 
   /** Read-only child count (the bounded-growth canary for the validation sweep). */

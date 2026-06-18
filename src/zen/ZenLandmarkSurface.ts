@@ -14,10 +14,10 @@
  * Only VISTA + TUNNEL landmarks reshape the surface; everywhere else this is just `heightAt`.
  */
 
-import { ZEN, ZEN_LANDMARK, ZEN_SLIDE, ZEN_DRIVEDOWN } from '../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_SLIDE } from '../utils/constants';
 import { heightAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
-import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, tunnelBasinCoverageFactor, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
+import { landmarksInRadius, tunnelBendShape, tunnelDepthFactor, LANDMARK_VISTA, LANDMARK_TUNNEL, type Landmark } from './ZenLandmarkModel';
 
 /** Reused scratch for surfaceUnder results (no per-frame allocation). */
 const _su = { y: 0, enclosed: false };
@@ -66,27 +66,10 @@ function surfaceUnder(seed: number, lm: Landmark, x: number, z: number): { y: nu
   const eps = halfL * 1e-3;
   const bendSlope = (amp * tunnelBendShape((along + eps) / halfL) - amp * tunnelBendShape((along - eps) / halfL)) / (2 * eps);
   const d = Math.abs(perp - bendOff) / Math.sqrt(1 + bendSlope * bendSlope);
-  if (s >= halfL || d >= hw) {
-    // OUTSIDE the tube. Normally → null (terrain). STAGE A DRIVE-DOWN (flag-gated, OFF in production):
-    // a DEEP DRIVABLE BASIN — a sunken drive-around room at the tunnel's deep centre that the tube
-    // floor hands off to with NO pop (the SEAM RULE). When the flag is OFF this block is skipped and
-    // the tunnel branch is byte-identical to before (the normal tunnel + the #154 canary unchanged).
-    if (ZEN_DRIVEDOWN.enabled) {
-      // CROSS-ANCHOR (the critical line): the basin drops below the SAME heightAt(tunnel CENTRE) the
-      // tube's deepest floor uses — NOT heightAt(this point). The combined coverage (Stage A centre disc
-      // ∪ Stage C1 far corridor, tunnelBasinCoverageFactor) is flat-deep wherever it abuts the tube wall
-      // (the tube is at FULL depth there) → basin Y EQUALS tube floor Y → pop-free; and it now COVERS
-      // the held-deep far mouth (B's latent terminus) so leaving the far end lands on the deep room.
-      const depthFactor = tunnelBasinCoverageFactor(along, perp, halfL, lm.scale);
-      if (depthFactor > 0) {
-        const basinDepth = ZEN_LANDMARK.tunnelDepth * lm.scale * depthFactor;
-        _su.y = heightAt(seed, lm.x, lm.z) - basinDepth;
-        _su.enclosed = basinDepth >= ZEN_LANDMARK.tunnelEnclosedDepth;
-        return _su;
-      }
-    }
-    return null;
-  }
+  // OUTSIDE the tube → null (plain terrain). The tunnel is the PROVEN warp-segregated tube: it does NOT
+  // open into a drivable basin (the Stage A–C1 basin/seam was reverted) — you descend to the deep point
+  // and WARP into the hidden cave (ZenTunnelPayoff/ZenSession), so leaving the tube is always terrain.
+  if (s >= halfL || d >= hw) return null;
   // The floor: terrain at the tunnel CENTRE minus the shared depth profile — EXACTLY the rendered
   // mesh's world Y (heightAt(centre) + scale·localFloorY), at any lateral offset within the tube.
   const depth = ZEN_LANDMARK.tunnelDepth * lm.scale * tunnelDepthFactor(along / halfL);
@@ -153,15 +136,6 @@ export function queryDrivableSurface(seed: number, x: number, z: number): { y: n
   _query.y = s ? s.y : heightAt(seed, x, z);
   _query.onSurface = s !== null;
   return _query;
-}
-
-/** How far the drivable surface sits BELOW the local terrain roof at (x, z) — the positional DEPTH
- *  signal (Stage C1). 0 on plain terrain; ≈ tunnelDepth·scale when deep in a tunnel/basin; negative on
- *  a raised vista. The session drives the amber palette + cavern visibility off this (with hysteresis),
- *  replacing the warp-event trigger — you are "in the cavern" because you DROVE down into it, by
- *  position, not by a teleport. Pure (heightAt − drivableSurfaceY) → Node-testable. */
-export function driveDownDepth(seed: number, x: number, z: number): number {
-  return heightAt(seed, x, z) - drivableSurfaceY(seed, x, z);
 }
 
 /** Slope (rise/run) of the DRIVABLE surface along a unit heading — the override-aware analogue of

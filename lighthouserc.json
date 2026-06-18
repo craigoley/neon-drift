@@ -1,0 +1,30 @@
+{
+  "ci": {
+    "collect": {
+      "startServerCommand": "npm run preview -- --port 4173 --strictPort",
+      "url": ["http://localhost:4173/"],
+      "numberOfRuns": 1,
+      "settings": {
+        "//": "Neon Drift boots a THREE.js/WebGL canvas. In headless CI there is no GPU, so WebGL must",
+        "//2": "use software ANGLE/SwiftShader — otherwise the renderer fails to init, the app never",
+        "//3": "mounts, and Lighthouse reports NO_FCP (a blank page). These flags make the game actually",
+        "//4": "boot so the page can be measured.",
+        "chromeFlags": "--headless=new --no-sandbox --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader --ignore-gpu-blocklist"
+      }
+    },
+    "assert": {
+      "//": "WARN only — this gate MEASURES the page (markup/asset/config), it never hard-fails. Performance",
+      "//2": "is deliberately NOT asserted: software SwiftShader in CI inflates TBT/CPU/TTI and the score also",
+      "//3": "reflects the inherent WebGL game loop, not a page defect (interpret perf on a real device).",
+      "assertions": {
+        "categories:accessibility": ["warn", { "minScore": 0.9 }],
+        "categories:best-practices": ["warn", { "minScore": 0.9 }],
+        "categories:seo": ["warn", { "minScore": 0.9 }]
+      }
+    },
+    "upload": {
+      "target": "filesystem",
+      "outputDir": ".lighthouseci"
+    }
+  }
+}

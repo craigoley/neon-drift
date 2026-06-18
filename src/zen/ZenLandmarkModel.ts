@@ -99,8 +99,24 @@ export function tunnelBendShape(t: number): number {
  * the followed drivable surface (ZenLandmarkSurface) call this, so the car sits exactly on the road
  * it sees (diagnosis #148: they used to be two separate definitions → the "bump"). Multiply by
  * `tunnelDepth` (× the landmark scale, in world space) for the actual drop below the floor anchor.
+ *
+ * TWO profiles, selected by the DRIVE-DOWN flag (OFF in production):
+ *  • SYMMETRIC (flag OFF — the #158 warp ships, byte-identical to before): eases to 0 at BOTH mouths
+ *    — you drive in one mouth, down, and the far mouth windows back UP to the surface. (Stage A kept
+ *    this and proved the centre basin seam pop-free behind the flag.)
+ *  • ASYMMETRIC DRIVE-DOWN (flag ON — Stage B): the ENTRY mouth (tNorm < 0) still eases up to the
+ *    surface exactly as the symmetric profile (drive in normally, no snap at the mouth), but the FAR
+ *    half (tNorm ≥ 0) HOLDS FULL DEPTH (factor = 1) instead of windowing back up — so the tunnel
+ *    descends and STAYS deep into the basin seam (the Stage A cross-anchored deep Y). The transition
+ *    is dead-FLAT across the deep core: the symmetric entry profile is already 1 for |tNorm| ≤
+ *    easeStart, so both sides meet at factor = 1 around tNorm = 0 → no kink, the only grade is the
+ *    (unchanged) entry ramp, and the far half is flat-deep → maxStep is trivially bounded. BOTH the
+ *    mesh + the surface read THIS function, so they stay unified (the #149 rule) on the asymmetric
+ *    profile too. The corridor (#154, lateral) is untouched by this along-axis depth change.
  */
 export function tunnelDepthFactor(tNorm: number): number {
+  // FAR half holds full depth ONLY when the drive-down flag is on; otherwise the symmetric ascent ramp.
+  if (ZEN_DRIVEDOWN.enabled && tNorm >= 0) return 1;
   return 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(tNorm));
 }
 

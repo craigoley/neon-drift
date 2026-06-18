@@ -10,11 +10,11 @@
  */
 
 import type { WebGLRenderer } from 'three';
-import { ZEN, ZEN_SECRET, ZEN_TUNNEL_SECRET, ZEN_LANDMARK, ZEN_SLIDE, ZEN_ARCH, ZEN_RING, ZEN_DRIVEDOWN, type CarDef } from '../utils/constants';
-import { clamp } from '../utils/math';
+import { ZEN, ZEN_SECRET, ZEN_TUNNEL_SECRET, ZEN_LANDMARK, ZEN_SLIDE, ZEN_ARCH, ZEN_RING, type CarDef } from '../utils/constants';
+import { clamp, wrapToPi } from '../utils/math';
 import { createZenVehicle, updateZen, updateVertical } from './ZenVehicle';
 import { heightAt } from './ZenHeight';
-import { queryDrivableSurface, surfaceSlopeAlong, vistaDeckUnder, driveDownDepth } from './ZenLandmarkSurface';
+import { queryDrivableSurface, surfaceSlopeAlong, vistaDeckUnder } from './ZenLandmarkSurface';
 import { ZenSlidePath } from './ZenSlidePath';
 import { boostIntensity, boostedMaxSpeed } from './ZenArchBoost';
 import { randomWarpDestination } from './ZenRingWarp';
@@ -27,7 +27,7 @@ import {
   type VehicleSnapshot,
 } from './ZenSecret';
 import { crossedAnyOfType, LANDMARK_ARCH, LANDMARK_RING, type Landmark } from './ZenLandmarkModel';
-import { coveringTunnel, passedDeepPoint, tunnelReturnPortal, nearestTunnel } from './ZenTunnelPayoff';
+import { coveringTunnel, passedDeepPoint, tunnelReturnPortal } from './ZenTunnelPayoff';
 import { ZenRenderer } from './ZenRenderer';
 import { ZenMinimap } from './ZenMinimap';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
@@ -41,10 +41,8 @@ export interface ZenDebugSnapshot {
   airborne: boolean;
   warpPhase: 'none' | 'out' | 'in';
   inSecret: boolean;
-  /** True while inside the tunnel bottom-payoff space (Stage 4 WARP fallback) — distinct from inSecret. */
+  /** True while inside the tunnel bottom-payoff space (Stage 4) — distinct from inSecret. */
   inTunnelSpace: boolean;
-  /** True while in the DRIVE-DOWN cavern (Stage C1, positional — the default tunnel payoff). */
-  inDriveDownCavern: boolean;
   hasSaved: boolean;
   onSlide: boolean;
   slideU: number;
@@ -131,11 +129,6 @@ export class ZenSession {
   /** The tunnel id already triggered this descent (debounce: one payoff per run; cleared on leaving
    *  the tunnel footprint or returning). */
   private tunnelTriggeredId: number | null = null;
-  /** STAGE C1 — the DRIVE-DOWN (default) POSITIONAL cavern flag: true while the car is deep enough in a
-   *  tunnel/basin to be "in the cavern" (amber palette + cavern shown). Driven by driveDownDepth with a
-   *  hysteresis dead-band (enter > cavernEnterDepth, revert < cavernExitDepth) so it never flickers.
-   *  Distinct from inTunnelSpace (the WARP fallback's teleport flag) — only one is live per flag state. */
-  private inDriveDownCavern = false;
 
   // --- VISTA SKY-SLIDE: drive onto a vista deck → catapult up an absolute-Y path that twists +
   //     descends → land back near the vista. A GUIDED ride (the path owns position) — crest physics
@@ -301,49 +294,30 @@ export class ZenSession {
         this.guardActive = false;
       }
     }
-    // TUNNEL PAYOFF (main world only). DEFAULT = the continuous DRIVE-DOWN (Stage C1): no teleport — the
-    // amber palette + cavern are driven POSITIONALLY by how deep the drivable surface sits below terrain
-    // (driveDownDepth), with a hysteresis dead-band so they never flicker at the threshold. FALLBACK
-    // (ZEN_DRIVEDOWN.enabled = false) = the #158 WARP, retained: fire once at the DEEP POINT and teleport.
+    // TUNNEL BOTTOM-PAYOFF TRIGGER (#158): you DESCEND a real downward tunnel, and at the DEEP POINT
+    // (along = 0) a WARP fires ONCE into the hidden amber cave — the cave is a SEGREGATED warp space
+    // (the C1 drive-down basin/seam was reverted: making the cave physically continuous DISSOLVED it).
+    // Record the ENTRANCE on first entering the tube — the return target (warp out lands AT the entrance,
+    // facing OUT; see doTeleport). Debounced per descent + behind the bounce guard. (Pure: ZenTunnelPayoff.)
     if (!this.inSecret && !this.inTunnelSpace) {
-      if (ZEN_DRIVEDOWN.enabled) {
-        const depth = driveDownDepth(ZEN.worldSeed, this.v.x, this.v.z);
-        if (!this.inDriveDownCavern && depth > ZEN_DRIVEDOWN.cavernEnterDepth) {
-          // Descended into the deep tube/basin → place the cavern on THIS tunnel's deep basin floor
-          // (the cross-anchored deep Y) and reveal it + the amber palette. No save/restore (you drove here).
-          const tun = nearestTunnel(ZEN.worldSeed, this.v.x, this.v.z);
-          if (tun) {
-            const deepY = heightAt(ZEN.worldSeed, tun.x, tun.z) - ZEN_LANDMARK.tunnelDepth * tun.scale;
-            this.renderer.placeCavern(tun.x, tun.z, deepY);
-            this.inDriveDownCavern = true;
-            this.renderer.setTunnelSecret(true);
-          }
-        } else if (this.inDriveDownCavern && depth < ZEN_DRIVEDOWN.cavernExitDepth) {
-          this.inDriveDownCavern = false; // drove back up out of the deep → revert to the surface palette
-          this.renderer.setTunnelSecret(false);
+      const cover = coveringTunnel(ZEN.worldSeed, this.v.x, this.v.z);
+      if (cover) {
+        if (this.tunnelPrevAlong === null) {
+          this.tunnelEntry = snapshot(this.v); // just entered the tube → remember the entrance
+          this.tunnelTriggeredId = null;
         }
+        if (
+          this.warpPhase === 'none' &&
+          !this.guardActive &&
+          this.tunnelTriggeredId !== cover.tunnel.id &&
+          passedDeepPoint(this.tunnelPrevAlong, cover.along)
+        ) {
+          this.tunnelTriggeredId = cover.tunnel.id;
+          this.startTunnelPayoff();
+        }
+        this.tunnelPrevAlong = cover.along;
       } else {
-        // WARP FALLBACK: fire ONCE when the car crosses the DEEP POINT (along = 0). Record the ENTRANCE on
-        // first entering the tube (the return target). Debounced per descent + behind the bounce guard.
-        const cover = coveringTunnel(ZEN.worldSeed, this.v.x, this.v.z);
-        if (cover) {
-          if (this.tunnelPrevAlong === null) {
-            this.tunnelEntry = snapshot(this.v); // just entered the tube → remember the entrance
-            this.tunnelTriggeredId = null;
-          }
-          if (
-            this.warpPhase === 'none' &&
-            !this.guardActive &&
-            this.tunnelTriggeredId !== cover.tunnel.id &&
-            passedDeepPoint(this.tunnelPrevAlong, cover.along)
-          ) {
-            this.tunnelTriggeredId = cover.tunnel.id;
-            this.startTunnelPayoff();
-          }
-          this.tunnelPrevAlong = cover.along;
-        } else {
-          this.tunnelPrevAlong = null; // left the tube → re-arm for the next descent
-        }
+        this.tunnelPrevAlong = null; // left the tube → re-arm for the next descent
       }
     }
     // PORTAL TRIGGER: crossing a GATEWAY's opening starts a warp. In the tunnel-payoff space it's the
@@ -396,7 +370,6 @@ export class ZenSession {
       warpPhase: this.warpPhase,
       inSecret: this.inSecret,
       inTunnelSpace: this.inTunnelSpace,
-      inDriveDownCavern: this.inDriveDownCavern,
       hasSaved: this.saved !== null,
       onSlide: this.onSlide,
       slideU: this.slideU,
@@ -546,10 +519,19 @@ export class ZenSession {
         this.renderer.setTunnelSecret(true);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
       } else {
-        if (this.saved) restore(this.v, this.saved);
-        this.v.speed = 0; // #130 safe-arrival: don't barrel straight back to the deep point
+        // EXIT: warp back to the tunnel ENTRANCE position, FACING OUT — heading REVERSED from the
+        // descent (you drove in; now you face the way you came = out of the mouth), so the loop reads as
+        // "I came back up and out", ready to drive away (re-runnable). #130 safe-arrival (vy = 0, not
+        // airborne, sane land) + the bounce guard (no instant re-descent of the mouth you just exited).
+        if (this.saved) {
+          this.v.x = this.saved.x;
+          this.v.z = this.saved.z;
+          this.v.heading = wrapToPi(this.saved.heading + Math.PI); // face OUT, away from the tunnel
+        }
+        this.v.speed = 0;
         this.v.vy = 0;
         this.v.airborne = false;
+        this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
         this.inTunnelSpace = false;
         this.renderer.setTunnelSecret(false);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;

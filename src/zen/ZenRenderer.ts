@@ -188,13 +188,6 @@ export class ZenRenderer {
     this.cavern.setActive(active); // reveal the cavern (centerpiece + monuments + ceiling)
   }
 
-  /** RE-PLACE the cavern decoration onto a specific deep floor (Stage C1 drive-down): the active
-   *  tunnel's deep CENTRE (x, z) at the cross-anchored basin floor Y. Called as you descend INTO a
-   *  tunnel so you emerge amid the cavern that stands on the basin you drive onto (no teleport). */
-  placeCavern(x: number, z: number, y: number): void {
-    this.cavern.placeAtFloor(x, z, y);
-  }
-
   /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a
    *  secret-area WARP so the rig doesn't ease across the teleport distance (it would slew for
    *  seconds). Mirrors the resting framing the per-frame ease converges to. */

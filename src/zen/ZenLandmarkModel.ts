@@ -13,7 +13,7 @@
 
 import { hashNoise } from '../utils/rng';
 import { lerp } from '../utils/math';
-import { ZEN, ZEN_LANDMARK, ZEN_DRIVEDOWN } from '../utils/constants';
+import { ZEN, ZEN_LANDMARK } from '../utils/constants';
 import { chunkKey } from './ZenWorld';
 import { maskAt } from './ZenHeight';
 import { smoothstep } from './ZenNoise';
@@ -100,62 +100,13 @@ export function tunnelBendShape(t: number): number {
  * it sees (diagnosis #148: they used to be two separate definitions → the "bump"). Multiply by
  * `tunnelDepth` (× the landmark scale, in world space) for the actual drop below the floor anchor.
  *
- * TWO profiles, selected by the DRIVE-DOWN flag (OFF in production):
- *  • SYMMETRIC (flag OFF — the #158 warp ships, byte-identical to before): eases to 0 at BOTH mouths
- *    — you drive in one mouth, down, and the far mouth windows back UP to the surface. (Stage A kept
- *    this and proved the centre basin seam pop-free behind the flag.)
- *  • ASYMMETRIC DRIVE-DOWN (flag ON — Stage B): the ENTRY mouth (tNorm < 0) still eases up to the
- *    surface exactly as the symmetric profile (drive in normally, no snap at the mouth), but the FAR
- *    half (tNorm ≥ 0) HOLDS FULL DEPTH (factor = 1) instead of windowing back up — so the tunnel
- *    descends and STAYS deep into the basin seam (the Stage A cross-anchored deep Y). The transition
- *    is dead-FLAT across the deep core: the symmetric entry profile is already 1 for |tNorm| ≤
- *    easeStart, so both sides meet at factor = 1 around tNorm = 0 → no kink, the only grade is the
- *    (unchanged) entry ramp, and the far half is flat-deep → maxStep is trivially bounded. BOTH the
- *    mesh + the surface read THIS function, so they stay unified (the #149 rule) on the asymmetric
- *    profile too. The corridor (#154, lateral) is untouched by this along-axis depth change.
+ * SYMMETRIC: eases to 0 at BOTH mouths — you drive in one mouth, descend to the deep centre (where the
+ * #158 warp fires), and (if you don't warp) the far mouth windows back UP to the surface. (The Stage A–C1
+ * drive-down basin/seam/asymmetric profile was reverted — the tunnel is the PROVEN warp-segregated tube
+ * again; you descend a real downward journey and WARP at the deep point into the hidden amber cave.)
  */
 export function tunnelDepthFactor(tNorm: number): number {
-  // FAR half holds full depth ONLY when the drive-down flag is on; otherwise the symmetric ascent ramp.
-  if (ZEN_DRIVEDOWN.enabled && tNorm >= 0) return 1;
   return 1 - smoothstep(ZEN_LANDMARK.tunnelDepthEaseStart, 1, Math.abs(tNorm));
-}
-
-/**
- * The DRIVE-DOWN BASIN's depth factor at radial distance `r` (world units) from the tunnel centre, for
- * a landmark of `scale` — 1 on the flat-deep room floor (r ≤ basinFlatRadius·scale), easing to 0 at the
- * room rim (basinRimRadius·scale). The ONE source of truth for the basin floor — BOTH the followed
- * surface (ZenLandmarkSurface) AND the rendered basin mesh (ZenLandmarks) call this, the #149
- * unified-floor rule extended to the new floor. Multiply by `tunnelDepth·scale` for the drop below the
- * SAME centre anchor the tube uses (heightAt(centre)) → the wall seam is Y-equal (the SEAM RULE). */
-export function tunnelBasinDepthFactor(r: number, scale: number): number {
-  return 1 - smoothstep(ZEN_DRIVEDOWN.basinFlatRadius * scale, ZEN_DRIVEDOWN.basinRimRadius * scale, r);
-}
-
-/**
- * The DRIVE-DOWN BASIN's combined depth factor at axial `along` + perpendicular `perp` (world units)
- * from the tunnel centre, for a landmark of `scale` — the ONE source of truth for the deep drive-around
- * room AND its far-terminus coverage (Stage C1), shared by the followed surface (ZenLandmarkSurface) and
- * any basin mesh. It is the MAX of two profiles, both dropping below the SAME heightAt(centre) anchor the
- * tube uses (so every wall seam is Y-equal — the SEAM RULE):
- *   • the CENTRE DISC (Stage A): tunnelBasinDepthFactor(r) — the radial room at the tunnel centre,
- *     unchanged, so the proven Stage A/B probes are byte-identical.
- *   • the FAR CORRIDOR (Stage C1, far half only — clipped to along ≥ 0 so the proven entry side is
- *     untouched): the held-deep far half swept into a room — the tube's own along profile
- *     (tunnelDepthFactor, = 1 across the deep far half under the asymmetric flag) × a lateral ease that
- *     REUSES the disc radii (so at along = 0 it equals the disc → seamless union) × a far back-wall ease
- *     that holds deep to the far mouth (along = halfL) then eases to terrain over basinFarMargin. This
- *     COVERS Stage B's latent far-mouth terminus: leaving the far end lands on the deep room, no step.
- * Multiply by tunnelDepth·scale for the drop below heightAt(centre). 0 ⇒ this point is plain terrain.
- */
-export function tunnelBasinCoverageFactor(along: number, perp: number, halfL: number, scale: number): number {
-  const r = Math.sqrt(along * along + perp * perp);
-  const disc = tunnelBasinDepthFactor(r, scale);
-  if (along < 0) return disc; // entry side: the centre disc only (the proven Stage A/B behaviour)
-  // FAR corridor: deep through the held-deep far half + just past the far mouth, eased to the back wall.
-  const lateral = tunnelBasinDepthFactor(Math.abs(perp), scale);
-  const backWall = 1 - smoothstep(halfL, halfL + ZEN_DRIVEDOWN.basinFarMargin * scale, along);
-  const far = tunnelDepthFactor(along / halfL) * lateral * backWall;
-  return Math.max(disc, far);
 }
 
 /**

@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- user-scalable=no is INTENTIONAL (a documented Lighthouse A11y trade-off, not an oversight):
+         this is a touch game where steering is a drag gesture — pinch-to-zoom mid-drag would hijack the
+         input and break play. viewport-fit=cover gives iPhone safe-area / notch handling. -->
     <meta
       name="viewport"
       content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"
@@ -41,9 +44,35 @@
     <!-- iOS home-screen icon — a 180×180 raster of the synthwave favicon on an opaque #1a0033 square
          (iOS doesn't render SVG apple-touch-icons + wants an opaque bg; it rounds the corners itself). -->
     <link rel="apple-touch-icon" href="/apple-touch-icon-180.png" />
+
+    <!-- Schema.org VideoGame — describes the game to crawlers in the static payload (the canvas is
+         opaque to bots). Real values only; no invented URL/rating. -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "Neon Drift",
+        "description": "A synthwave endless racer — weave through traffic and chase the neon horizon, or cruise the Zen free-roam.",
+        "genre": ["Racing", "Arcade"],
+        "applicationCategory": "Game",
+        "operatingSystem": "Web Browser",
+        "browserRequirements": "Requires JavaScript and WebGL."
+      }
+    </script>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <!-- Bot / crawler / no-JS readable description (the WebGL canvas is otherwise opaque to them).
+           Renders only when scripting is disabled — zero interference with the running game. -->
+      <noscript>
+        <h1>Neon Drift</h1>
+        <p>
+          A synthwave endless racer: weave through neon traffic and chase the horizon for a high
+          score, or cruise the Zen free-roam mode through a procedural neon world.
+        </p>
+        <p>Enable JavaScript to play in your browser.</p>
+      </noscript>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

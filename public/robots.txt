@@ -1,0 +1,3 @@
+# Neon Drift — allow all crawlers. (No Sitemap line: a single-page personal game has no sitemap.)
+User-agent: *
+Allow: /

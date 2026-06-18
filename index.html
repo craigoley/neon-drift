@@ -8,6 +8,39 @@
       content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover"
     />
     <title>Neon Drift</title>
+    <meta
+      name="description"
+      content="A synthwave endless racer — weave through traffic and chase the neon horizon."
+    />
+    <meta name="theme-color" content="#1a0033" />
+
+    <!-- Open Graph (fixes the blank unfurl when the link is shared). Text-based card for now;
+         og:image + og:url (canonical) are a follow-up — no share image / canonical URL exists yet. -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Neon Drift" />
+    <meta property="og:title" content="Neon Drift" />
+    <meta
+      property="og:description"
+      content="A synthwave endless racer — weave through traffic and chase the neon horizon."
+    />
+
+    <!-- Twitter card (summary; upgrade to summary_large_image once a share image ships). -->
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content="Neon Drift" />
+    <meta
+      name="twitter:description"
+      content="A synthwave endless racer — weave through traffic and chase the neon horizon."
+    />
+
+    <!-- PWA: home-screen install + fullscreen standalone (iPhone). -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Neon Drift" />
+    <!-- iOS prefers a PNG apple-touch-icon; this points at the on-brand SVG (resolves + degrades
+         gracefully). A 180×180 PNG is the one raster asset still needed for a crisp iOS icon. -->
+    <link rel="apple-touch-icon" href="/favicon.svg" />
   </head>
   <body>
     <div id="app"></div>

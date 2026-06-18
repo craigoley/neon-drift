@@ -1,0 +1,14 @@
+{
+  "name": "Neon Drift",
+  "short_name": "Neon Drift",
+  "description": "A synthwave endless racer — weave through traffic and chase the neon horizon.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1a0033",
+  "background_color": "#1a0033",
+  "icons": [
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }
+  ]
+}

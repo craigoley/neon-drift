@@ -40,7 +40,9 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, style: string, text?:
 }
 
 const PANEL = 'position:fixed;inset:0;z-index:9998;background:rgba(26,0,51,0.96);color:#e9d5ff;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;';
-const STRIP = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9998;background:rgba(26,0,51,0.85);color:#e9d5ff;font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:8px;';
+// The mode label sits just BELOW the main stats bar (top:0, ~44px tall) — its own slot, clear of the
+// speed/best readout it used to overlap. The position/gap readout (RaceHud) sits below this in turn.
+const STRIP = 'position:fixed;top:calc(50px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:9998;background:rgba(26,0,51,0.85);color:#e9d5ff;font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:8px;';
 const BTN = 'font:inherit;font-weight:700;padding:12px 24px;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:8px;cursor:pointer;min-width:8em;';
 
 const TIERS: ReadonlyArray<{ id: BotDifficulty; label: string; blurb: string }> = [
@@ -100,8 +102,15 @@ export function mountBotRaceUI(parent: HTMLElement, opts: BotRaceUIOptions): voi
 
   for (const tier of TIERS) {
     const btn = el('button', BTN, tier.label);
-    const blurb = el('div', 'font:500 11px system-ui,sans-serif;opacity:0.6;margin-top:-4px;', tier.blurb);
-    const wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:2px;');
+    // Readable descriptor in its own clear slot under the button: a touch larger, higher contrast, a
+    // calm violet, line-height + max-width so the "·"-separated copy wraps cleanly (not cramped) on a
+    // narrow phone. (Was 11px / opacity 0.6 / a NEGATIVE top margin → tiny, dim, jammed under the button.)
+    const blurb = el(
+      'div',
+      'font:500 12.5px/1.4 system-ui,sans-serif;color:#c9a8ff;max-width:16em;text-align:center;',
+      tier.blurb,
+    );
+    const wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:4px;');
     wrap.append(btn, blurb);
     tiers.append(wrap);
     btn.addEventListener('click', () => pick(tier));

@@ -2591,11 +2591,23 @@ export interface BotSkill {
   slowMoTriggerDistance: number;
 }
 
-/** EASY / MEDIUM / HARD skill presets (first-pass; tune from playtest). EASY sees
- *  late, places loosely, errs often, barely uses slow-mo → a beginner can win.
- *  HARD sees far, places tight, almost never errs, uses slow-mo well → a challenge. */
+/** EASY / MEDIUM / HARD skill presets. EASY sees late, places loosely, errs often, barely uses slow-mo
+ *  → a beginner can win. HARD sees far, places tight, almost never errs, uses slow-mo well → a challenge.
+ *
+ *  ⚠️ NO RUBBER-BANDING: these are flat SKILL knobs consumed by botIntent(), which never sees the player
+ *  (anti-rubber-band is structural — see Bot.ts). A weaker EASY is uniformly worse at every position; it
+ *  is NEVER helped when you're behind. They are difficulty CONFIG, not sim-math → changing them does NOT
+ *  affect SIM_MATH_VERSION (detmath primitives) and does NOT invalidate stored ghosts.
+ *
+ *  EASY WEAKENED (playtest: the old EASY dodged everything + never crashed → unbeatable for a beginner).
+ *  Now it genuinely makes mistakes + crashes sometimes, at its own consistent (low) skill:
+ *   • reactionDistance 95→58  — sees hazards MUCH later, so it often can't set up the dodge in time.
+ *   • steerGain     0.18→0.12 — steers sluggishly toward the clear lane → sometimes fails to reach it.
+ *   • dodgeJitter    2.4→3.4  — sloppier than the clearance (~2.8) → it misjudges gaps + clips obstacles.
+ *   • mistakeRate   0.22→0.34 — fumbles more often; a fumble that lands on a hazard = a crash.
+ *   • slowMoTriggerDistance 0 — never bails itself out with slow-mo (unchanged; already the weakest). */
 export const BOT_DIFFICULTY: Readonly<Record<'easy' | 'medium' | 'hard', BotSkill>> = {
-  easy: { reactionDistance: 95, dodgeJitter: 2.4, mistakeRate: 0.22, steerGain: 0.18, slowMoTriggerDistance: 0 },
+  easy: { reactionDistance: 58, dodgeJitter: 3.4, mistakeRate: 0.34, steerGain: 0.12, slowMoTriggerDistance: 0 },
   medium: { reactionDistance: 160, dodgeJitter: 1.1, mistakeRate: 0.08, steerGain: 0.3, slowMoTriggerDistance: 32 },
   hard: { reactionDistance: 240, dodgeJitter: 0.25, mistakeRate: 0.015, steerGain: 0.42, slowMoTriggerDistance: 48 },
 } as const;

@@ -79,10 +79,12 @@ export class RaceHud {
   constructor(parent: HTMLElement, opts: RaceHudOptions) {
     this.opts = opts;
 
-    // Position + gap readout.
+    // Position + gap readout. Sits in its OWN clear band BELOW the main stats bar (top:0, ~44px) and the
+    // mode strip (~50px), so the three top elements stack cleanly instead of piling up + occluding each
+    // other. safe-area-inset keeps it clear of the iPhone notch (viewport-fit=cover).
     this.hud = el(
       'div',
-      'position:fixed;top:40px;left:50%;transform:translateX(-50%);z-index:9998;display:none;flex-direction:column;align-items:center;gap:2px;font-family:system-ui,sans-serif;text-shadow:0 0 8px currentColor;pointer-events:none;',
+      'position:fixed;top:calc(82px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:9998;display:none;flex-direction:column;align-items:center;gap:2px;font-family:system-ui,sans-serif;text-shadow:0 0 8px currentColor;pointer-events:none;',
     );
     this.hud.className = 'race-hud';
     this.posEl = el('div', 'font:800 22px system-ui,sans-serif;letter-spacing:0.05em;');

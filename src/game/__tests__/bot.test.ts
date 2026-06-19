@@ -134,3 +134,25 @@ describe('Bot — anti-rubber-band (cannot see the player)', () => {
     void playerIrrelevant;
   });
 });
+
+describe('Bot — EASY is genuinely weaker (crashes; no rubber-band)', () => {
+  /** Run a bot solo through the REAL sim (mpRace mode → a crash SLOWS, doesn't end) and count crashes. */
+  function runBot(skill: BotSkill, frames: number) {
+    const g = startRun(createGameState(SEED), undefined, 0, SEED, undefined, undefined, undefined, true);
+    const bot = createBotState(SEED);
+    let crashes = 0;
+    for (let i = 0; i < frames; i++) {
+      const intent = botIntent(bot, g, skill, TIMESTEP);
+      update(g, intent, TIMESTEP);
+      if (g.lastEvents.mpCrashed) crashes++; // a one-step crash signal in mpRace mode
+    }
+    return { crashes, distance: g.distance };
+  }
+
+  it('EASY actually CRASHES into obstacles (a beginner can win), and MORE than HARD', () => {
+    const easy = runBot(BOT_DIFFICULTY.easy, 3600); // ~60s
+    const hard = runBot(BOT_DIFFICULTY.hard, 3600);
+    expect(easy.crashes, 'EASY makes real mistakes — it crashes sometimes').toBeGreaterThan(0);
+    expect(easy.crashes, 'EASY is uniformly weaker than HARD (its own skill, not catch-up)').toBeGreaterThan(hard.crashes);
+  });
+});

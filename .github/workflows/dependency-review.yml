@@ -1,0 +1,36 @@
+name: Dependency Review
+
+# PR-time review of DEPENDENCY CHANGES — the official github-native actions/dependency-review-action.
+# It diffs the PR's manifest/lockfile and flags any NEWLY-ADDED vulnerable dependency (and license
+# issues) BEFORE merge. This is a distinct lifecycle point from the existing tools — not redundant:
+#   • OSV-Scanner scans the deps ALREADY committed (repo scan / schedule).
+#   • Dependabot security updates open PRs to FIX known-vuln deps after they're in.
+#   • Dependency Review catches a vulnerable dep AS IT'S INTRODUCED, in the PR diff.
+#
+# Non-blocking: dependency-review is inherently a PR-diff tool (no value on a schedule), so it runs on
+# pull_request — but `warn-only: true` makes it REPORT (and comment on findings) WITHOUT ever failing
+# the check, so it can never wall the claude-review auto-merge pipeline. Flip warn-only off (or set
+# fail-on-severity) later if Craig wants it to be a hard gate.
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write # to post the findings summary as a PR comment
+
+concurrency:
+  group: dep-review-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/dependency-review-action@v4
+        with:
+          warn-only: true # report-only — never fails the build (keeps the auto-merge pipeline unblocked)
+          comment-summary-in-pr: on-failure # post a summary comment only when something's flagged

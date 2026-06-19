@@ -442,6 +442,10 @@ const shell = new Shell(app, settings, leaderboard, audio, {
     const glow = cosmeticById(progress.getEquipped('glow'))?.color ?? null;
     void import('./zen/ZenSession').then(({ ZenSession }) => {
       zen = new ZenSession({
+        // A FRESH world each time you ENTER Zen (playSeed = a random u32), so there's always something
+        // new to explore — UNLESS ?seed= pins it (deterministic for tests + the OG capture). Re-entering
+        // draws a new seed → a new world. The impurity (Math.random) stays in the composition root.
+        seed: playSeed(),
         renderer: scene.renderer,
         car: carById(carId),
         glow,

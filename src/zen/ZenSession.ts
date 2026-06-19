@@ -34,6 +34,8 @@ import { biomeAt, createZenBiomeState } from './ZenBiome';
 
 /** Read-only Zen state snapshot for the validation sweep (no setters, no behaviour). */
 export interface ZenDebugSnapshot {
+  /** This Zen session's world seed (random per entry, or the pinned ?seed=) — the world fingerprint. */
+  seed: number;
   pos: { x: number; y: number; z: number };
   cam: { x: number; y: number; z: number };
   heading: number;
@@ -56,6 +58,10 @@ export interface ZenDebugSnapshot {
 }
 
 export interface ZenSessionOptions {
+  /** The world seed for THIS Zen session — the ENTIRE world (biomes, terrain, landmarks, props, portals)
+   *  keys off it. The composition root passes a FRESH RANDOM seed per entry (a new world to explore each
+   *  time), or the pinned `?seed=` value for deterministic tests / the OG capture. */
+  seed: number;
   /** The game's shared WebGLRenderer (Zen draws with it; never disposes it). */
   renderer: WebGLRenderer;
   /** The player's selected car (driven in Zen, cosmetics and all). */
@@ -78,6 +84,8 @@ const BTN =
 
 export class ZenSession {
   private readonly v = createZenVehicle();
+  /** This session's world seed (random per entry, or the pinned ?seed=). The whole Zen world keys off it. */
+  private readonly seed: number;
   private readonly renderer: ZenRenderer;
   private readonly overlay: HTMLElement;
   private readonly minimap: ZenMinimap;
@@ -165,9 +173,10 @@ export class ZenSession {
 
   constructor(opts: ZenSessionOptions) {
     this.opts = opts;
+    this.seed = opts.seed; // set FIRST — the whole world (and everything below) keys off it
     // Start resting ON the terrain so the car doesn't visibly rise from y=0 at spawn.
-    this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
-    this.renderer = new ZenRenderer(opts.renderer, opts.car);
+    this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
+    this.renderer = new ZenRenderer(opts.renderer, this.seed, opts.car);
     this.renderer.setGlow(opts.glow);
     this.renderer.setQuality(!opts.lowFx); // honour the persisted quality setting
 
@@ -197,7 +206,7 @@ export class ZenSession {
     }
 
     // Live navigation radar in the top-right corner (the other corners hold EXIT + GAS/BRAKE).
-    this.minimap = new ZenMinimap(this.overlay);
+    this.minimap = new ZenMinimap(this.overlay, this.seed);
 
     // Secret-area warp: the full-screen fade overlay (appended LAST → on top of all overlay UI),
     // and the fixed secret region's return portal (deterministic — computed once).
@@ -206,8 +215,8 @@ export class ZenSession {
     this.fader.style.cssText =
       `position:absolute;inset:0;background:${ZEN_SECRET.fadeColor};opacity:0;pointer-events:none;`;
     this.overlay.appendChild(this.fader);
-    this.returnPortal = findReturnPortal(ZEN.worldSeed);
-    this.tunnelPortal = tunnelReturnPortal(ZEN.worldSeed);
+    this.returnPortal = findReturnPortal(this.seed);
+    this.tunnelPortal = tunnelReturnPortal(this.seed);
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
 
@@ -252,7 +261,7 @@ export class ZenSession {
     // The DRIVABLE-surface slope (vista mesa / tunnel floor override where one applies, else the
     // terrain). Computed every frame so the LANDING catch-up (updateVertical) can ride up a rising
     // far-side at its own rate; the gentle SPEED nudge stays GROUNDED-only (no terrain grip in air).
-    const slope = surfaceSlopeAlong(ZEN.worldSeed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
+    const slope = surfaceSlopeAlong(this.seed, this.v.x, this.v.z, Math.sin(this.v.heading), -Math.cos(this.v.heading));
     // The speed cap is RAISED while an ARCH boost is active (eased back to cruise as it decays).
     updateZen(this.v, steer, throttle, dt, this.v.airborne ? 0 : slope, boostedMaxSpeed(this.boostT));
     // Props are SOLID — but only while GROUNDED: airborne, the car flies OVER them. Push
@@ -267,7 +276,7 @@ export class ZenSession {
     // (allowAir=false) so the car flows ONTO the mesa / DOWN the tunnel without crest-jumping; the
     // override blends to terrain at the rim so the entry/exit eases (no snap).
     // Combined query: one coveringSurface scan for both Y + on-surface (not two).
-    const surface = queryDrivableSurface(ZEN.worldSeed, this.v.x, this.v.z);
+    const surface = queryDrivableSurface(this.seed, this.v.x, this.v.z);
     this.lastOnSurface = surface.onSurface; // for __neonDebug (the tunnel-smoothness canary)
     updateVertical(this.v, surface.y + ZEN.rideHeight, slope, dt, !surface.onSurface);
 
@@ -281,7 +290,7 @@ export class ZenSession {
         this.slideGuardActive = false;
       }
     } else {
-      const vista = vistaDeckUnder(ZEN.worldSeed, this.v.x, this.v.z);
+      const vista = vistaDeckUnder(this.seed, this.v.x, this.v.z);
       if (vista) this.startSlide(vista);
     }
 
@@ -300,7 +309,7 @@ export class ZenSession {
     // Record the ENTRANCE on first entering the tube — the return target (warp out lands AT the entrance,
     // facing OUT; see doTeleport). Debounced per descent + behind the bounce guard. (Pure: ZenTunnelPayoff.)
     if (!this.inSecret && !this.inTunnelSpace) {
-      const cover = coveringTunnel(ZEN.worldSeed, this.v.x, this.v.z);
+      const cover = coveringTunnel(this.seed, this.v.x, this.v.z);
       if (cover) {
         if (this.tunnelPrevAlong === null) {
           this.tunnelEntry = snapshot(this.v); // just entered the tube → remember the entrance
@@ -322,7 +331,7 @@ export class ZenSession {
     }
     // PORTAL TRIGGER: crossing a GATEWAY's opening starts a warp. In the tunnel-payoff space it's the
     // RETURN (back near the entrance); elsewhere it's the secret-area enter/leave.
-    if (this.warpPhase === 'none' && !this.guardActive && crossedAnyGateway(ZEN.worldSeed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+    if (this.warpPhase === 'none' && !this.guardActive && crossedAnyGateway(this.seed, this.prevX, this.prevZ, this.v.x, this.v.z)) {
       this.warpKind = this.inTunnelSpace ? 'tunnel' : 'secret';
       this.warpPhase = 'out';
       this.warpT = 0;
@@ -331,7 +340,7 @@ export class ZenSession {
     // ARCH = SPEED BOOST: crossing an arch's opening grants a free, refreshable surge (no guard — a
     // boost is harmless to re-trigger; crossedOpening already fires once per pass). An instant kick +
     // a timer that raises the cap then eases it back to cruise (ZenArchBoost).
-    if (crossedAnyOfType(ZEN.worldSeed, LANDMARK_ARCH, this.prevX, this.prevZ, this.v.x, this.v.z)) {
+    if (crossedAnyOfType(this.seed, LANDMARK_ARCH, this.prevX, this.prevZ, this.v.x, this.v.z)) {
       this.boostT = ZEN_ARCH.boostSeconds;
       this.v.speed = Math.max(this.v.speed, ZEN_ARCH.boostMaxSpeed * ZEN_ARCH.boostKickFrac);
     }
@@ -342,7 +351,7 @@ export class ZenSession {
       !this.guardActive &&
       !this.inSecret &&
       !this.inTunnelSpace &&
-      crossedAnyOfType(ZEN.worldSeed, LANDMARK_RING, this.prevX, this.prevZ, this.v.x, this.v.z)
+      crossedAnyOfType(this.seed, LANDMARK_RING, this.prevX, this.prevZ, this.v.x, this.v.z)
     ) {
       this.startRandomWarp();
     }
@@ -359,8 +368,9 @@ export class ZenSession {
    *  counts, so the soak can assert finiteness, bounded growth, and transition (de)sync. */
   debugSnapshot(): ZenDebugSnapshot {
     const info = this.renderer.debugInfo;
-    biomeAt(ZEN.worldSeed, this.v.x, this.v.z, this._dbgBiome);
+    biomeAt(this.seed, this.v.x, this.v.z, this._dbgBiome);
     return {
+      seed: this.seed,
       pos: { x: this.v.x, y: this.v.y, z: this.v.z },
       cam: info.cam,
       camHeading: info.camHeading,
@@ -382,7 +392,7 @@ export class ZenSession {
   /** CATAPULT: build the absolute-Y slide path anchored at the vista deck, launching in the
    *  direction the car drove on, and enter the on-slide state (the tube mesh appears). */
   private startSlide(vista: Landmark): void {
-    const deckY = heightAt(ZEN.worldSeed, vista.x, vista.z) + ZEN_LANDMARK.vistaHeight * vista.scale + ZEN.rideHeight;
+    const deckY = heightAt(this.seed, vista.x, vista.z) + ZEN_LANDMARK.vistaHeight * vista.scale + ZEN.rideHeight;
     this.slide = new ZenSlidePath({ x: vista.x, y: deckY, z: vista.z }, this.v.heading);
     this.slideU = 0;
     this.slideLat = 0;
@@ -499,7 +509,7 @@ export class ZenSession {
       this.v.speed = 0;
       this.v.vy = 0;
       this.v.airborne = false;
-      this.v.y = heightAt(ZEN.worldSeed, d.x, d.z) + ZEN.rideHeight;
+      this.v.y = heightAt(this.seed, d.x, d.z) + ZEN.rideHeight;
       this.pendingDest = null;
       this.guardDist = ZEN_RING.guardDistance;
     } else if (this.warpKind === 'tunnel') {
@@ -514,7 +524,7 @@ export class ZenSession {
         this.v.speed = 0;
         this.v.vy = 0;
         this.v.airborne = false;
-        this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+        this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
         this.inTunnelSpace = true;
         this.renderer.setTunnelSecret(true);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
@@ -531,7 +541,7 @@ export class ZenSession {
         this.v.speed = 0;
         this.v.vy = 0;
         this.v.airborne = false;
-        this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+        this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
         this.inTunnelSpace = false;
         this.renderer.setTunnelSecret(false);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
@@ -548,7 +558,7 @@ export class ZenSession {
       this.v.speed = 0;
       this.v.vy = 0;
       this.v.airborne = false;
-      this.v.y = heightAt(ZEN.worldSeed, this.v.x, this.v.z) + ZEN.rideHeight;
+      this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
       this.inSecret = true;
       this.renderer.setSecret(true);
       this.guardDist = ZEN_SECRET.returnGuardDistance;

@@ -22,7 +22,9 @@ import {
 } from '../src/zen/ZenLandmarkModel';
 
 const OUT = 'public/og-image.png';
-const SEED = ZEN.worldSeed; // the Zen world is keyed to ZEN.worldSeed → deterministic, same frame every run
+// Zen now picks a RANDOM world per entry; ?seed= PINS it. We pin ZEN.worldSeed (the canonical world the
+// landmark lookups below also use) so the hero frame stays deterministic — the same composition every run.
+const SEED = ZEN.worldSeed;
 
 interface ZenDbg { pos: { x: number; y: number; z: number }; heading: number; speed: number }
 interface Dbg { mode: string; zen?: ZenDbg }

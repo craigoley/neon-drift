@@ -45,17 +45,21 @@ const PANEL = 'position:fixed;inset:0;z-index:9998;background:rgba(26,0,51,0.96)
 const STRIP = 'position:fixed;top:calc(50px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:9998;background:rgba(26,0,51,0.85);color:#e9d5ff;font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:8px;';
 const BTN = 'font:inherit;font-weight:700;padding:12px 24px;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:8px;cursor:pointer;min-width:8em;';
 
-const TIERS: ReadonlyArray<{ id: BotDifficulty; label: string; blurb: string }> = [
-  { id: 'easy', label: 'EASY', blurb: 'sees late · dodges loosely · a beginner can win' },
-  { id: 'medium', label: 'MEDIUM', blurb: 'a steady, fair opponent' },
-  { id: 'hard', label: 'HARD', blurb: 'sees far · clean dodges · a real challenge' },
+// Descriptors as PHRASE arrays (rendered as nowrap "beats" joined by · — see the loop below): so a
+// phrase never breaks mid-word + the separators read. HONEST about rubber-banding now that EASY has
+// catch-up: EASY signals it helps you ("stumbles when ahead"); MEDIUM/HARD state they DON'T ("no
+// catch-up" / "no mercy") — the no-rubber-banding promise now lives where it's actually true.
+const TIERS: ReadonlyArray<{ id: BotDifficulty; label: string; phrases: readonly string[] }> = [
+  { id: 'easy', label: 'EASY', phrases: ['sees late', 'stumbles when ahead', 'a beginner can win'] },
+  { id: 'medium', label: 'MEDIUM', phrases: ['a steady, fair opponent', 'no catch-up'] },
+  { id: 'hard', label: 'HARD', phrases: ['sees far', 'clean dodges', 'no mercy'] },
 ];
 
 export function mountBotRaceUI(parent: HTMLElement, opts: BotRaceUIOptions): void {
   const root = el('div', PANEL);
   root.className = 'bot-race-ui';
   const title = el('h1', 'color:#ff00ff;text-shadow:0 0 12px #ff00ff;margin:0;font-size:clamp(20px,5vw,30px);', 'vs COMPUTER');
-  const sub = el('p', 'opacity:0.7;margin:0;max-width:30em;', 'Race an AI opponent on a shared course. Pick a difficulty — the bot plays at its skill, no rubber-banding.');
+  const sub = el('p', 'opacity:0.7;margin:0;max-width:30em;', 'Race an AI opponent on a shared course. Pick your challenge.');
   const tiers = el('div', 'display:flex;flex-direction:column;gap:10px;align-items:center;');
   const backBtn = el('button', `${BTN};border-color:#888;color:#bbb`, 'BACK');
   root.append(title, sub, tiers);
@@ -102,15 +106,16 @@ export function mountBotRaceUI(parent: HTMLElement, opts: BotRaceUIOptions): voi
 
   for (const tier of TIERS) {
     const btn = el('button', BTN, tier.label);
-    // Readable descriptor in its own clear slot under the button: a touch larger, higher contrast, a
-    // calm violet, line-height + max-width so the "·"-separated copy wraps cleanly (not cramped) on a
-    // narrow phone. (Was 11px / opacity 0.6 / a NEGATIVE top margin → tiny, dim, jammed under the button.)
-    const blurb = el(
-      'div',
-      'font:500 12.5px/1.4 system-ui,sans-serif;color:#c9a8ff;max-width:16em;text-align:center;',
-      tier.blurb,
-    );
-    const wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:6px;margin-bottom:4px;');
+    // TYPOGRAPHY (UI/UX): each phrase is a NOWRAP "beat" (so it never breaks mid-word — no "a / beginner
+    // can win"), joined by a leading "· " that stays glued to its phrase, so a wrap can ONLY happen
+    // between beats with the middot leading the continuation line. `text-wrap: balance` evens the line
+    // lengths (kills orphans/ragged breaks); max-width in CH targets ~34 chars/line (mobile microcopy);
+    // line-height 1.45 + the wrap's gap give it breathing room as a caption for THIS button.
+    const blurb = el('div', 'font:500 12.5px/1.45 system-ui,sans-serif;color:#c9a8ff;max-width:34ch;text-align:center;text-wrap:balance;');
+    blurb.innerHTML = tier.phrases
+      .map((p, i) => `<span style="white-space:nowrap">${i === 0 ? '' : '· '}${p}</span>`)
+      .join(' ');
+    const wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:6px;');
     wrap.append(btn, blurb);
     tiers.append(wrap);
     btn.addEventListener('click', () => pick(tier));

@@ -17,13 +17,16 @@
 
 import { clamp } from '../utils/math';
 import { Rng } from '../utils/rng';
-import { BOT, type BotSkill, ObstacleKind, ROAD } from '../utils/constants';
+import { BOT, BOT_CATCHUP, type BotSkill, ObstacleKind, ROAD } from '../utils/constants';
 import { roadCenterAt } from './Road';
 import type { InputIntent } from './Input';
 import type { GameState } from './GameState';
 
 // Scratch intent reused every sub-step (callers consume it before the next call).
 const _intent: InputIntent = { steer: 0, deploySlowMo: false, restart: false };
+
+// Scratch skill reused by catchUpSkill (callers consume it before the next call).
+const _boostedSkill: BotSkill = { reactionDistance: 0, dodgeJitter: 0, mistakeRate: 0, steerGain: 0, slowMoTriggerDistance: 0 };
 
 /** The bot's small persistent state: its private mistake-rng + a held "fumble" so a
  *  mistake reads as a beat of hesitation rather than a 1-frame flicker. */
@@ -64,9 +67,31 @@ function pickClearLane(center: number, botLateral: number, obsLateral: number): 
 }
 
 /**
+ * POSITION-AWARE CATCH-UP (EASY only). Given the bot's `lead` over the player (world units; positive =
+ * bot AHEAD), return a skill whose mistakeRate is boosted while the bot is ahead — so it stumbles/crashes
+ * more the further it leads, letting a beginner catch up. PURE + Node-testable.
+ *
+ * ⚠️ Gated by `skill.catchUp` (EASY only): for MEDIUM/HARD (no catchUp) this is a NO-OP — it returns the
+ * SAME skill object, so they stay pure-skill + position-blind (no rubber-banding). botIntent itself never
+ * sees the player; the catch-up lives HERE, in the race layer's pre-intent skill shaping, EASY-gated.
+ */
+export function catchUpSkill(skill: BotSkill, lead: number): BotSkill {
+  if (!skill.catchUp || lead <= BOT_CATCHUP.leadThreshold) return skill; // behind/even or not EASY → pure
+  const boost = Math.min(BOT_CATCHUP.maxBoost, (lead - BOT_CATCHUP.leadThreshold) * BOT_CATCHUP.boostPerUnit);
+  _boostedSkill.reactionDistance = skill.reactionDistance;
+  _boostedSkill.dodgeJitter = skill.dodgeJitter;
+  _boostedSkill.mistakeRate = skill.mistakeRate + boost;
+  _boostedSkill.steerGain = skill.steerGain;
+  _boostedSkill.slowMoTriggerDistance = skill.slowMoTriggerDistance;
+  _boostedSkill.catchUp = skill.catchUp;
+  return _boostedSkill;
+}
+
+/**
  * Produce the bot's intent for ONE sub-step. Mutates `bot` (advances its rng +
  * mistake timer). `dt` is the fixed sub-step (TIMESTEP). Reads ONLY `game` (the
- * bot's own state) — never the player's.
+ * bot's own state) — never the player's. (Any EASY catch-up is baked into `skill`
+ * by the caller via catchUpSkill BEFORE this point — botIntent stays position-blind.)
  */
 export function botIntent(bot: BotState, game: GameState, skill: BotSkill, dt: number): InputIntent {
   _intent.steer = 0;

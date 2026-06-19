@@ -15,7 +15,7 @@
  */
 
 import { createGameState, type GameState, GameMode, startRun, update } from '../game/GameState';
-import { botIntent, createBotState, type BotState } from '../game/Bot';
+import { botIntent, catchUpSkill, createBotState, type BotState } from '../game/Bot';
 import { decideWinner, leadWithDeadband, resultFor, type RaceWinner } from './raceLogic';
 import type { RaceView } from './RaceHud';
 import { handlingFor, MP_RACE, scoringFor, slowMoFor, TIMESTEP, type BotSkill } from '../utils/constants';
@@ -94,8 +94,11 @@ export class BotRace {
       this.accumulator += realDt;
       while (this.accumulator >= TIMESTEP) {
         this.accumulator -= TIMESTEP;
-        // The bot decides from ITS OWN state only (never the player's) — anti-rubber-band.
-        const intent = botIntent(this.botState, this.bot, this.skill, TIMESTEP);
+        // EASY-ONLY catch-up: shape the skill by the bot's current LEAD over the player BEFORE the intent
+        // (botIntent itself stays position-blind). For MEDIUM/HARD catchUpSkill is a no-op → pure skill,
+        // anti-rubber-band preserved. lead = bot ahead of player (positive).
+        const lead = this.bot.distance - this.playerGame.distance;
+        const intent = botIntent(this.botState, this.bot, catchUpSkill(this.skill, lead), TIMESTEP);
         update(this.playerGame, playerIntent, TIMESTEP); // consumes the deploy latch (one/press)
         update(this.bot, intent, TIMESTEP);
         if (this.playerGame.lastEvents.mpCrashed) this.events.onLocalCrash?.();

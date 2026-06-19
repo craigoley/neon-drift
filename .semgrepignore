@@ -1,0 +1,17 @@
+# Semgrep path excludes. Generated / vendored output only — there is NOTHING to suppress for false
+# positives: a full-repo scan (p/typescript + p/javascript + p/security-audit + p/secrets), INCLUDING
+# the WebRTC signaling code (src/net/) and the /api/signal serverless endpoint, returned 0 findings and
+# 0 errors. So no `// nosemgrep` inline waivers + no rule excludes are needed — the baseline is clean.
+# (If a future canvas/WebRTC false positive appears, suppress it inline with `// nosemgrep: <rule-id>`
+# and a one-line reason, rather than blanket-ignoring a rule.)
+
+node_modules/
+dist/
+coverage/
+
+# Local-only Playwright artifacts (the committed -linux baselines are intentional, but binary PNGs +
+# traces carry no source to scan).
+test-results/
+playwright-report/
+**/*-snapshots/
+.lighthouseci/

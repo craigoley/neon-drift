@@ -9,6 +9,7 @@
 import type { GameState } from '../game/GameState';
 import { isSlalom, Phase } from '../game/GameState';
 import type { PowerupEffects } from '../game/Powerups';
+import { mph, usDistance } from '../utils/units';
 import {
   cssHex,
   JUICE,
@@ -168,7 +169,7 @@ export class HUD {
       }
     }
 
-    this.speedEl.textContent = `${Math.round(game.vehicle.speed)} km/s`;
+    this.speedEl.textContent = `${mph(game.vehicle.speed)} MPH`;
     if (slalom) {
       // DAILY SLALOM readouts: the event-driven score, the clean-streak multiplier
       // (the dominant term — pulses as it climbs), and gates threaded. The classic
@@ -183,7 +184,7 @@ export class HUD {
       this.lastCombo = s.cleanMultiplier;
       this.bestEl.textContent = '';
     } else {
-      this.distEl.textContent = `${Math.round(game.distance)} m`;
+      this.distEl.textContent = usDistance(game.distance);
       this.scoreEl.textContent = `${Math.round(game.score.score)}`;
       this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
       this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';

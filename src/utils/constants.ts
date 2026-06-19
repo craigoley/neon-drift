@@ -45,6 +45,23 @@ export const MAX_FRAME_DT = 0.25;
  */
 export const SIM_MATH_VERSION = 1;
 
+/**
+ * DISPLAY-ONLY US units (audit #174). The HUD/race readouts used to show speed as "km/s" (km/second =
+ * orbital velocity — physically absurd) and distance as "m". These convert the numbers a US player READS
+ * to mph + miles/feet. ⚠️ DISPLAY-ONLY: the sim's internal speed (world units/s) + distance (world units)
+ * are UNCHANGED — this does NOT touch SIM_MATH_VERSION and does NOT invalidate ghosts/leaderboards/daily.
+ */
+export const UNITS = {
+  /** mph shown = internal speed (world units/s) × this. The internal value (~70 cruise → ~235 top) already
+   *  reads as a plausible fast-car mph, so 1 is a clean 1:1; tune up for a punchier readout if wanted. */
+  mphPerSpeedUnit: 1,
+  /** Real conversions — world units are treated as metres for display. */
+  metersPerMile: 1609.34,
+  feetPerMeter: 3.28084,
+  /** Below this many metres, show FEET (keeps short distances / close race gaps legible); MILES above. */
+  feetThresholdMeters: 160,
+} as const;
+
 /** Road geometry + recycled-segment-pool tuning. */
 export const ROAD = {
   /** Drivable half-width; lateral position is clamped to +/- this. */

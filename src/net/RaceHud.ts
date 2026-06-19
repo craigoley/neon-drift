@@ -10,6 +10,7 @@
 
 import { finishProgress, type RaceResult } from './raceLogic';
 import { CSS_PALETTE, MP_RACE } from '../utils/constants';
+import { usDistance } from '../utils/units';
 
 /** The per-tick snapshot the HUD renders (mode-agnostic: MP and bot both produce it). */
 export interface RaceView {
@@ -35,7 +36,7 @@ const AHEAD = CSS_PALETTE.ahead;
 const BEHIND = CSS_PALETTE.behind;
 const YOU = CSS_PALETTE.cyan;
 const RIVAL = CSS_PALETTE.magenta;
-const m = (d: number) => `${Math.round(d)}m`;
+const m = (d: number) => usDistance(d); // US display (miles/feet); internal distance is unchanged
 
 const markerStyle = (color: string) =>
   `position:absolute;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;` +

@@ -145,11 +145,15 @@ test('Esc pause → Esc resume returns to the SAME run (distance keeps climbing)
 
   await page.keyboard.press('Escape');
   await expect(page.locator('.shell-pause')).toBeVisible();
-  const distAtPause = await lsNumber(page, '.hud-stat >> nth=1'); // frozen while paused
+  // Read the RAW distance from the debug mirror (not the HUD text): the HUD now formats US miles/feet
+  // (#174), so digit-stripping the label is unit-dependent + fragile across the ft↔mi switch. The raw
+  // value is the unit-independent source of truth for "distance kept climbing".
+  const rawDist = () => page.evaluate(() => (window as unknown as { __neonDebug?: { distance: number } }).__neonDebug?.distance ?? 0);
+  const distAtPause = await rawDist(); // frozen while paused
   await page.keyboard.press('Escape'); // resume
   await expect(page.locator('.shell-pause')).toBeHidden();
   await expect.poll(() => page.evaluate(() => document.body.classList.contains('playing'))).toBe(true);
   // Same run continued: distance advances from where it paused (not reset to 0).
-  await expect.poll(() => lsNumber(page, '.hud-stat >> nth=1')).toBeGreaterThan(distAtPause);
+  await expect.poll(rawDist).toBeGreaterThan(distAtPause);
   expect(errors).toEqual([]);
 });

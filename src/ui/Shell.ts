@@ -18,6 +18,7 @@ import type { BestRun, LeaderboardStore, RunPlacement } from '../state/Leaderboa
 import type { DailyEntry, DailyResult } from '../state/DailyStore';
 import type { AudioEngine } from '../audio/AudioEngine';
 import { carById, CARS, carStats, cssHex, handlingFor, SCORING, UI } from '../utils/constants';
+import { usDistance } from '../utils/units';
 import { share } from './share';
 
 type Screen =
@@ -368,7 +369,7 @@ export class Shell {
     daily: DailyResult | null = null,
     creditsEarned = 0,
   ): void {
-    this.crashScoreEl.textContent = `score ${Math.round(score)} · ${Math.round(distance)} m`;
+    this.crashScoreEl.textContent = `score ${Math.round(score)} · ${usDistance(distance)}`;
     // PROG-1: the credits earned this run + the running balance (no spend yet).
     this.renderCredits(this.crashCreditsEl, creditsEarned);
     // The live combo resets on crash, so the WIPEOUT screen is where the player
@@ -383,7 +384,7 @@ export class Shell {
 
     // For a daily run `best` is TODAY's best (chase-your-own); else the all-time #1.
     const bestLabel = daily ? 'today' : 'best';
-    this.crashBestEl.textContent = `${bestLabel} ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
+    this.crashBestEl.textContent = `${bestLabel} ${Math.round(best.score)} · ${usDistance(best.distance)}`;
 
     // Unlock moment: celebrate anything earned this run (else stay hidden).
     if (unlockedNames.length > 0) {
@@ -531,8 +532,9 @@ export class Shell {
       `<button class="shell-utility-btn shell-settings-open" type="button" aria-label="Settings" title="Settings">⚙</button>` +
       `<button class="shell-utility-btn shell-share" type="button" aria-label="Share" title="Share">↗</button>` +
       `</div>` +
-      // HEADER: identity + the two live readouts.
+      // HEADER: identity + a one-line "what is this" (FTUE) + the two live readouts.
       `<h1 class="shell-title">NEON DRIFT</h1>` +
+      `<p class="shell-tagline">A synthwave endless racer — weave through traffic and chase the neon horizon.</p>` +
       `<p class="shell-best"></p>` +
       `<p class="shell-credits"></p>` +
       // PRIMARY: the one dominant action.
@@ -619,7 +621,7 @@ export class Shell {
 
   private bestLine(best: BestRun): string {
     if (best.score <= 0 && best.distance <= 0) return 'NO RUNS YET';
-    return `BEST  ${Math.round(best.score)} · ${Math.round(best.distance)} m`;
+    return `BEST  ${Math.round(best.score)} · ${usDistance(best.distance)}`;
   }
 
   // --- settings panel -----------------------------------------------------
@@ -1024,7 +1026,7 @@ export class Shell {
             `<div class="shell-lb-row${i === 0 ? ' shell-lb-row--top' : ''}">` +
             `<span class="shell-lb-rank">#${i + 1}</span>` +
             `<span class="shell-lb-score">${fmtNum(e.score)}</span>` +
-            `<span class="shell-lb-dist">${fmtNum(e.distance)} m</span>` +
+            `<span class="shell-lb-dist">${usDistance(e.distance)}</span>` +
             `<span class="shell-lb-car">${this.carLabel(e.carId)}</span>` +
             `<span class="shell-lb-date">${fmtDate(e.date)}</span>` +
             `</div>`,
@@ -1042,7 +1044,7 @@ export class Shell {
                 `<div class="shell-lb-row">` +
                 `<span class="shell-lb-car">${this.carLabel(c.carId)}</span>` +
                 `<span class="shell-lb-score">${fmtNum(c.score)}</span>` +
-                `<span class="shell-lb-dist">${fmtNum(c.distance)} m</span>` +
+                `<span class="shell-lb-dist">${usDistance(c.distance)}</span>` +
                 `<span class="shell-lb-date">${fmtDate(c.date)}</span>` +
                 `</div>`,
             )
@@ -1075,7 +1077,7 @@ export class Shell {
     const today = d.today();
     this.dailyTodayEl.textContent =
       today && today.runs > 0
-        ? `TODAY: ${fmtNum(today.bestScore)} · ${fmtNum(today.bestDistance)} m · ${today.runs} run${today.runs === 1 ? '' : 's'}`
+        ? `TODAY: ${fmtNum(today.bestScore)} · ${usDistance(today.bestDistance)} · ${today.runs} run${today.runs === 1 ? '' : 's'}`
         : 'TODAY: not played yet';
 
     const history = d.history();
@@ -1088,7 +1090,7 @@ export class Shell {
                 `<div class="shell-lb-row shell-daily-row">` +
                 `<span class="shell-lb-date">${fmtDateKey(e.dateKey)}</span>` +
                 `<span class="shell-lb-score">${fmtNum(e.bestScore)}</span>` +
-                `<span class="shell-lb-dist">${fmtNum(e.bestDistance)} m</span>` +
+                `<span class="shell-lb-dist">${usDistance(e.bestDistance)}</span>` +
                 `<span class="shell-lb-car">${this.carLabel(e.bestCarId)}</span>` +
                 `</div>`,
             )

@@ -25,6 +25,9 @@ import type { GameState } from './GameState';
 // Scratch intent reused every sub-step (callers consume it before the next call).
 const _intent: InputIntent = { steer: 0, deploySlowMo: false, restart: false };
 
+// Scratch skill reused by catchUpSkill (callers consume it before the next call).
+const _boostedSkill: BotSkill = { reactionDistance: 0, dodgeJitter: 0, mistakeRate: 0, steerGain: 0, slowMoTriggerDistance: 0 };
+
 /** The bot's small persistent state: its private mistake-rng + a held "fumble" so a
  *  mistake reads as a beat of hesitation rather than a 1-frame flicker. */
 export interface BotState {
@@ -75,7 +78,13 @@ function pickClearLane(center: number, botLateral: number, obsLateral: number): 
 export function catchUpSkill(skill: BotSkill, lead: number): BotSkill {
   if (!skill.catchUp || lead <= BOT_CATCHUP.leadThreshold) return skill; // behind/even or not EASY → pure
   const boost = Math.min(BOT_CATCHUP.maxBoost, (lead - BOT_CATCHUP.leadThreshold) * BOT_CATCHUP.boostPerUnit);
-  return { ...skill, mistakeRate: skill.mistakeRate + boost };
+  _boostedSkill.reactionDistance = skill.reactionDistance;
+  _boostedSkill.dodgeJitter = skill.dodgeJitter;
+  _boostedSkill.mistakeRate = skill.mistakeRate + boost;
+  _boostedSkill.steerGain = skill.steerGain;
+  _boostedSkill.slowMoTriggerDistance = skill.slowMoTriggerDistance;
+  _boostedSkill.catchUp = skill.catchUp;
+  return _boostedSkill;
 }
 
 /**

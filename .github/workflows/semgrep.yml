@@ -1,0 +1,62 @@
+name: Semgrep (security + static analysis)
+
+# Static-analysis security scan (SAST) — joins CodeQL + OSV as a defence-in-depth scanner. Runs the
+# public OSS rulesets (no token / no app.semgrep.dev account needed) and uploads findings as SARIF to
+# the Security tab + as an artifact.
+#
+# Deliberately OFF the per-PR path: workflow_dispatch + a weekly schedule only — NO `pull_request`
+# trigger. So it can NEVER become a merge-blocking check and never trips/loops the claude-review
+# review-and-merge pipeline (which fires on pull_request events). Mirrors lighthouse.yml / validation.yml.
+# Extra belt-and-braces: the scan step is continue-on-error so a finding (or a transient ruleset fetch
+# failure) never reds the run — this gate REPORTS, it never blocks.
+#
+# Rulesets are adapted to the ACTUAL stack (Three.js + vanilla TypeScript + Vite — NOT React, so p/react
+# is intentionally omitted): p/typescript + p/javascript for code smells/bugs, p/security-audit for
+# injection/unsafe-pattern SAST, p/secrets for committed credentials.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '41 7 * * 2' # weekly, Tuesday 07:41 UTC (off-set from CodeQL Mon / OSV Wed)
+
+permissions:
+  contents: read
+  security-events: write # to upload the SARIF to the Security tab
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  semgrep:
+    name: Semgrep scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v6
+      # `.semgrepignore` (committed at the repo root) excludes generated output + the justified,
+      # documented false-positives for a canvas/WebRTC game. SARIF is always written.
+      - name: Semgrep scan
+        continue-on-error: true
+        run: |
+          semgrep scan \
+            --config p/typescript \
+            --config p/javascript \
+            --config p/security-audit \
+            --config p/secrets \
+            --sarif --output semgrep.sarif \
+            --metrics off
+      - name: Upload SARIF to the Security tab
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+        continue-on-error: true
+      - name: Upload SARIF artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-sarif
+          path: semgrep.sarif
+          if-no-files-found: ignore

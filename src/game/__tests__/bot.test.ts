@@ -5,11 +5,11 @@
  * see the player — these tests exercise the behaviour built on top of that.
  */
 import { describe, expect, it } from 'vitest';
-import { botIntent, createBotState } from '../Bot';
+import { botIntent, catchUpSkill, createBotState } from '../Bot';
 import { createGameState, startRun, update } from '../GameState';
 import { roadCenterAt } from '../Road';
 import { createIntent } from '../Input';
-import { BOT_DIFFICULTY, type BotSkill, ObstacleKind, ROAD, TIMESTEP } from '../../utils/constants';
+import { BOT_CATCHUP, BOT_DIFFICULTY, type BotSkill, ObstacleKind, ROAD, TIMESTEP } from '../../utils/constants';
 
 const SEED = 12345;
 /** A clean skill with no randomness, to test the deterministic dodge geometry. */
@@ -135,7 +135,7 @@ describe('Bot — anti-rubber-band (cannot see the player)', () => {
   });
 });
 
-describe('Bot — EASY is genuinely weaker (crashes; no rubber-band)', () => {
+describe('Bot — EASY is genuinely weaker (base skill) + EASY-only position-aware catch-up', () => {
   /** Run a bot solo through the REAL sim (mpRace mode → a crash SLOWS, doesn't end) and count crashes. */
   function runBot(skill: BotSkill, frames: number) {
     const g = startRun(createGameState(SEED), undefined, 0, SEED, undefined, undefined, undefined, true);
@@ -153,6 +153,34 @@ describe('Bot — EASY is genuinely weaker (crashes; no rubber-band)', () => {
     const easy = runBot(BOT_DIFFICULTY.easy, 3600); // ~60s
     const hard = runBot(BOT_DIFFICULTY.hard, 3600);
     expect(easy.crashes, 'EASY makes real mistakes — it crashes sometimes').toBeGreaterThan(0);
-    expect(easy.crashes, 'EASY is uniformly weaker than HARD (its own skill, not catch-up)').toBeGreaterThan(hard.crashes);
+    expect(easy.crashes, 'EASY is uniformly weaker than HARD (its own skill)').toBeGreaterThan(hard.crashes);
+  });
+
+  describe('EASY position-aware catch-up (rubber-banding) — EASY ONLY', () => {
+    it('catchUpSkill BOOSTS the EASY mistake rate when AHEAD, leaves it alone when even/behind', () => {
+      const base = BOT_DIFFICULTY.easy.mistakeRate;
+      // Even / behind / small lead → no boost (a close race is pure skill).
+      expect(catchUpSkill(BOT_DIFFICULTY.easy, 0).mistakeRate).toBe(base);
+      expect(catchUpSkill(BOT_DIFFICULTY.easy, -300).mistakeRate).toBe(base);
+      expect(catchUpSkill(BOT_DIFFICULTY.easy, BOT_CATCHUP.leadThreshold).mistakeRate).toBe(base);
+      // Ahead → mistakeRate climbs with the lead, capped at base + maxBoost.
+      const some = catchUpSkill(BOT_DIFFICULTY.easy, BOT_CATCHUP.leadThreshold + 200).mistakeRate;
+      expect(some).toBeGreaterThan(base);
+      expect(catchUpSkill(BOT_DIFFICULTY.easy, 99999).mistakeRate).toBeCloseTo(base + BOT_CATCHUP.maxBoost, 6);
+    });
+
+    it('MEDIUM/HARD are POSITION-BLIND: catchUpSkill is a no-op no matter how far ahead (no rubber-band)', () => {
+      for (const lead of [0, 500, 99999]) {
+        expect(catchUpSkill(BOT_DIFFICULTY.medium, lead), `medium @${lead}`).toBe(BOT_DIFFICULTY.medium); // same ref
+        expect(catchUpSkill(BOT_DIFFICULTY.hard, lead), `hard @${lead}`).toBe(BOT_DIFFICULTY.hard);
+      }
+    });
+
+    it('EASY crashes MORE while AHEAD than at its base skill (it stumbles when leading → you catch up)', () => {
+      const ahead = catchUpSkill(BOT_DIFFICULTY.easy, BOT_CATCHUP.leadThreshold + 400); // a solid lead
+      const behind = runBot(BOT_DIFFICULTY.easy, 3600); // base skill (even/behind)
+      const leading = runBot(ahead, 3600); // boosted (ahead)
+      expect(leading.crashes, 'leading EASY fumbles/crashes more than base EASY').toBeGreaterThan(behind.crashes);
+    });
   });
 });

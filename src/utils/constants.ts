@@ -2606,6 +2606,11 @@ export interface BotSkill {
   /** Use a banked slow-mo when the nearest hazard is within this distance (0 =
    *  never uses slow-mo). Larger = deploys earlier / smarter in tight spots. */
   slowMoTriggerDistance: number;
+  /** EASY-ONLY opt-in: when true, the RACE layer (BotRace) applies POSITION-AWARE CATCH-UP — it boosts
+   *  this bot's mistake rate while it's AHEAD of the player (see BOT_CATCHUP), so a beginner wins most.
+   *  Absent/false (MEDIUM/HARD) = pure skill, position-blind, NO rubber-banding (botIntent never sees
+   *  the player either way — the catch-up is applied to the skill BEFORE botIntent, gated by this flag). */
+  catchUp?: boolean;
 }
 
 /** EASY / MEDIUM / HARD skill presets. EASY sees late, places loosely, errs often, barely uses slow-mo
@@ -2624,11 +2629,31 @@ export interface BotSkill {
  *   • mistakeRate   0.22→0.34 — fumbles more often; a fumble that lands on a hazard = a crash.
  *   • slowMoTriggerDistance 0 — never bails itself out with slow-mo (unchanged; already the weakest). */
 export const BOT_DIFFICULTY: Readonly<Record<'easy' | 'medium' | 'hard', BotSkill>> = {
-  easy: { reactionDistance: 58, dodgeJitter: 3.4, mistakeRate: 0.34, steerGain: 0.12, slowMoTriggerDistance: 0 },
+  // EASY also opts into position-aware CATCH-UP (catchUp: true → it stumbles when AHEAD; see BOT_CATCHUP).
+  easy: { reactionDistance: 58, dodgeJitter: 3.4, mistakeRate: 0.34, steerGain: 0.12, slowMoTriggerDistance: 0, catchUp: true },
+  // MEDIUM/HARD: pure skill, NO catch-up, position-blind (the no-rubber-banding promise lives HERE now).
   medium: { reactionDistance: 160, dodgeJitter: 1.1, mistakeRate: 0.08, steerGain: 0.3, slowMoTriggerDistance: 32 },
   hard: { reactionDistance: 240, dodgeJitter: 0.25, mistakeRate: 0.015, steerGain: 0.42, slowMoTriggerDistance: 48 },
 } as const;
 export type BotDifficulty = keyof typeof BOT_DIFFICULTY;
+
+/**
+ * EASY-ONLY position-aware CATCH-UP (rubber-banding) tuning. When the EASY bot leads the player by more
+ * than `leadThreshold` (world units), the race layer boosts its mistake rate by `boostPerUnit` per unit
+ * of lead beyond the threshold, capped at `maxBoost` — so it fumbles/crashes MORE the further ahead it
+ * gets, letting a beginner catch up + win most races (but NOT a walkover — when even/behind it plays at
+ * its normal weak skill, so a player who crashes a lot still loses). ⚠️ EASY ONLY (gated by
+ * BotSkill.catchUp); MEDIUM/HARD never rubber-band. AI/race CONFIG — NOT detmath → no SIM_MATH_VERSION
+ * bump, no ghost/leaderboard impact (the bot is never recorded as a ghost; ghosts are player replays).
+ */
+export const BOT_CATCHUP = {
+  /** Lead (world units, bot ahead of player) below which there's NO boost — a close race is pure skill. */
+  leadThreshold: 140,
+  /** Added mistake-rate per world-unit of lead beyond the threshold. */
+  boostPerUnit: 0.0016,
+  /** Cap on the added mistake rate (base 0.34 + 0.55 ≈ 0.89 peak when far ahead — frequent fumbles). */
+  maxBoost: 0.55,
+} as const;
 
 /** Bot behaviour constants shared across difficulties. */
 export const BOT = {

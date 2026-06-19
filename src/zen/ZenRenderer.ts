@@ -71,9 +71,13 @@ export class ZenRenderer {
   /** Speed-streak field for the ARCH boost; `boost` ∈ [0,1] eases its opacity (0 = hidden). */
   private readonly streaks: ZenSpeedStreaks;
   private boost = 0;
+  /** This session's world seed — every world-generating sub-object (backdrop, terrain, scenery,
+   *  landmarks, cavern, stars) + the per-frame surface/biome reads key off it. */
+  private readonly seed: number;
 
-  constructor(renderer: THREE.WebGLRenderer, car?: CarDef) {
+  constructor(renderer: THREE.WebGLRenderer, seed: number, car?: CarDef) {
     this.renderer = renderer;
+    this.seed = seed; // set FIRST — the sub-objects below build the world from it
     // Fog tinted to the HORIZON colour so the grid floor fades into the sunset horizon
     // (not a flat purple band) — the backdrop's sky gradient ends in the same colour, so
     // floor and sky meet seamlessly. The backdrop sets scene.background (the sky gradient).
@@ -83,27 +87,27 @@ export class ZenRenderer {
     this.camera.position.set(0, ZEN.camHeight, ZEN.camDistance);
 
     // Serene sunset horizon (sky + sun + mountain ring) — kills the void, works 360°.
-    this.backdrop = new ZenBackdrop(this.scene, ZEN.worldSeed);
+    this.backdrop = new ZenBackdrop(this.scene, this.seed);
 
     // The neon synthwave grid is now a HEIGHTMAP surface (rolling hills), streamed +
     // recentred on the car. Seams perfectly because heights come from world coords.
-    this.terrain = new ZenTerrain(this.scene, ZEN.worldSeed);
+    this.terrain = new ZenTerrain(this.scene, this.seed);
 
     // Chunk-streamed scenery (the populated world the car drives through), on the terrain.
-    this.scenery = new ZenScenery(this.scene);
+    this.scenery = new ZenScenery(this.scene, this.seed);
 
     // Rare neon LANDMARKS — beacons you spot from afar + journey to (streamed + reach pulses).
-    this.landmarks = new ZenLandmarks(this.scene, ZEN.worldSeed);
+    this.landmarks = new ZenLandmarks(this.scene, this.seed);
 
     // The tunnel payoff CAVERN — a vast amber space at the tunnel region (hidden until you warp in).
-    this.cavern = new ZenCavern(this.scene, ZEN.worldSeed);
+    this.cavern = new ZenCavern(this.scene, this.seed);
 
     // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
     this.shadow = new ZenShadow(this.scene);
 
     // Biome REGIONS: a 360° star dome + the apply that pushes the blended biome palette
     // (fog/sky/sun/mountains/stars/prop-tint) from the biome under the car each frame.
-    this.stars = new ZenStarfield(this.scene, ZEN.worldSeed);
+    this.stars = new ZenStarfield(this.scene, this.seed);
     this.biomeView = new ZenBiomeView(this.scene, this.backdrop, this.stars, this.scenery);
 
     // ARCH speed-boost streaks (hidden until a boost is active).
@@ -226,7 +230,7 @@ export class ZenRenderer {
       const arc = Math.atan2(v.vy, Math.max(v.speed, 1));
       this.car.group.rotation.x = clamp(arc * ZEN.terrainTiltFactor, -ZEN.airTiltMax, ZEN.airTiltMax);
     } else {
-      const slope = surfaceSlopeAlong(ZEN.worldSeed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
+      const slope = surfaceSlopeAlong(this.seed, v.x, v.z, Math.sin(v.heading), -Math.cos(v.heading));
       this.car.group.rotation.x = clamp(Math.atan(slope) * ZEN.terrainTiltFactor, -ZEN.terrainTiltMax, ZEN.terrainTiltMax);
     }
     this.car.chassis.rotation.z = -clamp(steer, -1, 1) * leanMax;
@@ -248,13 +252,13 @@ export class ZenRenderer {
     } else if (this.secretActive) {
       this.biomeView.applySecret();
     } else {
-      biomeAt(ZEN.worldSeed, v.x, v.z, this.biomeState);
+      biomeAt(this.seed, v.x, v.z, this.biomeState);
       this.biomeView.apply(this.biomeState);
     }
     this.stars.update(v.x, v.z);
     // Air-shadow: pin a glow spot to the terrain under the car. Airborne, the car rises but
     // the shadow stays on the ground → a visible gap (the readable "in the air" cue).
-    const groundY = drivableSurfaceY(ZEN.worldSeed, v.x, v.z) + ZEN.rideHeight;
+    const groundY = drivableSurfaceY(this.seed, v.x, v.z) + ZEN.rideHeight;
     this.shadow.update(v.x, groundY, v.z, v.y - groundY);
     // ARCH boost speed-streaks: stream past the car, opacity/flow eased by the boost intensity.
     this.streaks.update(v.x, v.y, v.z, v.heading, this.boost, dt);

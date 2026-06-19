@@ -9,7 +9,7 @@
  * Pure logic (the projection + sampling) lives in ZenMinimapModel; this is the thin renderer.
  */
 
-import { ZEN, ZEN_MINIMAP, cssHex } from '../utils/constants';
+import { ZEN_MINIMAP, cssHex } from '../utils/constants';
 import { smoothFollow, wrapToPi } from '../utils/math';
 import {
   projectToRadar,
@@ -47,8 +47,11 @@ export class ZenMinimap {
   private smoothedHeading = 0;
   private framesSinceResample = Number.MAX_SAFE_INTEGER; // force a resample on the first frame
   private initialised = false;
+  /** The session world seed — the radar's biome wash + landmark markers/bearings key off it. */
+  private readonly seed: number;
 
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, seed: number) {
+    this.seed = seed;
     this.dpr = Math.min(2, Math.max(1, Math.round(globalThis.devicePixelRatio || 1)));
     this.size = ZEN_MINIMAP.sizePx;
     this.radius = this.size / 2 - ZEN_MINIMAP.ringWidth;
@@ -110,7 +113,7 @@ export class ZenMinimap {
       const dz = ((j + 0.5) / n * 2 - 1) * R;
       for (let i = 0; i < n; i++) {
         const dx = ((i + 0.5) / n * 2 - 1) * R;
-        const color = biomeRadarColor(ZEN.worldSeed, carX + dx, carZ + dz, this.biomeScratch);
+        const color = biomeRadarColor(this.seed, carX + dx, carZ + dz, this.biomeScratch);
         const o = (j * n + i) * 4;
         data[o] = (color >> 16) & 0xff;
         data[o + 1] = (color >> 8) & 0xff;
@@ -119,10 +122,10 @@ export class ZenMinimap {
       }
     }
     this.washCtx.putImageData(img, 0, 0);
-    this.markers = gatherMarkers(ZEN.worldSeed, carX, carZ, R);
+    this.markers = gatherMarkers(this.seed, carX, carZ, R);
     // The per-type compass: the nearest arch/ring/gateway/vista/tunnel to the car (for the edge
     // bearing ticks). Throttled with the rest of the resample — it barely moves between samples.
-    this.bearings = nearestOfEachType(ZEN.worldSeed, carX, carZ);
+    this.bearings = nearestOfEachType(this.seed, carX, carZ);
   }
 
   /** Redraw the scope: rotated biome wash, markers, north tick, ring, and the centred car. */

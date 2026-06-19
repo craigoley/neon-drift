@@ -33,10 +33,13 @@ export class ZenScenery {
   private neon = true;
   /** Per-kind instance capacity (the bounded prop budget). */
   readonly capacity: number;
+  /** The session world seed — the chunk field + per-prop terrain heights key off it. */
+  private readonly seed: number;
 
-  constructor(scene: THREE.Scene) {
+  constructor(scene: THREE.Scene, seed: number) {
+    this.seed = seed;
     const kinds = SCENERY.layers.length;
-    this.field = new ZenChunkField(ZEN.worldSeed, ZEN.chunkRadius, kinds);
+    this.field = new ZenChunkField(this.seed, ZEN.chunkRadius, kinds);
     // Worst case all active props are one kind, so size each kind's pool to the WHOLE
     // active budget. Draw calls stay = kinds (one InstancedMesh each) regardless.
     this.capacity = maxActiveChunks(ZEN.chunkRadius) * ZEN.propsPerChunk;
@@ -102,7 +105,7 @@ export class ZenScenery {
       const n = this.counts[p.kind];
       if (n >= this.capacity) return; // guard — sizing guarantees this won't trip
       // Sit each prop ON the terrain surface (PR3a) so it rests on the hills, not floats.
-      this.dummy.position.set(p.x, heightAt(ZEN.worldSeed, p.x, p.z), p.z);
+      this.dummy.position.set(p.x, heightAt(this.seed, p.x, p.z), p.z);
       this.dummy.rotation.set(0, p.rotationY, 0);
       this.dummy.scale.setScalar(p.scale);
       this.dummy.updateMatrix();

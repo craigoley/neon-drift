@@ -55,6 +55,9 @@ interface ZenDbg {
 }
 interface Dbg { mode: string; frame: number; seed: number; zen?: ZenDbg }
 
+// Zen now picks a RANDOM world per entry; the soak PINS it via the `?seed=${SEED}` boot below so the
+// world (and the landmark/portal lookups keyed to SEED) stays deterministic — the canary never goes
+// flaky from a random world. ZEN.worldSeed is the canonical pinned world.
 const SEED = ZEN.worldSeed;
 const log = (s: string) => console.log(`[VALIDATION] entering state=${s}`);
 

@@ -200,6 +200,15 @@ export class ZenSession {
       : '← → / A D to steer · ↑ ↓ to accelerate · drift around';
     this.overlay.appendChild(hint);
 
+    // DISCOVERY nudge (FTUE, audit #174): controls alone don't tell a new player there's anything OUT
+    // there. One calm line points them outward — toward the landmark beacons the radar marks. Same
+    // unobtrusive style as the controls hint; the discovery itself is the point, so we don't over-explain.
+    const discover = document.createElement('p');
+    discover.style.cssText =
+      'position:absolute;top:32px;left:50%;transform:translateX(-50%);margin:0;color:#c9a8ff;opacity:0.6;font-size:12px;text-align:center;';
+    discover.textContent = 'explore — drive toward the beacons on the horizon';
+    this.overlay.appendChild(discover);
+
     if (opts.isTouch) {
       this.overlay.appendChild(this.makeHoldButton('GAS', 'right:14px', (h) => (this.fwd = h)));
       this.overlay.appendChild(this.makeHoldButton('BRAKE', 'left:14px', (h) => (this.back = h)));

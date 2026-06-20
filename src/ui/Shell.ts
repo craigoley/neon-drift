@@ -865,6 +865,10 @@ export class Shell {
   private buildStore(): HTMLElement {
     const s = screen('shell-store');
     s.innerHTML =
+      // FIXED top-left BACK — always visible (kid-safety, audit #190): the store's only other exit is
+      // the DONE button BELOW the long cosmetics list, off-screen on a phone → a trap (a player got
+      // stuck, browser-back the only way out). This stays put at the safe-area top, never scrolls away.
+      `<button class="shell-back shell-back-store" type="button" aria-label="Back to menu">‹ BACK</button>` +
       `<h2 class="shell-subtitle">STORE</h2>` +
       `<p class="shell-store-balance"></p>` +
       `<div class="shell-store-preview"></div>` +
@@ -874,6 +878,7 @@ export class Shell {
       `<div class="shell-store-cosmetics shell-store-list"></div>` +
       `<button class="shell-btn shell-close-store" type="button">DONE</button>`;
 
+    s.querySelector('.shell-back-store')!.addEventListener('click', () => this.showStart());
     s.querySelector('.shell-close-store')!.addEventListener('click', () => this.showStart());
     // Delegated buy/equip: the row button carries data-action / data-id / data-slot.
     const onClick = (e: Event) => {

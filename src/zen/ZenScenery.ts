@@ -33,8 +33,8 @@ export class ZenScenery {
   private neon = true;
   /** Per-kind instance capacity (the bounded prop budget). */
   readonly capacity: number;
-  /** The session world seed — the chunk field + per-prop terrain heights key off it. */
-  private readonly seed: number;
+  /** The world seed — the chunk field + per-prop terrain heights key off it. */
+  private seed: number;
 
   constructor(scene: THREE.Scene, seed: number) {
     this.seed = seed;
@@ -91,6 +91,13 @@ export class ZenScenery {
     for (let i = 0; i < this.meshes.length; i++) {
       this.meshes[i].geometry = on ? this.fancyGeos[i] : this.plainGeos[i];
     }
+  }
+
+  /** Re-key the world seed (tunnel-payoff warp): the chunk field + the per-prop terrain heights both
+   *  switch to it, and the field re-streams on the next update. */
+  setSeed(seed: number): void {
+    this.seed = seed;
+    this.field.setSeed(seed);
   }
 
   /**

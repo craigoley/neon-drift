@@ -82,7 +82,7 @@ const _white = new THREE.Color(0xffffff);
 
 export class ZenLandmarks {
   private readonly scene: THREE.Scene;
-  private readonly seed: number;
+  private seed: number;
   /** Shared base geometry per type (built once; every instance references it). */
   private readonly geo: THREE.BufferGeometry[];
   /** Shared unit ANNULUS (outer radius 1, in local XY) for the gate ripple — a filled ring you
@@ -119,6 +119,25 @@ export class ZenLandmarks {
    * Stream landmark meshes around the car + run the reach pulses. Cheap: landmarks are rare, so
    * the active set is tiny; the heavy work is a bounded `landmarksInRadius` scan.
    */
+  /** Re-key the world seed (tunnel-payoff warp): cull EVERY active landmark (they're from the old seed,
+   *  and ids are cell-based so they could otherwise collide), then the next update re-streams the new
+   *  seed's landmarks. */
+  setSeed(seed: number): void {
+    this.seed = seed;
+    this.hasPrevCar = false;
+    for (const a of this.active.values()) {
+      a.mesh.removeFromParent();
+      a.material.dispose();
+      if (a.gateMesh) a.gateMesh.removeFromParent();
+      if (a.gateMaterial) a.gateMaterial.dispose();
+      if (a.floorMesh) a.floorMesh.removeFromParent();
+      if (a.floorMaterial) a.floorMaterial.dispose();
+      if (a.decorMesh) { a.decorMesh.removeFromParent(); a.decorMesh.geometry.dispose(); }
+      if (a.decorMaterial) a.decorMaterial.dispose();
+    }
+    this.active.clear();
+  }
+
   update(carX: number, carZ: number, dt: number): void {
     const inRange = landmarksInRadius(this.seed, carX, carZ, ZEN_LANDMARK.drawRadius);
 

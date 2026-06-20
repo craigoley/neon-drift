@@ -84,8 +84,13 @@ const BTN =
 
 export class ZenSession {
   private readonly v = createZenVehicle();
-  /** This session's world seed (random per entry, or the pinned ?seed=). The whole Zen world keys off it. */
-  private readonly seed: number;
+  /** The IMMUTABLE session identity (random per entry, or the pinned ?seed=) — the world Craig roams.
+   *  Never changes across a warp; #172 randomises it per entry, ?seed= pins it. */
+  private readonly sessionSeed: number;
+  /** The WORKING world seed every per-frame read keys off (surface/biome/triggers/heightAt) = sessionSeed
+   *  normally, but SWITCHED to ZEN_TUNNEL_SECRET.seed while warped in the tunnel cavern so that segregated
+   *  amber region is the SAME designed space every session (the renderer is re-keyed in lock-step). */
+  private seed: number;
   private readonly renderer: ZenRenderer;
   private readonly overlay: HTMLElement;
   private readonly minimap: ZenMinimap;
@@ -173,7 +178,8 @@ export class ZenSession {
 
   constructor(opts: ZenSessionOptions) {
     this.opts = opts;
-    this.seed = opts.seed; // set FIRST — the whole world (and everything below) keys off it
+    this.sessionSeed = opts.seed; // the immutable identity (the world Craig roams)
+    this.seed = opts.seed; // the working world seed (= sessionSeed until a tunnel warp switches it)
     // Start resting ON the terrain so the car doesn't visibly rise from y=0 at spawn.
     this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
     this.renderer = new ZenRenderer(opts.renderer, this.seed, opts.car);
@@ -225,7 +231,9 @@ export class ZenSession {
       `position:absolute;inset:0;background:${ZEN_SECRET.fadeColor};opacity:0;pointer-events:none;`;
     this.overlay.appendChild(this.fader);
     this.returnPortal = findReturnPortal(this.seed);
-    this.tunnelPortal = tunnelReturnPortal(this.seed);
+    // The tunnel cavern is the FIXED designed region (not the random session world) — its return portal
+    // + the cave + the region's terrain all key off ZEN_TUNNEL_SECRET.seed, so it's the SAME every session.
+    this.tunnelPortal = tunnelReturnPortal(ZEN_TUNNEL_SECRET.seed);
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
 
@@ -379,7 +387,7 @@ export class ZenSession {
     const info = this.renderer.debugInfo;
     biomeAt(this.seed, this.v.x, this.v.z, this._dbgBiome);
     return {
-      seed: this.seed,
+      seed: this.sessionSeed,
       pos: { x: this.v.x, y: this.v.y, z: this.v.z },
       cam: info.cam,
       camHeading: info.camHeading,
@@ -526,6 +534,11 @@ export class ZenSession {
       // the distinct tunnel space in front of its portal; RETURN restores that entrance, safe-arrival.
       if (!this.inTunnelSpace) {
         this.saved = this.tunnelEntry ?? snapshot(this.v);
+        // Switch the world to the FIXED tunnel-cavern region FIRST (the renderer re-streams it, hidden by
+        // the fade) so the cave is the same designed space every session — then place the car ON it.
+        this.inTunnelSpace = true;
+        this.seed = ZEN_TUNNEL_SECRET.seed;
+        this.renderer.setWorldSeed(ZEN_TUNNEL_SECRET.seed);
         const pose = arrivalPose(this.tunnelPortal);
         this.v.x = pose.x;
         this.v.z = pose.z;
@@ -534,7 +547,6 @@ export class ZenSession {
         this.v.vy = 0;
         this.v.airborne = false;
         this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
-        this.inTunnelSpace = true;
         this.renderer.setTunnelSecret(true);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
       } else {
@@ -542,6 +554,10 @@ export class ZenSession {
         // descent (you drove in; now you face the way you came = out of the mouth), so the loop reads as
         // "I came back up and out", ready to drive away (re-runnable). #130 safe-arrival (vy = 0, not
         // airborne, sane land) + the bounce guard (no instant re-descent of the mouth you just exited).
+        // Back to the SESSION world (restore the random world the player roamed; re-stream it).
+        this.inTunnelSpace = false;
+        this.seed = this.sessionSeed;
+        this.renderer.setWorldSeed(this.sessionSeed);
         if (this.saved) {
           this.v.x = this.saved.x;
           this.v.z = this.saved.z;
@@ -551,7 +567,6 @@ export class ZenSession {
         this.v.vy = 0;
         this.v.airborne = false;
         this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
-        this.inTunnelSpace = false;
         this.renderer.setTunnelSecret(false);
         this.guardDist = ZEN_TUNNEL_SECRET.returnGuardDistance;
         // Re-arm the descent detector so a fresh run can re-trigger (after the bounce guard clears).

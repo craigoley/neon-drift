@@ -121,7 +121,7 @@ interface LoadedChunk {
  */
 export class ZenChunkField {
   private readonly loaded = new Map<string, LoadedChunk>();
-  private readonly seed: number;
+  private seed: number;
   private readonly radius: number;
   private readonly kinds: number;
   private carCx = NaN;
@@ -131,6 +131,15 @@ export class ZenChunkField {
     this.seed = seed;
     this.radius = radius;
     this.kinds = kinds;
+  }
+
+  /** Re-key the world seed (tunnel-payoff warp). Drops all loaded chunks + invalidates the position so
+   *  the next update() re-streams the whole active set from the new seed. */
+  setSeed(seed: number): void {
+    this.seed = seed;
+    this.loaded.clear();
+    this.carCx = NaN;
+    this.carCz = NaN;
   }
 
   /**

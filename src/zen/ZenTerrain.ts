@@ -21,7 +21,7 @@ import { heightAt, rampContribution } from './ZenHeight';
 import { biomeAt, createZenBiomeState } from './ZenBiome';
 
 export class ZenTerrain {
-  private readonly seed: number;
+  private seed: number;
   private readonly geo = new THREE.BufferGeometry();
   private readonly mesh: THREE.LineSegments;
   private readonly mat: THREE.LineBasicMaterial;
@@ -99,6 +99,14 @@ export class ZenTerrain {
 
   /** Recenter + rebuild the surface when the car crosses into a new chunk (cheap rest of
    *  the time — a chunk-coord compare). */
+  /** Re-key the world seed (tunnel-payoff warp: render the cavern region from its FIXED seed, then the
+   *  session seed again on exit). Forces a rebuild on the next update so the grid re-streams from it. */
+  setSeed(seed: number): void {
+    this.seed = seed;
+    this.carCx = NaN; // invalidate → next update rebuilds from the new seed
+    this.carCz = NaN;
+  }
+
   update(carX: number, carZ: number): void {
     const cx = worldToChunk(carX, ZEN.chunkSize);
     const cz = worldToChunk(carZ, ZEN.chunkSize);

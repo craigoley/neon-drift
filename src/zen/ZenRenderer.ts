@@ -10,7 +10,7 @@
  */
 
 import * as THREE from 'three';
-import { ZEN, ZEN_SLIDE, type CarDef } from '../utils/constants';
+import { ZEN, ZEN_SLIDE, ZEN_TUNNEL_SECRET, type CarDef } from '../utils/constants';
 import { clamp, smoothFollow, wrapToPi } from '../utils/math';
 import { CarMesh } from '../rendering/CarMesh';
 import { zenFraming } from './ZenCamera';
@@ -71,9 +71,10 @@ export class ZenRenderer {
   /** Speed-streak field for the ARCH boost; `boost` ∈ [0,1] eases its opacity (0 = hidden). */
   private readonly streaks: ZenSpeedStreaks;
   private boost = 0;
-  /** This session's world seed — every world-generating sub-object (backdrop, terrain, scenery,
-   *  landmarks, cavern, stars) + the per-frame surface/biome reads key off it. */
-  private readonly seed: number;
+  /** The world seed the STREAMED world (terrain/scenery/landmarks) + the per-frame surface/biome reads
+   *  key off. Normally the session seed; SWITCHED to ZEN_TUNNEL_SECRET.seed while warped in the tunnel
+   *  cavern (setWorldSeed) so that region is the SAME designed space every session (#172 bug fix). */
+  private seed: number;
 
   constructor(renderer: THREE.WebGLRenderer, seed: number, car?: CarDef) {
     this.renderer = renderer;
@@ -100,7 +101,10 @@ export class ZenRenderer {
     this.landmarks = new ZenLandmarks(this.scene, this.seed);
 
     // The tunnel payoff CAVERN — a vast amber space at the tunnel region (hidden until you warp in).
-    this.cavern = new ZenCavern(this.scene, this.seed);
+    // Built from the FIXED tunnel-region seed (NOT the random session seed) so the cave is the SAME
+    // designed space every session; the region's terrain is rendered from the same fixed seed while
+    // inside (setWorldSeed), so the cavern sits exactly on it (no float). (#172 "different world" fix.)
+    this.cavern = new ZenCavern(this.scene, ZEN_TUNNEL_SECRET.seed);
 
     // Terrain-anchored air-shadow: a gap opens between car + shadow when airborne.
     this.shadow = new ZenShadow(this.scene);
@@ -190,6 +194,18 @@ export class ZenRenderer {
     this.tunnelSecretActive = active;
     this.terrain.setTunnelSecret(active); // force the GRID floor amber too
     this.cavern.setActive(active); // reveal the cavern (centerpiece + monuments + ceiling)
+  }
+
+  /** Re-key the STREAMED world (terrain/scenery/landmarks) + the per-frame surface/biome reads to a new
+   *  seed. The tunnel warp calls this with ZEN_TUNNEL_SECRET.seed on ENTER (the cave region is the same
+   *  designed space every session) and the session seed on EXIT. The seed-switch forces a re-stream,
+   *  hidden by the warp fade (the same one-frame chunk reload the teleport already does). Backdrop/stars
+   *  are a palette-overridden dome → not re-keyed. */
+  setWorldSeed(seed: number): void {
+    this.seed = seed;
+    this.terrain.setSeed(seed);
+    this.scenery.setSeed(seed);
+    this.landmarks.setSeed(seed);
   }
 
   /** SNAP the chase camera to its resting pose behind the car's CURRENT position — used after a

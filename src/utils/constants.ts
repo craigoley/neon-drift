@@ -1378,6 +1378,14 @@ export const ZEN_TUNNEL_SECRET_BIOME: BiomeDef = {
  * distinct space (the beautiful tunnel-themed build is a follow-up).
  */
 export const ZEN_TUNNEL_SECRET = {
+  /** FIXED seed for the whole tunnel-payoff REGION (cavern + its terrain/scenery/landmarks + the return
+   *  portal). The main Zen world is RANDOM per entry (#172), but the segregated amber cave must be the
+   *  SAME designed space every session — so while warped inside, the world is rendered from THIS fixed
+   *  seed instead of the random session seed (the warp's existing chunk-reload re-streams it, hidden by
+   *  the fade). This value is the historical fixed Zen world seed (0x5a2e17), so the cave region is
+   *  byte-identical to the pre-#172 designed space. Bug: #172 made this region random → "different world
+   *  on every warp"; pinning it here restores consistency without touching the random main world. */
+  seed: 0x5a2e17,
   /** Far base coordinate the tunnel-payoff region sits near — a DIFFERENT band from the gateway
    *  secret region (640000, -480000), so the two spaces are distinct places. Its nearest GATEWAY is
    *  the arrival + return portal. */

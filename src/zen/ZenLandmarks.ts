@@ -124,6 +124,7 @@ export class ZenLandmarks {
    *  seed's landmarks. */
   setSeed(seed: number): void {
     this.seed = seed;
+    this.hasPrevCar = false;
     for (const a of this.active.values()) {
       a.mesh.removeFromParent();
       a.material.dispose();

@@ -71,6 +71,24 @@ describe('Store preview — mounts with the screen', () => {
   });
 });
 
+describe('Store BACK — an always-present in-game exit (kid-safety: no browser-back trap)', () => {
+  it('the store has a BACK button (separate from the bottom DONE) that leaves to the menu', () => {
+    const { parent, calls } = makeShell();
+    const storeScreen = parent.querySelector('.shell-store') as HTMLElement;
+    const back = storeScreen.querySelector('.shell-back-store') as HTMLButtonElement;
+    expect(back).toBeTruthy(); // a dedicated BACK exists...
+    // ...and it sits at the TOP of the screen (before the lists), so it's never below the long
+    // cosmetics list (the trap was: DONE only at the bottom, off-screen on a phone).
+    const cosmetics = storeScreen.querySelector('.shell-store-cosmetics')!;
+    expect(back.compareDocumentPosition(cosmetics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    openStore(parent);
+    back.click();
+    expect(calls.previewExit).toBe(1); // tapping BACK leaves the store (tears the preview down)
+    expect(storeScreen.style.display).toBe('none'); // and the store screen is hidden (returned to menu)
+  });
+});
+
 describe('Store preview — hover previews, leaving reverts (NO commit)', () => {
   it('hovering a cosmetic row previews it; mouseout reverts to equipped (null)', () => {
     const { parent, calls } = makeShell();

@@ -436,6 +436,36 @@ body,
   gap: clamp(8px, 1.8vh, 16px);
 }
 
+/* Always-visible BACK for long/scrolling screens (the STORE — kid-safety, audit #190). Pinned to the
+   top-left in the SAFE AREA (clears the notch), out of the centred flow, above the content (z-index),
+   so however far the cosmetics list runs the way OUT is never scrolled/clipped off-screen. The screen
+   is position:absolute inset:0, so this absolute child sits at the viewport top-left. >=46px tap target. */
+.shell-back {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(14px, env(safe-area-inset-left));
+  z-index: 5;
+  pointer-events: auto;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 46px;
+  padding: 10px 18px;
+  font: 800 clamp(14px, 3.8vw, 18px) / 1 'Segoe UI', system-ui, sans-serif;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #00ffff;
+  background: rgba(26, 0, 51, 0.85);
+  border: 2px solid #00ffff;
+  border-radius: 10px;
+  box-shadow: 0 0 12px rgba(0, 255, 255, 0.4);
+}
+.shell-back:active {
+  transform: translateY(1px);
+}
+
 /* Low-frequency utility (Settings / Share) as small corner icons, out of the
    primary flow — research-standard nesting, not full-width labelled buttons. */
 .shell-utility {

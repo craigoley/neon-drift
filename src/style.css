@@ -466,6 +466,59 @@ body,
   transform: translateY(1px);
 }
 
+/* Inner SCROLL container for long list screens (store, leaderboard). The screen itself stays put so
+   the fixed .shell-back floats over it; this holds the scrolling content (title + lists + DONE), so a
+   long list is reachable AND the way out (BACK) is never scrolled away. Thin neon scrollbar on
+   desktop/Android; on iOS Safari the overlay scrollbar auto-hides, so the .shell-scroll-cue fade is
+   the reliable "there's more" signal. */
+.shell-scroll {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(10px, 2.6vh, 20px);
+  width: min(440px, 94vw);
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch; /* momentum scroll on iOS */
+  /* top padding clears the absolute BACK; bottom keeps DONE off the home-bar */
+  padding: 58px 6px max(14px, env(safe-area-inset-bottom));
+  scrollbar-width: thin;
+  scrollbar-color: #00ffff rgba(0, 255, 255, 0.12);
+}
+.shell-scroll::-webkit-scrollbar {
+  width: 9px;
+}
+.shell-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 255, 255, 0.08);
+  border-radius: 6px;
+}
+.shell-scroll::-webkit-scrollbar-thumb {
+  background: #00ffff;
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0, 255, 255, 0.7);
+}
+
+/* "More below" cue — a bottom fade-gradient pinned to the screen's bottom edge. Shown only while the
+   inner .shell-scroll has content below the fold (the `shows-more` class, toggled in JS), so a player
+   can SEE the list continues. The most reliable affordance on iOS Safari (where overlay scrollbars
+   vanish). pointer-events:none so it never blocks a tap. */
+.shell-scroll-cue {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: clamp(30px, 7vh, 56px);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.18s ease;
+  background: linear-gradient(to bottom, rgba(8, 0, 20, 0), rgba(8, 0, 20, 0.92));
+  z-index: 4;
+}
+.shows-more .shell-scroll-cue {
+  opacity: 1;
+}
+
 /* Low-frequency utility (Settings / Share) as small corner icons, out of the
    primary flow — research-standard nesting, not full-width labelled buttons. */
 .shell-utility {

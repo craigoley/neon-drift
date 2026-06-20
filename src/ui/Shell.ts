@@ -485,6 +485,24 @@ export class Shell {
     }
   }
 
+  /** Wire the "more below" scroll cue on a screen that has an inner `.shell-scroll` container: update
+   *  the fade on every scroll. (It must ALSO be refreshed after the list (re)renders — the render
+   *  methods call refreshScrollCue once the screen is shown + measurable.) */
+  private wireScrollCue(s: HTMLElement): void {
+    const scroll = s.querySelector('.shell-scroll');
+    scroll?.addEventListener('scroll', () => this.refreshScrollCue(s), { passive: true });
+  }
+
+  /** Toggle `shows-more` while the inner `.shell-scroll` has content BELOW the fold → the bottom
+   *  fade-gradient cue appears. The reliable signal on iOS Safari (its overlay scrollbar auto-hides, so
+   *  a player otherwise can't tell the list continues). No-op when nothing overflows (jsdom: sizes 0). */
+  private refreshScrollCue(s: HTMLElement): void {
+    const scroll = s.querySelector('.shell-scroll') as HTMLElement | null;
+    if (!scroll) return;
+    const more = scroll.scrollTop + scroll.clientHeight < scroll.scrollHeight - 4;
+    s.classList.toggle('shows-more', more);
+  }
+
   private play(): void {
     this.lastWasDaily = false;
     this.go(null);
@@ -869,6 +887,9 @@ export class Shell {
       // the DONE button BELOW the long cosmetics list, off-screen on a phone → a trap (a player got
       // stuck, browser-back the only way out). This stays put at the safe-area top, never scrolls away.
       `<button class="shell-back shell-back-store" type="button" aria-label="Back to menu">‹ BACK</button>` +
+      // The content SCROLLS in an inner container (same pattern as the leaderboard) so the long cosmetics
+      // list is reachable AND the .shell-scroll-cue fade below makes it clear there's more (iOS Safari).
+      `<div class="shell-scroll">` +
       `<h2 class="shell-subtitle">STORE</h2>` +
       `<p class="shell-store-balance"></p>` +
       `<div class="shell-store-preview"></div>` +
@@ -876,10 +897,13 @@ export class Shell {
       `<div class="shell-store-cars shell-store-list"></div>` +
       `<h3 class="shell-store-heading">COSMETICS</h3>` +
       `<div class="shell-store-cosmetics shell-store-list"></div>` +
-      `<button class="shell-btn shell-close-store" type="button">DONE</button>`;
+      `<button class="shell-btn shell-close-store" type="button">DONE</button>` +
+      `</div>` +
+      `<div class="shell-scroll-cue" aria-hidden="true"></div>`;
 
     s.querySelector('.shell-back-store')!.addEventListener('click', () => this.showStart());
     s.querySelector('.shell-close-store')!.addEventListener('click', () => this.showStart());
+    this.wireScrollCue(s);
     // Delegated buy/equip: the row button carries data-action / data-id / data-slot.
     const onClick = (e: Event) => {
       const btn = (e.target as HTMLElement).closest('button[data-action]') as HTMLButtonElement | null;
@@ -943,6 +967,7 @@ export class Shell {
         return `<div class="shell-store-row" data-cos-slot="${c.slot}" data-cos-id="${c.id}" tabindex="0">${swatch}<span class="shell-store-name">${c.name}</span>${right}</div>`;
       })
       .join('');
+    this.refreshScrollCue(this.storeScreen); // the list height just changed → re-check "more below"
   }
 
   /** Render the missions panel from the live progression data (on open). */
@@ -1005,12 +1030,23 @@ export class Shell {
   private buildLeaderboard(): HTMLElement {
     const s = screen('shell-leaderboard');
     s.innerHTML =
+      // FIXED top-left BACK — always visible (same .shell-back as the store, #180): the scores list +
+      // best-per-car list can run long, and the only other exit (DONE) is at the BOTTOM. This stays put.
+      `<button class="shell-back shell-back-leaderboard" type="button" aria-label="Back to menu">‹ BACK</button>` +
+      // The content SCROLLS in an inner container (the screen itself stays put so the BACK floats over
+      // it). The .shell-scroll-cue fade below signals "more below" — reliable on iOS Safari, where the
+      // overlay scrollbar auto-hides so a player can't otherwise tell the list continues.
+      `<div class="shell-scroll">` +
       `<h2 class="shell-subtitle">SCORES</h2>` +
       `<div class="shell-lb-list"></div>` +
       `<h3 class="shell-lb-heading">BEST PER CAR</h3>` +
       `<div class="shell-lb-cars"></div>` +
-      `<button class="shell-btn shell-close-leaderboard" type="button">DONE</button>`;
+      `<button class="shell-btn shell-close-leaderboard" type="button">DONE</button>` +
+      `</div>` +
+      `<div class="shell-scroll-cue" aria-hidden="true"></div>`;
+    s.querySelector('.shell-back-leaderboard')!.addEventListener('click', () => this.showStart());
     s.querySelector('.shell-close-leaderboard')!.addEventListener('click', () => this.showStart());
+    this.wireScrollCue(s);
     return s;
   }
 
@@ -1054,6 +1090,7 @@ export class Shell {
                 `</div>`,
             )
             .join('');
+    this.refreshScrollCue(this.leaderboardScreen); // lists just populated → re-check "more below"
   }
 
   // --- daily challenge view (OPP-09) --------------------------------------

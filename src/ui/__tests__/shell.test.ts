@@ -71,6 +71,33 @@ describe('Shell — WIPEOUT peak combo', () => {
   });
 });
 
+describe('Shell — leaderboard always-escapable BACK + scroll structure (kid-safety, same class as #180)', () => {
+  const openLeaderboard = (parent: HTMLElement) =>
+    (parent.querySelector('.shell-leaderboard-open') as HTMLButtonElement).click();
+
+  it('has a fixed BACK that leaves to the menu, and the content scrolls with a "more below" cue', () => {
+    const { parent } = makeShell();
+    openLeaderboard(parent);
+    const lb = parent.querySelector('.shell-leaderboard') as HTMLElement;
+    expect(lb.style.display).toBe('flex'); // the leaderboard is open
+
+    // BACK exists, uses the SAME .shell-back class as the store fix, and sits before the scroll content.
+    const back = lb.querySelector('.shell-back-leaderboard') as HTMLButtonElement;
+    expect(back).toBeTruthy();
+    expect(back.classList.contains('shell-back')).toBe(true);
+    const scroll = lb.querySelector('.shell-scroll') as HTMLElement;
+    expect(scroll).toBeTruthy(); // the content lives in an inner SCROLL container...
+    expect(lb.querySelector('.shell-scroll-cue')).toBeTruthy(); // ...with a "more below" fade cue
+    expect(scroll.querySelector('.shell-lb-list')).toBeTruthy(); // the scores list is inside the scroll
+    expect(back.compareDocumentPosition(scroll) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy(); // BACK is first
+
+    // Tapping BACK returns to the menu (the leaderboard hides, start shows).
+    back.click();
+    expect(lb.style.display).toBe('none');
+    expect((parent.querySelector('.shell-start') as HTMLElement).style.display).toBe('flex');
+  });
+});
+
 describe('Shell — menu return + pause routing', () => {
   it('the WIPEOUT screen offers a MENU button that returns to the start screen', () => {
     const { shell, parent, calls } = makeShell();

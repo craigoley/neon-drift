@@ -29,8 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/dependency-review-action@v4
+      - uses: actions/checkout@v7
+      - uses: actions/dependency-review-action@v5
         with:
           warn-only: true # report-only — never fails the build (keeps the auto-merge pipeline unblocked)
           comment-summary-in-pr: on-failure # post a summary comment only when something's flagged

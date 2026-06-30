@@ -20,7 +20,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.61.0",
     "@types/node": "^26.0.1",
-    "@types/three": "^0.184.1",
+    "@types/three": "^0.185.0",
     "eslint": "^10.5.0",
     "globals": "^17.6.0",
     "jsdom": "^29.1.1",
@@ -31,6 +31,6 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
-    "three": "^0.184.0"
+    "three": "^0.185.0"
   }
 }

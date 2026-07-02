@@ -62,12 +62,12 @@ describe('Shell — WIPEOUT peak combo', () => {
     expect(parent.querySelector('.shell-crash-combo')?.textContent).toBe('MAX COMBO x4.5');
   });
 
-  it('dims the line when the run never built a combo', () => {
+  it('hides the line when the run never built a combo (audit #191, F16 — no "MAX COMBO x1.0" for a non-event)', () => {
     const { shell, parent } = makeShell();
     shell.showCrash(700, 700, { distance: 700, score: 700 }, 1);
     const el = parent.querySelector('.shell-crash-combo') as HTMLElement;
-    expect(el.textContent).toBe('MAX COMBO x1.0');
-    expect(el.style.opacity).toBe('0.45');
+    expect(el.textContent).toBe('');
+    expect(el.style.display).toBe('none');
   });
 });
 

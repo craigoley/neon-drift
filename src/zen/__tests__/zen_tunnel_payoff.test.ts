@@ -12,12 +12,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { coveringTunnel, passedDeepPoint, tunnelReturnPortal } from '../ZenTunnelPayoff';
+import { cavernLayout } from '../ZenCavernLayout';
 import { snapshot, arrivalPose, findReturnPortal } from '../ZenSecret';
 import { landmarksInRadius, LANDMARK_TUNNEL, LANDMARK_GATEWAY } from '../ZenLandmarkModel';
 import { createZenVehicle } from '../ZenVehicle';
 import { heightAt } from '../ZenHeight';
 import { wrapToPi } from '../../utils/math';
-import { ZEN, ZEN_LANDMARK, ZEN_SECRET_BIOME, ZEN_TUNNEL_SECRET, ZEN_TUNNEL_SECRET_BIOME } from '../../utils/constants';
+import { ZEN, ZEN_LANDMARK, ZEN_SECRET_BIOME, ZEN_TUNNEL_SECRET_BIOME } from '../../utils/constants';
 
 const SEED = ZEN.worldSeed;
 const tunnel = landmarksInRadius(SEED, 0, 0, 40000)
@@ -156,35 +157,47 @@ describe('Zen tunnel payoff — EXIT warps back to the tunnel ENTRANCE, FACING O
   });
 });
 
-describe('Zen tunnel cavern — pinned to a FIXED region seed (the #172 "different world on warp" fix)', () => {
-  // The MAIN Zen world is random per entry (#172), but the segregated amber cavern must be the SAME
-  // designed space every session. So the whole tunnel-payoff REGION (cavern + terrain + return portal)
-  // keys off the FIXED ZEN_TUNNEL_SECRET.seed, NOT the random session seed.
-  it('the tunnel region seed is a fixed constant (the historical Zen world seed) — same every session', () => {
-    expect(ZEN_TUNNEL_SECRET.seed).toBe(0x5a2e17);
-    expect(typeof ZEN_TUNNEL_SECRET.seed).toBe('number');
-  });
+describe('Zen tunnel cavern — a POCKET in the SESSION world (the #191 "different world on warp" fix)', () => {
+  // The tunnel warp USED to re-seed the whole world to a FIXED cavern seed (0x5a2e17) while inside, which
+  // regenerated the surrounding terrain/biomes/landmarks into a visibly DIFFERENT world (the bug Craig
+  // hit). The fix: the cavern REGION — its return portal, decor layout, and the terrain it sits on — all
+  // key off the SESSION seed, so warping in stays in the SAME world the player drove the tunnel in.
+  // (The wiring is enforced structurally too: ZenSession.seed / ZenRenderer.seed are `readonly` and the
+  // world-re-key method was removed, so there is no longer any mechanism to switch the world on warp.)
 
-  it('the cavern return portal is keyed to the FIXED region seed — independent of the session seed', () => {
-    // Whatever random session seed the player roams, the warp lands at the SAME designed cavern.
-    const fixedPortal = tunnelReturnPortal(ZEN_TUNNEL_SECRET.seed);
-    expect(tunnelReturnPortal(ZEN_TUNNEL_SECRET.seed)).toEqual(fixedPortal); // deterministic
-    // A DIFFERENT (session) seed would give a different portal — proving the region is decoupled from it.
-    for (const sessionSeed of [12345, 0xabcdef, 777]) {
-      if (sessionSeed === ZEN_TUNNEL_SECRET.seed) continue;
-      expect(tunnelReturnPortal(sessionSeed)).not.toEqual(fixedPortal);
+  it('the return portal is derived from the SESSION seed — deterministic, so ?seed= pins it (OG capture/sweep)', () => {
+    for (const s of [SEED, 12345, 0xabcdef, 777]) {
+      expect(tunnelReturnPortal(s)).toEqual(tunnelReturnPortal(s)); // same session seed → same cavern portal
     }
   });
 
-  it('the fixed cavern region is a DISTINCT world from a random session world (it stays segregated)', () => {
-    // Same coords, different seed → different terrain/landmarks: confirms warping into the fixed region is
-    // a genuinely different (but consistent) space, not the player's current world (the chosen design).
-    const fixedPortal = tunnelReturnPortal(ZEN_TUNNEL_SECRET.seed);
-    const sessionSeed = 98765; // a stand-in random session seed
-    expect(heightAt(ZEN_TUNNEL_SECRET.seed, fixedPortal.x, fixedPortal.z))
-      .not.toBe(heightAt(sessionSeed, fixedPortal.x, fixedPortal.z));
-    // And the fixed region's height is deterministic (the same cave floor every session).
-    expect(heightAt(ZEN_TUNNEL_SECRET.seed, fixedPortal.x, fixedPortal.z))
-      .toBe(heightAt(ZEN_TUNNEL_SECRET.seed, fixedPortal.x, fixedPortal.z));
+  it('DIFFERENT session seeds give DIFFERENT cavern regions (a pocket in each session\'s OWN world, not one fixed space)', () => {
+    const seeds = [SEED, 12345, 0xabcdef, 777, 98765];
+    const portals = seeds.map((s) => tunnelReturnPortal(s));
+    for (let i = 0; i < seeds.length; i++) {
+      for (let j = i + 1; j < seeds.length; j++) {
+        expect(portals[i]).not.toEqual(portals[j]);
+      }
+    }
+  });
+
+  it('the cavern sits on the SESSION world\'s terrain — same world, not a regenerated one', () => {
+    // The cave decor anchors to heightAt(SESSION seed) at the region and the car drives that SAME terrain,
+    // so ground + decor agree AND the surrounds are the player's own world (the fix). The region floor is
+    // deterministic per session (?seed= pins the exact space); two sessions get two different own-world floors.
+    const portalA = tunnelReturnPortal(SEED);
+    const portalB = tunnelReturnPortal(98765);
+    expect(heightAt(SEED, portalA.x, portalA.z)).toBe(heightAt(SEED, portalA.x, portalA.z)); // stable per ?seed=
+    expect(heightAt(SEED, portalA.x, portalA.z)).not.toBe(heightAt(98765, portalB.x, portalB.z)); // each its own world
+  });
+
+  it('the cavern DECOR layout is a deterministic function of the SESSION seed (its own pocket per session)', () => {
+    const s = 24680;
+    const layout1 = cavernLayout(s, tunnelReturnPortal(s));
+    const layout2 = cavernLayout(s, tunnelReturnPortal(s));
+    expect(layout1.center).toEqual(layout2.center); // same session → same designed pocket (?seed= stable)
+    expect(layout1.monuments).toEqual(layout2.monuments);
+    const other = cavernLayout(13579, tunnelReturnPortal(13579));
+    expect(other.center).not.toEqual(layout1.center); // a different session → a different pocket
   });
 });

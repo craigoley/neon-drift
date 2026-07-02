@@ -35,3 +35,6 @@ e2e/**/*-darwin.png
 
 # Lighthouse CI reports (generated)
 .lighthouseci
+
+# UX-critique screenshot captures (generated on demand by `npm run ux:capture`)
+ux-critique/

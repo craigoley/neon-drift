@@ -14,7 +14,8 @@
     "test": "vitest run",
     "e2e": "playwright test",
     "e2e:cross-engine": "playwright test --config playwright.cross-engine.config.ts",
-    "e2e:validation": "playwright test --config playwright.validation.config.ts"
+    "e2e:validation": "playwright test --config playwright.validation.config.ts",
+    "ux:capture": "UX_CAPTURE=1 playwright test e2e/ux-capture.spec.ts --workers=1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

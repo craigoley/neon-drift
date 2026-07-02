@@ -375,6 +375,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
       game,
       localCarId: carId,
       onRacing: (race) => {
+        shell.hide(); // the lobby was an external menu — NOW enter real play mode (body.playing on)
         mpRace = race;
         rivalRenderer.applyCar(carById(race.remoteCarId)); // remote's solid car
         rivalRenderer.setVisible(true);
@@ -411,6 +412,7 @@ const shell = new Shell(app, settings, leaderboard, audio, {
       botCarId,
       makeSeed: playSeed,
       onRacing: (race) => {
+        shell.hide(); // the picker was an external menu — NOW enter real play mode (body.playing on)
         botRace = race;
         rivalRenderer.applyCar(carById(race.rivalCarId));
         rivalRenderer.setVisible(true);

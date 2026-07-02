@@ -22,7 +22,7 @@
  * which is how the WIPEOUT screen is reached with no product hook.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { boot } from './_helpers';
 import { ZEN } from '../src/utils/constants';
@@ -93,7 +93,15 @@ async function burst(page: Page, entries: ManifestEntry[], e: Omit<ManifestEntry
 /** Append this test's entries into the shared manifest (serial under --workers=1). */
 function writeManifest(entries: ManifestEntry[]): void {
   const path = join(OUT_ROOT, 'manifest.json');
-  const prior = existsSync(path) ? (JSON.parse(readFileSync(path, 'utf8')) as ManifestEntry[]) : [];
+  // Read-then-catch rather than existsSync-then-read: avoids the check-then-use
+  // filesystem race CodeQL flags, and ENOENT (no prior manifest — first viewport
+  // of the run) just means we start fresh.
+  let prior: ManifestEntry[] = [];
+  try {
+    prior = JSON.parse(readFileSync(path, 'utf8')) as ManifestEntry[];
+  } catch {
+    /* no prior manifest yet — start a new array */
+  }
   writeFileSync(path, JSON.stringify([...prior, ...entries], null, 2));
 }
 

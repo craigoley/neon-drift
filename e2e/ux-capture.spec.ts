@@ -23,9 +23,9 @@
  * `isMobile:true` reports `pointer:coarse`, so the game enters its touch branch.
  * The walk still DRIVES via keyboard (always attached, main.ts) — synthetic touch
  * isn't needed to make the controls RENDER, which is what we're auditing. The
- * touch test hard-asserts the touch surface actually appeared (see `assertTouch*`)
- * so a mis-emulated context fails loudly instead of shipping keyboard UI under a
- * "touch" label.
+ * touch test hard-asserts the touch surface actually appeared (the `if (touch)`
+ * VALIDITY GATE blocks in captureWalk) so a mis-emulated context fails loudly
+ * instead of shipping keyboard UI under a "touch" label.
  *
  * ON DEMAND ONLY: gated on UX_CAPTURE=1 so `npm run e2e` / CI never runs it
  * (it's slow and its output is a local critique artifact, not a test result).

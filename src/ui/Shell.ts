@@ -204,6 +204,7 @@ export class Shell {
   private readonly crashBestEl: HTMLElement;
   private readonly crashUnlockEl: HTMLElement;
   private readonly crashMissionsEl: HTMLElement;
+  private readonly crashCelebrateEl: HTMLElement;
   /** PROG-1 credit readouts (start balance + per-run earned). */
   private readonly startCreditsEl: HTMLElement;
   private readonly crashCreditsEl: HTMLElement;
@@ -283,6 +284,7 @@ export class Shell {
     this.crashBestEl = this.crashScreen.querySelector('.shell-crash-best')!;
     this.crashUnlockEl = this.crashScreen.querySelector('.shell-crash-unlock')!;
     this.crashMissionsEl = this.crashScreen.querySelector('.shell-crash-missions')!;
+    this.crashCelebrateEl = this.crashScreen.querySelector('.shell-crash-celebrate')!;
     this.leaderboardListEl = this.leaderboardScreen.querySelector('.shell-lb-list')!;
     this.leaderboardCarsEl = this.leaderboardScreen.querySelector('.shell-lb-cars')!;
     this.dailyTodayEl = this.dailyScreen.querySelector('.shell-daily-today')!;
@@ -354,7 +356,11 @@ export class Shell {
       return;
     }
     const balance = Math.round(this.opts.credits());
-    eln.textContent = earned > 0 ? `+${Math.round(earned)} credits · ${balance} total` : `★ ${balance} credits`;
+    // Pluralize correctly (audit #191, F16: "1 credits" was a plural bug at n=1).
+    eln.textContent =
+      earned > 0
+        ? `+${Math.round(earned)} ${creditWord(Math.round(earned))} · ${balance} total`
+        : `★ ${balance} ${creditWord(balance)}`;
     eln.style.display = '';
   }
 
@@ -373,10 +379,11 @@ export class Shell {
     // PROG-1: the credits earned this run + the running balance (no spend yet).
     this.renderCredits(this.crashCreditsEl, creditsEarned);
     // The live combo resets on crash, so the WIPEOUT screen is where the player
-    // sees how daring the run was. Dimmed when the run never built a combo.
-    this.crashComboEl.textContent = `MAX COMBO x${peakCombo.toFixed(1)}`;
-    // Dim when the run never rose above the base combo (a daring run pops).
-    this.crashComboEl.style.opacity = peakCombo > SCORING.baseCombo ? '1' : '0.45';
+    // sees how daring the run was. HIDDEN entirely when the run never built a combo
+    // (audit #191, F16: "MAX COMBO x1.0" was the widest orange line for a non-event).
+    const hasCombo = peakCombo > SCORING.baseCombo;
+    this.crashComboEl.textContent = hasCombo ? `MAX COMBO x${peakCombo.toFixed(1)}` : '';
+    this.crashComboEl.style.display = hasCombo ? '' : 'none';
 
     // Placement callout: for a DAILY run a daily badge (OPP-09); otherwise the
     // OPP-15 board placement + nearest target. Both hide when nothing's earned.
@@ -407,8 +414,13 @@ export class Shell {
     }
 
     // Mission / rank celebration lines (non-intrusive; never block the retry).
-    if (missionLines.length > 0) {
-      this.crashMissionsEl.innerHTML = missionLines
+    // Drop any line that merely repeats a car unlock already shown in the headline
+    // banner above (audit #191, F6: "UNLOCKED: Nova" appeared as both a cyan banner
+    // AND an orange mission line). The banner owns the unlock; missions keep the rest.
+    const shownUnlocks = new Set(unlockedNames.map((n) => `UNLOCKED: ${n}`));
+    const lines = missionLines.filter((l) => !shownUnlocks.has(l));
+    if (lines.length > 0) {
+      this.crashMissionsEl.innerHTML = lines
         .map((l) => `<span class="shell-crash-mission-line">${l}</span>`)
         .join('');
       this.crashMissionsEl.style.display = '';
@@ -416,6 +428,8 @@ export class Shell {
       this.crashMissionsEl.innerHTML = '';
       this.crashMissionsEl.style.display = 'none';
     }
+    // The contained celebration block is visible only when it holds something.
+    this.crashCelebrateEl.style.display = unlockedNames.length > 0 || lines.length > 0 ? '' : 'none';
 
     this.go('crash');
   }
@@ -544,9 +558,12 @@ export class Shell {
 
   private buildStart(): HTMLElement {
     const s = screen('shell-start');
+    // Keep the hyphenated "slow-mo" / "SLOW-MO" token from breaking mid-word into a
+    // "slow-/mo" orphan at phone width (audit #191, F15) — the nowrap-beats pattern
+    // (cf. BotRaceUI blurbs). The sentence still wraps freely at the spaces.
     const hint = this.opts.isTouch
-      ? 'drag to steer · tap SLOW-MO to deploy a banked charge'
-      : '← → / A D to steer · SPACE to deploy a banked slow-mo';
+      ? 'drag to steer · tap <span class="nowrap">SLOW-MO</span> to deploy a banked charge'
+      : '← → / A D to steer · SPACE to deploy a banked <span class="nowrap">slow-mo</span>';
     s.innerHTML =
       // Low-frequency UTILITY nested as small corner icons (out of the primary flow).
       `<div class="shell-utility">` +
@@ -901,6 +918,10 @@ export class Shell {
       `<div class="shell-scroll">` +
       `<h2 class="shell-subtitle">STORE</h2>` +
       `<p class="shell-store-balance"></p>` +
+      // How-to-earn hint (audit #191, F5): a fresh profile has 0 ★ and every price reads
+      // as a dead button — say where credits come from. Accurate to runCredits() (every
+      // run earns from score+distance) + the race/daily bonuses.
+      `<p class="shell-store-earn">earn ★ by racing</p>` +
       `<div class="shell-store-preview"></div>` +
       `<h3 class="shell-store-heading">CARS</h3>` +
       `<div class="shell-store-cars shell-store-list"></div>` +
@@ -949,14 +970,15 @@ export class Shell {
   private renderStore(): void {
     const store = this.opts.store;
     if (!store) return;
-    this.storeBalanceEl.textContent = `★ ${Math.round(store.balance())} credits`;
+    const bal = Math.round(store.balance());
+    this.storeBalanceEl.textContent = `★ ${bal} ${creditWord(bal)}`;
 
     this.storeCarsEl.innerHTML = store
       .cars()
       .map((c) => {
         const right = c.owned
           ? `<span class="shell-store-owned">OWNED</span>`
-          : `<button class="shell-btn shell-store-buy" type="button" data-action="buy-car" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.price} ★</button>`;
+          : `<button class="shell-btn shell-store-buy" type="button" data-action="buy-car" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.affordable ? '' : '🔒 '}${c.price} ★</button>`;
         return `<div class="shell-store-row"><span class="shell-store-name">${c.name}</span>${right}</div>`;
       })
       .join('');
@@ -967,7 +989,7 @@ export class Shell {
         const swatch = `<span class="shell-store-swatch" style="background:${c.color};box-shadow:0 0 6px ${c.color};"></span>`;
         let right: string;
         if (!c.owned) {
-          right = `<button class="shell-btn shell-store-buy" type="button" data-action="buy-cosmetic" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.price} ★</button>`;
+          right = `<button class="shell-btn shell-store-buy" type="button" data-action="buy-cosmetic" data-id="${c.id}"${c.affordable ? '' : ' disabled'}>${c.affordable ? '' : '🔒 '}${c.price} ★</button>`;
         } else if (c.equipped) {
           right = `<span class="shell-store-owned">EQUIPPED</span>`;
         } else {
@@ -1206,8 +1228,13 @@ export class Shell {
       `<p class="shell-crash-line shell-crash-score"></p>` +
       `<p class="shell-crash-placement"></p>` +
       `<p class="shell-crash-combo"></p>` +
+      // Unlock banner + mission/rank lines grouped into ONE contained block (audit
+      // #191, F6) so the celebration reads as a single unit, not loose alternating
+      // strata. Toggled as a whole in showCrash when there's anything to celebrate.
+      `<div class="shell-crash-celebrate">` +
       `<p class="shell-crash-unlock"></p>` +
       `<div class="shell-crash-missions"></div>` +
+      `</div>` +
       `<p class="shell-crash-line shell-crash-best"></p>` +
       `<p class="shell-crash-credits"></p>` +
       `<p class="shell-crash-target"></p>` +
@@ -1367,6 +1394,11 @@ function screen(modifier: string): HTMLElement {
   el.className = `shell-screen ${modifier}`;
   el.style.display = 'none';
   return el;
+}
+
+/** "credit" vs "credits" — pluralize the currency word correctly (audit #191, F16). */
+function creditWord(n: number): string {
+  return n === 1 ? 'credit' : 'credits';
 }
 
 /** Rounded integer with thousands separators (e.g. 56142 → "56,142"). Fixed

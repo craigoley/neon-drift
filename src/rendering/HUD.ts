@@ -177,7 +177,8 @@ export class HUD {
       // (the daily best lives on the daily screen). Lives show in the .hud-lives row.
       const s = game.slalomScore;
       this.distEl.textContent = `${s.gatesThreaded} gates`;
-      this.scoreEl.textContent = `${Math.round(s.score)}`;
+      // Label the score (audit #191, F8) — the only otherwise-unitless number in the bar.
+      this.scoreEl.textContent = `${Math.round(s.score)} PTS`;
       this.comboEl.textContent = `CLEAN x${s.cleanMultiplier}`;
       this.comboEl.style.opacity = s.cleanMultiplier > 1 ? '1' : '0.6';
       if (s.cleanMultiplier > this.lastCombo + 1e-6) this.pulseCombo();
@@ -185,7 +186,8 @@ export class HUD {
       this.bestEl.textContent = '';
     } else {
       this.distEl.textContent = usDistance(game.distance);
-      this.scoreEl.textContent = `${Math.round(game.score.score)}`;
+      // Label the score (audit #191, F8) — the only otherwise-unitless number in the bar.
+      this.scoreEl.textContent = `${Math.round(game.score.score)} PTS`;
       this.comboEl.textContent = `x${game.score.combo.toFixed(1)}`;
       this.comboEl.style.opacity = game.score.combo > 1 ? '1' : '0.6';
       // Tier-up celebration: a brief scale/glow pulse when the multiplier climbs.

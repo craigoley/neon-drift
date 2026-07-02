@@ -82,12 +82,14 @@ body,
 }
 
 .hud-best {
-  font-size: clamp(12px, 2.4vw, 16px);
+  /* Bumped one contrast step (audit #191, F8): it was the dimmest/smallest number in
+     the bar. Fully opaque + a slightly higher size floor so "best" stays legible. */
+  font-size: clamp(13px, 2.4vw, 16px);
   color: #ff66ff;
   text-shadow:
     0 0 4px #ff00ff,
     0 1px 2px rgba(0, 0, 0, 0.85);
-  opacity: 0.9;
+  opacity: 1;
 }
 
 /* --- active-powerup chips ---------------------------------------------- */
@@ -313,6 +315,16 @@ body,
     0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* How-to-earn hint under the store balance (audit #191, F5) — quiet, so it informs
+   without competing with the balance or the row prices. */
+.shell-store-earn {
+  margin: 0 0 2px;
+  font-size: clamp(11px, 2.6vw, 13px);
+  letter-spacing: 0.04em;
+  color: #c9a8ff;
+  opacity: 0.7;
+}
+
 /* PROG-1 PR2 STORE screen. */
 .shell-store-preview {
   width: min(280px, 70vw);
@@ -387,7 +399,15 @@ body,
   font-size: clamp(12px, 3.2vw, 18px);
   letter-spacing: 0.06em;
   opacity: 0.85;
+  /* Even the wrapped lines + never orphan a fragment (audit #191, F15). */
+  text-wrap: balance;
   animation: hud-pulse 1.6s ease-in-out infinite;
+}
+
+/* Keep a token from breaking mid-word (e.g. the "slow-mo" hyphen). Used inline in
+   hint copy — the nowrap-beats pattern (cf. BotRaceUI blurbs). */
+.nowrap {
+  white-space: nowrap;
 }
 
 /* Buttons: large tap targets (>= 48px), neon fill for primary, ghost for
@@ -686,16 +706,17 @@ body,
   text-shadow: none;
 }
 
-/* Slow-mo line (PR2) — under the scoring line, tinted the slow-mo neon green so it
-   reads as the SLOW-MO↔agility tradeoff, distinct from the cyan scoring line. */
+/* Slow-mo line (PR2) — under the scoring line. Uses the ORANGE ACCENT (audit #191,
+   F14: it was lime #39ff14, a 5th hue outside the magenta/cyan/purple/orange palette).
+   Cyan scoring line + orange slow-mo line = two on-palette accents, one per tradeoff. */
 .shell-car-slowmo {
   min-height: 1em;
   margin: 1px 0 0;
   font-size: clamp(11px, 2.8vw, 14px);
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: #39ff14;
-  text-shadow: 0 0 6px rgba(57, 255, 20, 0.5);
+  color: #ff8a3d;
+  text-shadow: 0 0 6px rgba(255, 102, 0, 0.5);
   opacity: 0.92;
 }
 .shell-carpicker.locked .shell-car-slowmo {
@@ -817,6 +838,25 @@ body,
   letter-spacing: 0.04em;
   color: #ff8a3d;
   text-shadow: 0 0 8px #ff6600;
+}
+
+/* Contained celebration block (audit #191, F6): wraps the unlock banner + mission
+   lines into ONE unit — a faint cyan-tinted card — so they read as a grouped
+   celebration, not loose alternating strata. Toggled as a whole in showCrash. */
+.shell-crash-celebrate {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 4px 0;
+  padding: 8px 16px;
+  border: 1px solid rgba(0, 255, 255, 0.22);
+  border-radius: 10px;
+  background: rgba(0, 255, 255, 0.05);
+}
+.shell-crash-celebrate .shell-crash-unlock,
+.shell-crash-celebrate .shell-crash-missions {
+  margin: 0;
 }
 
 /* OPP-15: WIPEOUT placement badge ("NEW #3!" / "BEST IN NOVA") — a bright cyan
@@ -956,11 +996,17 @@ body,
   width: min(360px, 86vw);
   margin: 4px 0;
 }
+/* Each mission is ONE contained card (audit #191, F12) so label→bar→count read as a
+   unit, not three unrelated strata with the faint track masquerading as a strikethrough. */
 .shell-mission {
   display: grid;
   grid-template-columns: 1fr auto;
-  gap: 2px 8px;
+  gap: 5px 8px;
   align-items: center;
+  padding: 7px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
 }
 .shell-mission-label {
   font-size: clamp(12px, 3vw, 15px);
@@ -972,15 +1018,21 @@ body,
   font-variant-numeric: tabular-nums;
   color: #ff66ff;
 }
+/* A clearly-inset track — a visible border + a taller trough so it reads as a
+   progress bar (not a rule under the label). */
 .shell-mission-track {
   grid-column: 1 / -1;
-  height: 6px;
-  border-radius: 3px;
-  background: rgba(255, 255, 255, 0.12);
+  height: 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   overflow: hidden;
 }
 .shell-mission-fill {
   height: 100%;
+  /* A minimum nub so even a 0%-progress mission shows a fill, reading as "a bar just
+     starting" rather than an empty grey line (audit #191, F12). */
+  min-width: 5px;
   background: #ff00ff;
   box-shadow: 0 0 8px #ff00ff;
   transition: width 0.3s ease;

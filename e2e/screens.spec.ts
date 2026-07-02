@@ -61,10 +61,16 @@ test('wipeout: unlock + mission/rank celebration lines render', async ({ page })
   const errors = trackErrors(page);
   await bootScreen(page, 'wipeout-unlock');
   await assertCrashHealthy(page);
+  // The car unlock shows ONCE, in the headline banner (audit #191, F6).
   await expect(page.locator('.shell-crash-unlock')).toContainText('UNLOCKED: Nova');
   const missionLines = page.locator('.shell-crash-missions .shell-crash-mission-line');
-  await expect(missionLines).toHaveCount(3);
+  // Two lines: the redundant "UNLOCKED: Nova" is deduped out (the banner owns it),
+  // leaving the mission-complete + rank-up lines.
+  await expect(missionLines).toHaveCount(2);
   await expect(missionLines.first()).toContainText('MISSION COMPLETE');
+  await expect(page.locator('.shell-crash-missions')).not.toContainText('UNLOCKED: Nova');
+  // Unlock banner + mission lines are grouped in the one contained celebration block.
+  await expect(page.locator('.shell-crash-celebrate .shell-crash-unlock')).toBeVisible();
   expect(errors).toEqual([]);
 });
 

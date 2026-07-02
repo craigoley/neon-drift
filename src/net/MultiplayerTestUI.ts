@@ -56,7 +56,20 @@ export function mountMultiplayerTest(parent: HTMLElement): void {
   const controls = el('div', 'display:flex;gap:16px;align-items:center;flex-wrap:wrap;justify-content:center;');
   controls.append(hostBtn, el('span', 'opacity:0.5;', 'or'), joinRow);
 
-  root.append(title, sub, controls, codeLine, statusLine, rttLine, detLine, turnLine, hint);
+  // Fixed ‹ BACK escape (audit #191) — this ?mp=1 overlay had NO exit but browser chrome,
+  // the same store-trap class fixed for the store (#180) + leaderboard. Reuse the global
+  // `.shell-back` style/placement. There's no Shell handle here, so BACK navigates to the
+  // root: a clean return to the menu that also tears down the peer and drops ?mp=1 (so a
+  // refresh can't re-trap you).
+  const back = el('button', '', '‹ BACK');
+  back.className = 'shell-back';
+  back.type = 'button';
+  back.setAttribute('aria-label', 'Back to menu');
+  back.addEventListener('click', () => {
+    window.location.href = '/';
+  });
+
+  root.append(back, title, sub, controls, codeLine, statusLine, rttLine, detLine, turnLine, hint);
   parent.append(root);
 
   // --- connection + probe orchestration --------------------------------------

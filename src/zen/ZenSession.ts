@@ -198,22 +198,48 @@ export class ZenSession {
     exit.addEventListener('click', () => this.opts.onExit());
     this.overlay.appendChild(exit);
 
+    // The two hint lines share one flow-stacked container so they can WRAP without
+    // colliding (audit #191): absolutely-positioned lines 18px apart used to overlap
+    // into mush at phone width, and the right edge ran under the top-right minimap disc.
+    // Scoped styles (removed with the overlay on dispose) keep desktop at the top-centre
+    // while phones — where the ~138px minimap band leaves no room for centred top text —
+    // drop the block BELOW the minimap so it has the full width to wrap legibly.
+    const hintStyle = document.createElement('style');
+    hintStyle.textContent = `
+      .zen-hint {
+        position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+        display: flex; flex-direction: column; align-items: center; gap: 2px; margin: 0;
+        max-width: min(560px, calc(100vw - 32px));
+        text-align: center; pointer-events: none;
+      }
+      .zen-hint p { margin: 0; line-height: 1.3; }
+      @media (max-width: 520px) {
+        .zen-hint {
+          /* below the minimap band: margin(14) + size(124) + gap(12) */
+          top: 150px; max-width: calc(100vw - 28px);
+        }
+      }`;
+    this.overlay.appendChild(hintStyle);
+
+    const hintBox = document.createElement('div');
+    hintBox.className = 'zen-hint';
+
     const hint = document.createElement('p');
-    hint.style.cssText =
-      'position:absolute;top:14px;left:50%;transform:translateX(-50%);margin:0;color:#e9d5ff;opacity:0.7;font-size:13px;text-align:center;';
+    hint.style.cssText = 'color:#e9d5ff;opacity:0.7;font-size:13px;';
     hint.textContent = opts.isTouch
       ? 'drag to steer · hold GAS to cruise'
       : '← → / A D to steer · ↑ ↓ to accelerate · drift around';
-    this.overlay.appendChild(hint);
+    hintBox.appendChild(hint);
 
     // DISCOVERY nudge (FTUE, audit #174): controls alone don't tell a new player there's anything OUT
     // there. One calm line points them outward — toward the landmark beacons the radar marks. Same
     // unobtrusive style as the controls hint; the discovery itself is the point, so we don't over-explain.
     const discover = document.createElement('p');
-    discover.style.cssText =
-      'position:absolute;top:32px;left:50%;transform:translateX(-50%);margin:0;color:#c9a8ff;opacity:0.6;font-size:12px;text-align:center;';
+    discover.style.cssText = 'color:#c9a8ff;opacity:0.6;font-size:12px;';
     discover.textContent = 'explore — drive toward the beacons on the horizon';
-    this.overlay.appendChild(discover);
+    hintBox.appendChild(discover);
+
+    this.overlay.appendChild(hintBox);
 
     if (opts.isTouch) {
       this.overlay.appendChild(this.makeHoldButton('GAS', 'right:14px', (h) => (this.fwd = h)));

@@ -420,8 +420,11 @@ export class Shell {
     this.go('crash');
   }
 
-  /** In-play: hide all overlays. */
+  /** Enter in-play mode: hide all overlays and turn ON the in-run controls
+   *  (`body.playing`). Clears any external-system flag first, so it also serves as the
+   *  hand-off from an external menu (vs-CPU picker / 2P lobby) into a real race. */
   hide(): void {
+    this.externalMode = false;
     this.go(null);
   }
 
@@ -586,7 +589,10 @@ export class Shell {
         label: 'VS COMPUTER',
         present: !!this.opts.onVsComputer,
         onTap: () => {
-          this.hide();
+          // The picker is a MENU, not a run — hide as an EXTERNAL system (like Zen) so
+          // `body.playing` stays OFF and no ghost pause/slow-mo control sits under the
+          // modal (audit #191). Real play mode is entered when the race starts (onRacing).
+          this.hideForExternal();
           this.opts.onVsComputer?.();
         },
       },
@@ -595,7 +601,10 @@ export class Shell {
         label: '2P RACE',
         present: !!this.opts.onMultiplayer,
         onTap: () => {
-          this.hide();
+          // The Host/Join lobby is a MENU, not a run — hide as an EXTERNAL system so
+          // `body.playing` stays OFF (no ghost pause/slow-mo under the modal, audit #191).
+          // Real play mode is entered when the lockstep race starts (onRacing).
+          this.hideForExternal();
           this.opts.onMultiplayer?.();
         },
       },

@@ -684,7 +684,7 @@ export class Shell {
       `<button class="shell-btn shell-toggle shell-toggle-ghost" type="button" role="switch">` +
       `<span class="shell-ghost-value">OFF</span></button>` +
       `</div>` +
-      `<button class="shell-btn shell-close" type="button">CLOSE</button>`;
+      `<button class="shell-btn shell-btn--ghost shell-close" type="button">CLOSE</button>`;
 
     s.querySelector('.shell-toggle-sound')!.addEventListener('click', () => this.toggleSound());
     s.querySelector('.shell-toggle-fx')!.addEventListener('click', () => this.toggleFx());
@@ -776,7 +776,7 @@ export class Shell {
       this.statRow('AGILITY', 'agility') +
       `</div>` +
       `<div class="shell-car-dots"></div>` +
-      `<button class="shell-btn shell-close" type="button">DONE</button>`;
+      `<button class="shell-btn shell-btn--ghost shell-close" type="button">DONE</button>`;
 
     s.querySelector('.shell-prev')!.addEventListener('click', () => this.cycleCar(-1));
     s.querySelector('.shell-next')!.addEventListener('click', () => this.cycleCar(1));
@@ -878,7 +878,7 @@ export class Shell {
       `</div>` +
       `<p class="shell-sb-req"></p>` +
       `</div>` +
-      `<button class="shell-btn shell-close-missions" type="button">DONE</button>`;
+      `<button class="shell-btn shell-btn--ghost shell-close-missions" type="button">DONE</button>`;
 
     s.querySelector('.shell-sb-prev')!.addEventListener('click', () => this.cycleStartBiome(-1));
     s.querySelector('.shell-sb-next')!.addEventListener('click', () => this.cycleStartBiome(1));
@@ -906,7 +906,7 @@ export class Shell {
       `<div class="shell-store-cars shell-store-list"></div>` +
       `<h3 class="shell-store-heading">COSMETICS</h3>` +
       `<div class="shell-store-cosmetics shell-store-list"></div>` +
-      `<button class="shell-btn shell-close-store" type="button">DONE</button>` +
+      `<button class="shell-btn shell-btn--ghost shell-close-store" type="button">DONE</button>` +
       `</div>` +
       `<div class="shell-scroll-cue" aria-hidden="true"></div>`;
 
@@ -1050,7 +1050,7 @@ export class Shell {
       `<div class="shell-lb-list"></div>` +
       `<h3 class="shell-lb-heading">BEST PER CAR</h3>` +
       `<div class="shell-lb-cars"></div>` +
-      `<button class="shell-btn shell-close-leaderboard" type="button">DONE</button>` +
+      `<button class="shell-btn shell-btn--ghost shell-close-leaderboard" type="button">DONE</button>` +
       `</div>` +
       `<div class="shell-scroll-cue" aria-hidden="true"></div>`;
     s.querySelector('.shell-back-leaderboard')!.addEventListener('click', () => this.showStart());
@@ -1113,7 +1113,7 @@ export class Shell {
       `<p class="shell-daily-today"></p>` +
       `<h3 class="shell-lb-heading">LAST 7 DAYS</h3>` +
       `<div class="shell-daily-history"></div>` +
-      `<button class="shell-btn shell-close-daily" type="button">DONE</button>`;
+      `<button class="shell-btn shell-btn--ghost shell-close-daily" type="button">DONE</button>`;
     s.querySelector('.shell-play-daily')!.addEventListener('click', () => this.playDaily());
     s.querySelector('.shell-close-daily')!.addEventListener('click', () => this.showStart());
     return s;
@@ -1236,7 +1236,9 @@ export class Shell {
       `<h2 class="shell-subtitle">PAUSED</h2>` +
       `<button class="shell-btn shell-resume" type="button">RESUME</button>` +
       `<button class="shell-btn shell-btn--ghost shell-quit" type="button">QUIT TO MENU</button>` +
-      `<p class="shell-hint">Esc / P to resume</p>`;
+      // Touch has no Esc/P (audit #193, F10) — point at the actual resume control, the
+      // way buildStart branches its controls hint. Keyboard keeps the key shortcuts.
+      `<p class="shell-hint">${this.opts.isTouch ? 'tap RESUME to continue' : 'Esc / P to resume'}</p>`;
     s.querySelector('.shell-resume')!.addEventListener('click', () => this.resumeRun());
     s.querySelector('.shell-quit')!.addEventListener('click', () => this.menu());
     return s;

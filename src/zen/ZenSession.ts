@@ -87,10 +87,10 @@ export class ZenSession {
   /** The IMMUTABLE session identity (random per entry, or the pinned ?seed=) — the world Craig roams.
    *  Never changes across a warp; #172 randomises it per entry, ?seed= pins it. */
   private readonly sessionSeed: number;
-  /** The WORKING world seed every per-frame read keys off (surface/biome/triggers/heightAt) = sessionSeed
-   *  normally, but SWITCHED to ZEN_TUNNEL_SECRET.seed while warped in the tunnel cavern so that segregated
-   *  amber region is the SAME designed space every session (the renderer is re-keyed in lock-step). */
-  private seed: number;
+  /** The world seed every per-frame read keys off (surface/biome/triggers/heightAt). Always the SESSION
+   *  seed — the tunnel warp is a POCKET within this same world, so it is NEVER switched (#191 fix; the old
+   *  switch to a fixed cavern seed regenerated the surrounds into a visibly different world). */
+  private readonly seed: number;
   private readonly renderer: ZenRenderer;
   private readonly overlay: HTMLElement;
   private readonly minimap: ZenMinimap;
@@ -257,9 +257,10 @@ export class ZenSession {
       `position:absolute;inset:0;background:${ZEN_SECRET.fadeColor};opacity:0;pointer-events:none;`;
     this.overlay.appendChild(this.fader);
     this.returnPortal = findReturnPortal(this.seed);
-    // The tunnel cavern is the FIXED designed region (not the random session world) — its return portal
-    // + the cave + the region's terrain all key off ZEN_TUNNEL_SECRET.seed, so it's the SAME every session.
-    this.tunnelPortal = tunnelReturnPortal(ZEN_TUNNEL_SECRET.seed);
+    // The tunnel cavern is a POCKET in the SESSION's world (#191 fix) — its return portal + the cave
+    // decor + the region's terrain all key off the session seed, so warping in stays in the SAME world
+    // Craig drove the tunnel in (deterministic under ?seed=, fresh per entry like the rest of the world).
+    this.tunnelPortal = tunnelReturnPortal(this.sessionSeed);
     this.prevX = this.v.x;
     this.prevZ = this.v.z;
 
@@ -560,11 +561,10 @@ export class ZenSession {
       // the distinct tunnel space in front of its portal; RETURN restores that entrance, safe-arrival.
       if (!this.inTunnelSpace) {
         this.saved = this.tunnelEntry ?? snapshot(this.v);
-        // Switch the world to the FIXED tunnel-cavern region FIRST (the renderer re-streams it, hidden by
-        // the fade) so the cave is the same designed space every session — then place the car ON it.
+        // Warp to the cavern region (a far part of the SESSION's OWN world — NOT a re-seeded different
+        // world; #191 fix). The seed is unchanged: the amber cave decor is built from the session seed
+        // so it sits on this same terrain, and the surrounds stay the world Craig drove the tunnel in.
         this.inTunnelSpace = true;
-        this.seed = ZEN_TUNNEL_SECRET.seed;
-        this.renderer.setWorldSeed(ZEN_TUNNEL_SECRET.seed);
         const pose = arrivalPose(this.tunnelPortal);
         this.v.x = pose.x;
         this.v.z = pose.z;
@@ -580,10 +580,9 @@ export class ZenSession {
         // descent (you drove in; now you face the way you came = out of the mouth), so the loop reads as
         // "I came back up and out", ready to drive away (re-runnable). #130 safe-arrival (vy = 0, not
         // airborne, sane land) + the bounce guard (no instant re-descent of the mouth you just exited).
-        // Back to the SESSION world (restore the random world the player roamed; re-stream it).
+        // Back to the entrance. The world seed never changed (the cavern was a pocket in this same
+        // world), so there's nothing to restore — just warp home, facing out (#191 fix).
         this.inTunnelSpace = false;
-        this.seed = this.sessionSeed;
-        this.renderer.setWorldSeed(this.sessionSeed);
         if (this.saved) {
           this.v.x = this.saved.x;
           this.v.z = this.saved.z;

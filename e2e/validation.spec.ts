@@ -45,6 +45,8 @@ interface ZenDbg {
   airborne: boolean;
   warpPhase: 'none' | 'out' | 'in';
   inSecret: boolean;
+  /** True once the tunnel DEEP-POINT payoff warp has fired → the car is in the hidden amber cave (#164). */
+  inTunnelSpace: boolean;
   hasSaved: boolean;
   onSlide: boolean;
   slideU: number;
@@ -243,56 +245,48 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
     expect(Math.abs(home.pos.x), 'restored to the main world (near origin), not stuck far').toBeLessThan(50_000);
     heaps.push(await heapMB());
 
-    // --- PHASE 4: drive THROUGH the NEAREST tunnel (the surface-override / far-from-path NaN
-    // candidate). The "nearest" tunnel to the live post-warp spot can still be several km out, so
-    // the leg budget is DISTANCE-SCALED — a fixed 60s under-budgeted a 4924u drive at 96 u/s
-    // (≈82 u/s avg required, no margin) on the first live run. Nearest-pick + scaled budget = belt
-    // and suspenders, and it still exercises descend + resurface. ---
+    // --- PHASE 4: drive to the NEAREST tunnel and DESCEND it. POST-#164 the tunnel is a DESCEND → WARP
+    // payoff — the drive-through-and-resurface mechanic + the drivable basin were REMOVED: you descend to
+    // the deep point and WARP into the segregated amber cave (leaving the tube is always terrain). So the
+    // canary asserts the reliably-reachable half of that — the tunnel is a genuine SUB-SURFACE tube you
+    // descend into — and OBSERVES the payoff warp. It no longer asserts the removed "stay on the tunnel
+    // floor / resurface on the far side" model (the #149 assertion #164 deleted → it was crying wolf,
+    // diag/l3-soak-canary). The per-frame tube-floor smoothness is already guarded GREEN by the unit test
+    // zen_tunnel_smooth (21/21), so the soak no longer duplicates it.
+    //
+    // ⚠️ LIMITATION (verified, deliberately NOT asserted): the payoff WARP (inTunnelSpace flip) is only
+    // OBSERVED, not hard-asserted. Firing it needs the car to follow the BENT tube centreline continuously
+    // across the deep point so `along` flips sign on consecutive in-corridor frames (ZenTunnelPayoff
+    // .passedDeepPoint). The soak's straight-line closed-loop autopilot descends to the deep floor
+    // (minY ≈ −37) but doesn't hold the ~32u bendy corridor across the centre, so the warp does NOT
+    // reliably fire — confirmed here with two driving strategies (straight-through + axis-aligned mouth-to-
+    // mouth), both descend yet never warp. Making it fire is AUTOPILOT-PATHING work (bend-following) — the
+    // separate soak item this recalibration deliberately does NOT take on. We LOG whether the warp fired
+    // so a future bend-following drive can promote it to an assertion. ---
     const tun = nearestOfType(LANDMARK_TUNNEL, Math.round(home.pos.x), Math.round(home.pos.z));
     if (tun) {
       const dist = Math.hypot(tun.x - home.pos.x, tun.z - home.pos.z);
       // dist / maxSpeed is the straight-line floor; ×2.5 covers the initial turn-to-heading, the
-      // closed-loop steering corrections, and the curved ~810u descent. Floored so a near tunnel
-      // still gets a real budget.
+      // closed-loop steering corrections, and the curved descent to the deep point.
       const budgetMs = Math.max(45_000, Math.round((dist / ZEN.maxSpeed) * 2.5) * 1000);
       log(`tunnel (@ ${Math.round(tun.x)},${Math.round(tun.z)} · ${Math.round(dist)}u · budget ${Math.round(budgetMs / 1000)}s)`);
-      // Done = descended INTO the tunnel near its centre. Latch loosened to <60u && y<−1 (still a
-      // genuine sub-surface descent — tunnelDepth is 16u — just less knife-edge than <40u && y<−2).
-      const through = await drive(page, 'tunnel', {
-        target: tun,
-        budgetMs,
-        done: (z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z) < 60 && z.pos.y < -1,
-      });
-      all.push(...through.samples);
-      // Self-diagnosing (principle #4): a miss reports distance-remaining + depth reached, never a
-      // bare fail — so we never bump a budget to hide a hang, the log says how close it got.
-      const closest = through.samples.length ? Math.min(...through.samples.map((z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z))) : Infinity;
-      const minY = through.samples.length ? Math.min(...through.samples.map((z) => z.pos.y)) : NaN;
-      console.log(`[VALIDATION] tunnel: closestApproach=${Math.round(closest)}u minY=${minY.toFixed(1)} reached=${through.done}`);
-      expect(through.done, `descended into the tunnel (closest=${Math.round(closest)}u, minY=${minY.toFixed(1)})`).toBe(true);
-
-      // SMOOTHNESS CANARY (diagnosis #148: the car bumped between the tunnel floor and normal ground
-      // — FINITE but not SMOOTH, so the old sweep passed). Drive THROUGH + out the far side and assert
-      // the car STAYS on the tunnel floor: `onSurface` doesn't toggle back to terrain mid-tunnel, and
-      // no gross per-sample ΔY pop. (The per-frame guarantee is the unit test zen_tunnel_smooth; this
-      // is the live belt-and-suspenders.) Reuse the pure unit test as the precise guard.
-      log('tunnel-through (smoothness)');
-      const past = { x: 2 * tun.x - home.pos.x, z: 2 * tun.z - home.pos.z }; // keep going past the tunnel
-      const out = await drive(page, 'tunnel-through', {
+      // Drive straight through the tunnel; latch when we descend genuinely SUB-SURFACE (a real tube — the
+      // shallowest tunnel still bottoms ≈ −34 at tunnelDepth·scaleMin) or, as a bonus, if the warp fires.
+      // Robust: it needs a real DESCENT, not a precise on-axis path or frame-timing.
+      const past = { x: 2 * tun.x - home.pos.x, z: 2 * tun.z - home.pos.z };
+      const drove = await drive(page, 'tunnel', {
         target: past,
-        budgetMs: 14_000,
-        done: (z) => Math.hypot(z.pos.x - tun.x, z.pos.z - tun.z) > 140 && z.pos.y > -1,
+        budgetMs,
+        done: (z) => z.pos.y < -20 || z.inTunnelSpace,
       });
-      all.push(...out.samples);
-      const traversal = [...through.samples, ...out.samples];
-      const deep = traversal.filter((z) => z.pos.y < -3); // firmly inside the tunnel
-      const maxJump = traversal.length > 1 ? Math.max(...traversal.slice(1).map((z, i) => Math.abs(z.pos.y - traversal[i].pos.y))) : 0;
-      const poppedToGround = deep.some((z) => !z.onSurface); // deep but on plain terrain = the #148 pop
-      console.log(`[VALIDATION] tunnel-smooth: deepSamples=${deep.length} poppedToGround=${poppedToGround} maxΔY=${maxJump.toFixed(1)}u`);
-      if (deep.length >= 2) {
-        expect(poppedToGround, 'stayed on the tunnel floor (no pop to normal ground mid-tunnel)').toBe(false);
-      }
-      expect(maxJump, 'no gross vertical pop while traversing the tunnel').toBeLessThan(25);
+      all.push(...drove.samples);
+      const minY = drove.samples.length ? Math.min(...drove.samples.map((z) => z.pos.y)) : NaN;
+      const descended = drove.samples.some((z) => z.pos.y < -15); // genuinely into the sub-surface tube
+      const warpFired = drove.samples.some((z) => z.inTunnelSpace); // OBSERVED only (see LIMITATION above)
+      console.log(`[VALIDATION] tunnel: descended=${descended} minY=${minY.toFixed(1)} warpFired(observed)=${warpFired}`);
+      // The post-#164 canary: the tunnel is a real descendable SUB-SURFACE tube (the reachable half of
+      // descend→warp). A failure = the drivable tube floor is broken / the tunnel no longer descends.
+      expect(descended, `descended into the sub-surface tunnel tube (minY=${minY.toFixed(1)}, expected < −15)`).toBe(true);
     } else {
       log('tunnel-skip (none in range — not a failure)');
     }

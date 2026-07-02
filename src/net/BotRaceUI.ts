@@ -43,7 +43,11 @@ const PANEL = 'position:fixed;inset:0;z-index:9998;background:rgba(26,0,51,0.96)
 // The mode label sits just BELOW the main stats bar (top:0, ~44px tall) — its own slot, clear of the
 // speed/best readout it used to overlap. The position/gap readout (RaceHud) sits below this in turn.
 const STRIP = 'position:fixed;top:calc(50px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);z-index:9998;background:rgba(26,0,51,0.85);color:#e9d5ff;font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:8px;';
-const BTN = 'font:inherit;font-weight:700;padding:12px 24px;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:8px;cursor:pointer;min-width:8em;';
+// Mirrors the shell's `.shell-btn--ghost` design tokens (audit #191, F13) — cyan outline,
+// 10px radius, uppercase, cyan glow, 46px tap target — so the picker matches the rest of the
+// shell. Kept inline (not the CSS class) to preserve this panel's deliberate self-contained
+// styling (see the file header) and its compact width.
+const BTN = "font:800 clamp(15px,4.2vw,18px) 'Segoe UI',system-ui,sans-serif;letter-spacing:0.1em;text-transform:uppercase;padding:12px 24px;min-height:46px;min-width:8em;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:10px;box-shadow:0 0 12px rgba(0,255,255,0.35);cursor:pointer;";
 
 // Descriptors as PHRASE arrays (rendered as nowrap "beats" joined by · — see the loop below): so a
 // phrase never breaks mid-word + the separators read. HONEST about rubber-banding now that EASY has
@@ -58,10 +62,12 @@ const TIERS: ReadonlyArray<{ id: BotDifficulty; label: string; phrases: readonly
 export function mountBotRaceUI(parent: HTMLElement, opts: BotRaceUIOptions): void {
   const root = el('div', PANEL);
   root.className = 'bot-race-ui';
-  const title = el('h1', 'color:#ff00ff;text-shadow:0 0 12px #ff00ff;margin:0;font-size:clamp(20px,5vw,30px);', 'vs COMPUTER');
+  // All-caps to match the menu tile "VS COMPUTER" + the shell's uppercase titles (audit #191, F13).
+  const title = el('h1', 'color:#ff00ff;text-shadow:0 0 12px #ff00ff;margin:0;font-size:clamp(20px,5vw,30px);letter-spacing:0.08em;', 'VS COMPUTER');
   const sub = el('p', 'opacity:0.7;margin:0;max-width:30em;', 'Race an AI opponent on a shared course. Pick your challenge.');
   const tiers = el('div', 'display:flex;flex-direction:column;gap:10px;align-items:center;');
-  const backBtn = el('button', `${BTN};border-color:#888;color:#bbb`, 'BACK');
+  // BACK now uses the same cyan ghost token as the rest (was grey #888 — a different system, F13).
+  const backBtn = el('button', BTN, 'BACK');
   root.append(title, sub, tiers);
 
   const strip = el('div', STRIP, '');

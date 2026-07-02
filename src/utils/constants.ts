@@ -948,6 +948,32 @@ export const ENV = {
 } as const;
 
 /**
+ * HORIZON SCRIM (audit #191, F7) — a calm dark band across the horizon, drawn as a
+ * BACKGROUND layer (over the mountain ridge at renderOrder -2, UNDER all gameplay at 0),
+ * so the first orange obstacle no longer reads as a low-contrast chip on the busy
+ * EQ-ridge / grid-convergence band where hazards spawn. Purely a VISUAL contrast aid —
+ * it can never hide an obstacle (gameplay draws on top) nor dim the sun (the band sits
+ * BELOW the sun's bottom edge ~y100). NO hitbox / spawn / difficulty / gameplay change.
+ * CONSERVATIVE default; every value TUNABLE — Craig dials on device (opacity 0 = off).
+ */
+export const HORIZON_SCRIM = {
+  /** Deep near-black-purple, matching the backdrop palette (not a grey wash). */
+  color: 0x0a0018,
+  /** Idle opacity — subtle. The core dial. */
+  opacity: 0.4,
+  /** Band extents (world units) + vertical centre. Kept low so the top edge (centerY +
+   *  height/2 ≈ 86) stays clear of the sun's bottom (~y100). */
+  width: 640,
+  height: 96,
+  centerY: 38,
+  /** Local z within the backdrop group (between the sun at 0 and the mountains) — layering
+   *  is by renderOrder (depthTest off), so this is just tidy placement. */
+  localZ: -180,
+  /** Draw order: after the mountains (-2), before gameplay (0) → calms the ridge, never a hazard. */
+  renderOrder: -1.5,
+} as const;
+
+/**
  * The signature synthwave "retrosun": a vertical colour gradient (warm hot top
  * → deep-purple base) overlaid with horizontal scanline bands that thin and
  * tighten toward the bottom — a sunset, not a flat striped disc. Rendered as a
@@ -1592,8 +1618,10 @@ export const ZEN_MINIMAP = {
    *  steer doesn't jitter the map). */
   headingLerp: 9,
   /** Overall overlay opacity — semi-transparent so it aids navigation without dominating
-   *  the calm screen. */
-  opacity: 0.82,
+   *  the calm screen. LOWERED (audit #191, F11): the radar was the most saturated object
+   *  on a mode sold as CHILL, pulling the eye corner-first. TUNABLE (Craig dials on device):
+   *  calmer idle, but the landmark markers/bearings stay legible at this level. */
+  opacity: 0.68,
   /** Neon scope RING colour (synthwave cyan) + its line width (CSS px). */
   ringColor: 0x00ffff,
   ringWidth: 2,
@@ -1610,8 +1638,11 @@ export const ZEN_MINIMAP = {
   northTickPx: 7,
   /** Stroke width (CSS px) of the north tick. */
   northTickWidth: 2,
-  /** Alpha of the biome wash layer (slightly transparent so the backdrop bleeds through). */
-  washAlpha: 0.9,
+  /** Alpha of the biome wash layer (slightly transparent so the backdrop bleeds through).
+   *  LOWERED (audit #191, F11): the orange/green biome landmass was the loudest element —
+   *  calming JUST the wash desaturates the map without dimming the markers/bearings drawn on
+   *  top (they keep their type colours). TUNABLE (Craig dials on device). */
+  washAlpha: 0.55,
   /** LANDMARK marker (a destination beacon — bigger + brighter than a ramp dot) colour +
    *  radius (CSS px). A hollow ring so it reads as a "go here" beacon, distinct from ramps. */
   landmarkColor: 0xffe066,

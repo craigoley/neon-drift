@@ -43,7 +43,11 @@ function el<K extends keyof HTMLElementTagNameMap>(tag: K, style: string, text?:
 
 const PANEL = 'position:fixed;inset:0;z-index:9998;background:rgba(26,0,51,0.96);color:#e9d5ff;font-family:system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center;';
 const STRIP = 'position:fixed;top:8px;left:50%;transform:translateX(-50%);z-index:9998;background:rgba(26,0,51,0.85);color:#e9d5ff;font:600 13px system-ui,sans-serif;padding:6px 12px;border-radius:8px;';
-const BTN = 'font:inherit;font-weight:700;padding:12px 20px;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:8px;cursor:pointer;';
+// Mirrors the shell's `.shell-btn--ghost` design tokens (audit #191, F13) — cyan outline,
+// 10px radius, uppercase, cyan glow, 46px tap target — so the lobby matches the rest of the
+// shell. Kept inline (not the CSS class) to preserve this panel's deliberate self-contained
+// styling (see the file header) and a COMPACT width so the HOST / CODE / JOIN row doesn't wrap.
+const BTN = "font:800 clamp(13px,3.4vw,15px) 'Segoe UI',system-ui,sans-serif;letter-spacing:0.08em;text-transform:uppercase;padding:11px 16px;min-height:46px;border:2px solid #00ffff;background:transparent;color:#00ffff;border-radius:10px;box-shadow:0 0 12px rgba(0,255,255,0.35);cursor:pointer;";
 const INPUT = 'font:inherit;text-transform:uppercase;letter-spacing:0.2em;padding:10px;width:7em;text-align:center;border:2px solid #ff00ff;background:#0a001a;color:#fff;border-radius:8px;';
 
 export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void {
@@ -56,7 +60,8 @@ export function mountMpRaceUI(parent: HTMLElement, opts: MpRaceUIOptions): void 
   codeInput.placeholder = 'CODE';
   codeInput.maxLength = 8;
   const joinBtn = el('button', BTN, 'JOIN');
-  const backBtn = el('button', `${BTN};border-color:#888;color:#bbb`, 'BACK');
+  // BACK now uses the same cyan ghost token as the rest (was grey #888 — a different system, F13).
+  const backBtn = el('button', BTN, 'BACK');
   const row = el('div', 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center;');
   row.append(hostBtn, el('span', 'opacity:0.5;', 'or'), codeInput, joinBtn);
   const codeLine = el('p', 'font-size:clamp(28px,9vw,52px);font-weight:800;letter-spacing:0.3em;color:#00ffff;text-shadow:0 0 16px #00ffff;margin:6px 0;min-height:1em;');

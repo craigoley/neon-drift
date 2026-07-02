@@ -8,7 +8,7 @@
  */
 
 import * as THREE from 'three';
-import { ENV, GRID, PALETTE, SUN, type BiomeGradientStop } from '../utils/constants';
+import { ENV, GRID, HORIZON_SCRIM, PALETTE, SUN, type BiomeGradientStop } from '../utils/constants';
 import { hashNoise } from '../utils/rng';
 
 export class Environment {
@@ -52,6 +52,8 @@ export class Environment {
 
     this.backdrop.add(this.makeSun());
     this.backdrop.add(this.makeMountains(seed));
+    // F7 contrast aid: a calm dark band over the horizon ridge, behind the spawn zone.
+    if (HORIZON_SCRIM.opacity > 0) this.backdrop.add(this.makeHorizonScrim());
     this.group.add(this.backdrop);
 
     scene.add(this.group);
@@ -75,6 +77,28 @@ export class Environment {
     const mesh = new THREE.Mesh(new THREE.PlaneGeometry(SUN.radius * 2, SUN.radius * 2), mat);
     mesh.position.y = SUN.y;
     mesh.renderOrder = SUN.renderOrder;
+    return mesh;
+  }
+
+  /**
+   * F7 (audit #191) horizon scrim: a semi-transparent dark band across the horizon,
+   * drawn as a pure BACKGROUND layer (depthTest/Write off, renderOrder above the
+   * mountains but below all gameplay). It calms the busy EQ-ridge / grid-convergence
+   * band that the first orange obstacle spawns against — a VISUAL contrast aid only.
+   * It can never occlude an obstacle (gameplay renders on top) and sits below the sun.
+   */
+  private makeHorizonScrim(): THREE.Mesh {
+    const mat = new THREE.MeshBasicMaterial({
+      color: HORIZON_SCRIM.color,
+      transparent: true,
+      opacity: HORIZON_SCRIM.opacity,
+      fog: false,
+      depthWrite: false,
+      depthTest: false,
+    });
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(HORIZON_SCRIM.width, HORIZON_SCRIM.height), mat);
+    mesh.position.set(0, HORIZON_SCRIM.centerY, HORIZON_SCRIM.localZ);
+    mesh.renderOrder = HORIZON_SCRIM.renderOrder;
     return mesh;
   }
 

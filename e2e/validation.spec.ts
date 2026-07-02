@@ -23,9 +23,31 @@
  */
 import { test, expect, type Page } from '@playwright/test';
 import { trackErrors } from './_helpers';
-import { ZEN } from '../src/utils/constants';
-import { landmarksInRadius, LANDMARK_GATEWAY, LANDMARK_TUNNEL, LANDMARK_VISTA } from '../src/zen/ZenLandmarkModel';
+import { ZEN, ZEN_LANDMARK, ZEN_SECRET } from '../src/utils/constants';
+import { landmarksInRadius, tunnelBendShape, LANDMARK_GATEWAY, LANDMARK_TUNNEL, LANDMARK_VISTA } from '../src/zen/ZenLandmarkModel';
 import { findReturnPortal } from '../src/zen/ZenSecret';
+
+/** A placed landmark (tunnel / gateway) as landmarksInRadius returns it — the bits the autopilot needs. */
+interface Placed { x: number; z: number; rotationY: number; scale: number }
+
+// --- POST-#164 TUNNEL GEOMETRY (pure, mirrors ZenTunnelPayoff.coveringTunnel) so the autopilot can
+// FOLLOW the tunnel's BENT centreline through the deep point (#199). A straight-line drive leaves the
+// ~32u corridor on the bend, so `along` never flips sign on consecutive in-corridor frames and the
+// payoff warp can't fire (the #198 finding). Following the centreline keeps the car in-corridor →
+// `along` crosses 0 cleanly → the warp fires. All read-only maths from readable state; NO game change.
+const tunAxis = (t: Placed) => ({ tx: Math.sin(t.rotationY), tz: Math.cos(t.rotationY) });
+const tunHalfL = (t: Placed) => ZEN_LANDMARK.tunnelLength * t.scale * 0.5;
+/** The bent centreline point at axial position `s` (0 = deep centre, ±halfL = mouths). */
+function tunnelCentreline(t: Placed, s: number): { x: number; z: number } {
+  const { tx, tz } = tunAxis(t);
+  const bendOff = ZEN_LANDMARK.tunnelBendAmplitude * t.scale * tunnelBendShape(s / tunHalfL(t));
+  return { x: t.x + s * tx - bendOff * tz, z: t.z + s * tz + bendOff * tx };
+}
+/** The car's signed axial position along the tunnel (projection onto the through-axis). */
+const carAlong = (t: Placed, x: number, z: number) => {
+  const { tx, tz } = tunAxis(t);
+  return (x - t.x) * tx + (z - t.z) * tz;
+};
 
 // --- expected-warning allowlist (recon §4): benign sources that must NOT read as findings ---
 const EXPECTED = [
@@ -92,7 +114,13 @@ function checkSample(z: ZenDbg, where: string): void {
 async function drive(
   page: Page,
   where: string,
-  opts: { target?: { x: number; z: number } | null; budgetMs: number; done?: (z: ZenDbg) => boolean; stepMs?: number },
+  opts: {
+    /** A FIXED point, or a PER-FRAME target (for path-following, e.g. the tunnel's bent centreline). */
+    target?: { x: number; z: number } | ((z: ZenDbg) => { x: number; z: number }) | null;
+    budgetMs: number;
+    done?: (z: ZenDbg) => boolean;
+    stepMs?: number;
+  },
 ): Promise<{ samples: ZenDbg[]; done: boolean }> {
   const step = opts.stepMs ?? 120;
   const samples: ZenDbg[] = [];
@@ -108,9 +136,10 @@ async function drive(
         samples.push(z);
         checkSample(z, where);
         if (opts.done?.(z)) { done = true; break; }
-        if (opts.target) {
-          const dx = opts.target.x - z.pos.x;
-          const dz = opts.target.z - z.pos.z;
+        const tgt = typeof opts.target === 'function' ? opts.target(z) : opts.target;
+        if (tgt) {
+          const dx = tgt.x - z.pos.x;
+          const dz = tgt.z - z.pos.z;
           const desired = Math.atan2(dx, -dz); // forward = (sin h, -cos h)
           let err = desired - z.heading;
           while (err > Math.PI) err -= 2 * Math.PI;
@@ -233,10 +262,28 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
     expect(inSec.hasSaved, 'a main-world return spot is saved while in the secret area').toBe(true);
     heaps.push(await heapMB());
 
-    // --- PHASE 3: warp BACK (autopilot to the deterministic return portal in the far region) ---
+    // --- PHASE 3: warp BACK. The car ARRIVES at the return portal's arrival pose (arrivalPose), facing
+    // AWAY into the region, with the BOUNCE GUARD armed from that spot (guardDist = returnGuardDistance).
+    // A crossing only re-enables once the car has driven guardDist CLEAR of the arrival point — so a
+    // straight beeline back at the portal never clears the guard and the crossing stays gated (the
+    // Phase-3 flake, #199). Route it: (a) drive CLEAR of the guard, then (b) turn back + cross the portal. ---
     const portal = findReturnPortal(SEED);
     log(`warp-back (return portal @ ${Math.round(portal.x)},${Math.round(portal.z)})`);
-    const back = await drive(page, 'warp-back', { target: { x: portal.x, z: portal.z }, budgetMs: 80_000, done: (z) => !z.inSecret });
+    const arrival = { x: inSec.pos.x, z: inSec.pos.z }; // where we landed = the guard centre
+    const clearDist = ZEN_SECRET.returnGuardDistance + 60; // clear the guard with margin
+    // (a) Drive AWAY from the portal (its arrival heading already faces away) until guardDist is cleared.
+    const awayDir = { x: arrival.x - portal.x, z: arrival.z - portal.z };
+    const awayMag = Math.hypot(awayDir.x, awayDir.z) || 1;
+    const awayPoint = { x: arrival.x + (awayDir.x / awayMag) * (clearDist + 120), z: arrival.z + (awayDir.z / awayMag) * (clearDist + 120) };
+    const clear = await drive(page, 'warp-back-clear', {
+      target: awayPoint,
+      budgetMs: 25_000,
+      done: (z) => Math.hypot(z.pos.x - arrival.x, z.pos.z - arrival.z) > clearDist,
+    });
+    all.push(...clear.samples);
+    expect(clear.done, `drove clear of the bounce guard (>${clearDist}u from arrival)`).toBe(true);
+    // (b) Turn back and cross the portal opening → leave the secret area.
+    const back = await drive(page, 'warp-back', { target: { x: portal.x, z: portal.z }, budgetMs: 40_000, done: (z) => !z.inSecret });
     all.push(...back.samples);
     expect(back.done, 'crossed the return portal → left the secret area (inSecret false)').toBe(true);
     await page.waitForFunction(() => (window as unknown as { __neonDebug?: Dbg }).__neonDebug?.zen?.warpPhase === 'none', null, { timeout: 8_000 });
@@ -245,48 +292,57 @@ test.describe('L3 validation — the Zen SOAK (recon §3): finite, bounded, unfr
     expect(Math.abs(home.pos.x), 'restored to the main world (near origin), not stuck far').toBeLessThan(50_000);
     heaps.push(await heapMB());
 
-    // --- PHASE 4: drive to the NEAREST tunnel and DESCEND it. POST-#164 the tunnel is a DESCEND → WARP
-    // payoff — the drive-through-and-resurface mechanic + the drivable basin were REMOVED: you descend to
-    // the deep point and WARP into the segregated amber cave (leaving the tube is always terrain). So the
-    // canary asserts the reliably-reachable half of that — the tunnel is a genuine SUB-SURFACE tube you
-    // descend into — and OBSERVES the payoff warp. It no longer asserts the removed "stay on the tunnel
-    // floor / resurface on the far side" model (the #149 assertion #164 deleted → it was crying wolf,
-    // diag/l3-soak-canary). The per-frame tube-floor smoothness is already guarded GREEN by the unit test
-    // zen_tunnel_smooth (21/21), so the soak no longer duplicates it.
-    //
-    // ⚠️ LIMITATION (verified, deliberately NOT asserted): the payoff WARP (inTunnelSpace flip) is only
-    // OBSERVED, not hard-asserted. Firing it needs the car to follow the BENT tube centreline continuously
-    // across the deep point so `along` flips sign on consecutive in-corridor frames (ZenTunnelPayoff
-    // .passedDeepPoint). The soak's straight-line closed-loop autopilot descends to the deep floor
-    // (minY ≈ −37) but doesn't hold the ~32u bendy corridor across the centre, so the warp does NOT
-    // reliably fire — confirmed here with two driving strategies (straight-through + axis-aligned mouth-to-
-    // mouth), both descend yet never warp. Making it fire is AUTOPILOT-PATHING work (bend-following) — the
-    // separate soak item this recalibration deliberately does NOT take on. We LOG whether the warp fired
-    // so a future bend-following drive can promote it to an assertion. ---
+    // --- PHASE 4: drive to the NEAREST tunnel and FOLLOW its bent corridor through the deep point → the
+    // payoff WARP. POST-#164 the tunnel is a DESCEND → WARP payoff (the drive-through-and-resurface mechanic
+    // + the drivable basin were REMOVED): you descend to the deep point and WARP into the segregated amber
+    // cave. #198 could only OBSERVE the warp because a straight-line drive leaves the ~32u corridor on the
+    // bend, so `along` never flips sign on consecutive in-corridor frames and the warp can't fire. Here the
+    // autopilot FOLLOWS the tunnel's BENT centreline (tunnelCentreline, the same pure geometry
+    // coveringTunnel uses), holding the corridor across the centre → `along` crosses 0 cleanly → the warp
+    // fires (verified: in-corridor for the whole descent, 0 out-of-corridor frames). That promotes the
+    // warp to a HARD assert — the real post-#164 descend→warp→cave. The per-frame tube-floor smoothness
+    // stays guarded by the unit test zen_tunnel_smooth (21/21), so the soak doesn't duplicate it. ---
     const tun = nearestOfType(LANDMARK_TUNNEL, Math.round(home.pos.x), Math.round(home.pos.z));
     if (tun) {
       const dist = Math.hypot(tun.x - home.pos.x, tun.z - home.pos.z);
-      // dist / maxSpeed is the straight-line floor; ×2.5 covers the initial turn-to-heading, the
-      // closed-loop steering corrections, and the curved descent to the deep point.
+      const hL = tunHalfL(tun);
+      // Enter via the MOUTH nearer to `home`, then follow the centreline toward the FAR mouth (through 0).
+      const mPlus = tunnelCentreline(tun, +hL);
+      const mMinus = tunnelCentreline(tun, -hL);
+      const entrySign =
+        Math.hypot(mPlus.x - home.pos.x, mPlus.z - home.pos.z) < Math.hypot(mMinus.x - home.pos.x, mMinus.z - home.pos.z) ? +1 : -1;
       const budgetMs = Math.max(45_000, Math.round((dist / ZEN.maxSpeed) * 2.5) * 1000);
-      log(`tunnel (@ ${Math.round(tun.x)},${Math.round(tun.z)} · ${Math.round(dist)}u · budget ${Math.round(budgetMs / 1000)}s)`);
-      // Drive straight through the tunnel; latch when we descend genuinely SUB-SURFACE (a real tube — the
-      // shallowest tunnel still bottoms ≈ −34 at tunnelDepth·scaleMin) or, as a bonus, if the warp fires.
-      // Robust: it needs a real DESCENT, not a precise on-axis path or frame-timing.
-      const past = { x: 2 * tun.x - home.pos.x, z: 2 * tun.z - home.pos.z };
-      const drove = await drive(page, 'tunnel', {
-        target: past,
+      log(`tunnel (@ ${Math.round(tun.x)},${Math.round(tun.z)} · ${Math.round(dist)}u · entry ${entrySign > 0 ? '+' : '-'}mouth · budget ${Math.round(budgetMs / 1000)}s)`);
+      // (a) Approach a staging point just OUTSIDE the entry mouth (lined up with the axis).
+      const stage = tunnelCentreline(tun, entrySign * hL * 1.25);
+      const approach = await drive(page, 'tunnel-approach', {
+        target: stage,
         budgetMs,
-        done: (z) => z.pos.y < -20 || z.inTunnelSpace,
+        done: (z) => Math.hypot(z.pos.x - stage.x, z.pos.z - stage.z) < 70 || z.inTunnelSpace,
       });
-      all.push(...drove.samples);
-      const minY = drove.samples.length ? Math.min(...drove.samples.map((z) => z.pos.y)) : NaN;
-      const descended = drove.samples.some((z) => z.pos.y < -15); // genuinely into the sub-surface tube
-      const warpFired = drove.samples.some((z) => z.inTunnelSpace); // OBSERVED only (see LIMITATION above)
-      console.log(`[VALIDATION] tunnel: descended=${descended} minY=${minY.toFixed(1)} warpFired(observed)=${warpFired}`);
-      // The post-#164 canary: the tunnel is a real descendable SUB-SURFACE tube (the reachable half of
-      // descend→warp). A failure = the drivable tube floor is broken / the tunnel no longer descends.
+      all.push(...approach.samples);
+      // (b) FOLLOW the bent centreline toward the far mouth — aim a lookahead point DOWN the tube each
+      // frame, so the car holds the corridor across the deep point and the warp fires.
+      const LOOK = 60;
+      const follow = await drive(page, 'tunnel', {
+        target: (z) => tunnelCentreline(tun, carAlong(tun, z.pos.x, z.pos.z) - entrySign * LOOK),
+        budgetMs: 40_000,
+        done: (z) => z.inTunnelSpace,
+        stepMs: 90,
+      });
+      all.push(...follow.samples);
+      const traversal = [...approach.samples, ...follow.samples];
+      const minY = traversal.length ? Math.min(...traversal.map((z) => z.pos.y)) : NaN;
+      const descended = traversal.some((z) => z.pos.y < -15); // #198: genuinely into the sub-surface tube
+      const last = follow.samples.length ? follow.samples[follow.samples.length - 1] : null;
+      console.log(`[VALIDATION] tunnel: warpedToCave=${follow.done} descended=${descended} minY=${minY.toFixed(1)} lastPos=(${last ? Math.round(last.pos.x) : '?'},${last ? Math.round(last.pos.z) : '?'})`);
+      // HARD asserts (#199): following the tunnel DESCENDS it (a real sub-surface tube) AND fires the
+      // payoff WARP into the cave — the full post-#164 descend → warp → cave.
       expect(descended, `descended into the sub-surface tunnel tube (minY=${minY.toFixed(1)}, expected < −15)`).toBe(true);
+      expect(follow.done, `followed the tunnel → payoff WARP fired into the hidden cave (inTunnelSpace; minY=${minY.toFixed(1)})`).toBe(true);
+      expect(last, 'a live sample at cave arrival').not.toBeNull();
+      // The warp teleports to the FAR segregated cave region (same pattern as the secret-area warp).
+      expect(Math.abs(last!.pos.x) > 100_000 || Math.abs(last!.pos.z) > 100_000, 'warped to the far cave region').toBe(true);
     } else {
       log('tunnel-skip (none in range — not a failure)');
     }

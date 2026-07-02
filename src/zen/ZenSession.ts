@@ -179,7 +179,7 @@ export class ZenSession {
   constructor(opts: ZenSessionOptions) {
     this.opts = opts;
     this.sessionSeed = opts.seed; // the immutable identity (the world Craig roams)
-    this.seed = opts.seed; // the working world seed (= sessionSeed until a tunnel warp switches it)
+    this.seed = opts.seed; // the working world seed — always = sessionSeed; the tunnel warp is a pocket, never switches it (#191)
     // Start resting ON the terrain so the car doesn't visibly rise from y=0 at spawn.
     this.v.y = heightAt(this.seed, this.v.x, this.v.z) + ZEN.rideHeight;
     this.renderer = new ZenRenderer(opts.renderer, this.seed, opts.car);

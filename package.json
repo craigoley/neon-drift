@@ -32,6 +32,6 @@
   },
   "dependencies": {
     "@upstash/redis": "^1.38.0",
-    "three": "^0.185.0"
+    "three": "^0.185.1"
   }
 }

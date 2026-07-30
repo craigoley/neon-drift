@@ -4,10 +4,21 @@ import { boot, trackErrors } from './_helpers';
 /**
  * PHASE 1 — VISUAL REGRESSION BASELINES for every non-canvas screen.
  *
- * THE CANVAS WALL: these snapshots MASK the <canvas>, so they compare ONLY the DOM
+ * THE CANVAS WALL: these snapshots HIDE the <canvas>, so they compare ONLY the DOM
  * overlay (menus/screens/text). That removes WebGL/GPU/per-frame variance entirely
  * — the baseline catches DOM layout/color regressions (floating-DAILY, cyan-on-cyan,
  * clipped text), NOT anything rendered in the scene. Nothing here tests gameplay.
+ *
+ * WHY HIDE AND NOT MASK: this used to pass `mask: [page.locator('canvas')]`. But the
+ * game canvas IS the full viewport (measured: 1280x720 at 0,0), and Playwright paints
+ * a mask as an opaque #FF00FF box OVER the captured area — so the mask covered the
+ * whole page, including the very DOM overlay this spec exists to check. Every baseline
+ * came out as the same solid-magenta rectangle: 9 screens, ONE distinct image (single
+ * MD5, 4254 bytes each). The suite asserted nothing for its entire life, and the
+ * "restyles stayed under the 0.1 tolerance" history was really two identical blank
+ * rectangles comparing equal. `visibility: hidden` instead keeps layout intact (unlike
+ * `display: none`) so the overlay renders exactly where it normally does, over a plain
+ * background — same WebGL-variance removal, but the DOM is actually visible.
  *
  * PLATFORM BASELINES: snapshots are per-OS. Generate them ON THE LINUX CI RUNNER,
  * not locally — a Mac (-darwin) baseline never matches CI (-linux). Run the
@@ -24,11 +35,24 @@ import { boot, trackErrors } from './_helpers';
  * console errors); the pixel baseline is the secondary catch for gross breakage.
  */
 
-const MASK_CANVAS = (page: Page) => ({ mask: [page.locator('canvas')], maxDiffPixelRatio: 0.1 });
+/** Tolerance sized from MEASUREMENT, not habit. The old 0.1 (10% of pixels) could not
+ *  fail on any localised change: recolouring .shell-tagline shifts 2616 px = ratio 0.01,
+ *  so 0.1 passed it happily. With the canvas hidden the DOM render is deterministic —
+ *  two back-to-back local runs matched at EXACT equality (zero differing pixels) — so a
+ *  0.001 (921 px) budget still absorbs incidental text anti-aliasing while catching that
+ *  same regression with ~2.8x margin. Verified both ways: 0.001 fails on the recolour,
+ *  passes clean. */
+const SHOT_OPTS = { maxDiffPixelRatio: 0.001 };
+
+/** `visibility: hidden` (not `display: none`) so the canvas keeps its box and the DOM
+ *  overlay's layout is identical to a normal run. `!important` beats the `#app canvas`
+ *  rule in src/style.css. */
+const HIDE_CANVAS_CSS = 'canvas { visibility: hidden !important; }';
 
 async function baseline(page: Page, name: string, screenSel: string): Promise<void> {
   await expect(page.locator(screenSel)).toBeVisible();
-  await expect(page).toHaveScreenshot(`${name}.png`, MASK_CANVAS(page));
+  await page.addStyleTag({ content: HIDE_CANVAS_CSS });
+  await expect(page).toHaveScreenshot(`${name}.png`, SHOT_OPTS);
 }
 
 test('start menu baseline', async ({ page }) => {

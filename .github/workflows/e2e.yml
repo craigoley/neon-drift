@@ -36,10 +36,16 @@ jobs:
       # Chromium + its OS deps. Pinned to chromium only (the smoke needs one engine).
       - run: npx playwright install --with-deps chromium
       - run: npm run e2e
-      # Surface the report/traces on failure for debugging.
+      # Surface the report/traces on failure for debugging. `test-results/` is included
+      # because it holds the `*-actual.png` screenshots (and any baseline Playwright
+      # wrote on a missing-snapshot run) — without it, a screenshot failure gives you
+      # the diff view but no way to recover the actual image. To (re)generate committed
+      # baselines, prefer the dedicated `Visual baselines (regenerate)` workflow.
       - if: failure()
         uses: actions/upload-artifact@v7
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7

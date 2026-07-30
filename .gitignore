@@ -17,9 +17,13 @@ playwright-report
 test-results
 /blob-report
 .playwright
-# Dev-machine visual baselines are NOT the source of truth — only CI Linux
-# (-linux.png) baselines are committed. Locally-generated -darwin snapshots are
-# ignored so they never pollute the repo (see e2e/visual.spec.ts header).
+# Dev-machine visual baselines are NOT the source of truth — the CI Linux
+# (-linux.png) baselines are. Locally-generated -darwin snapshots are ignored so they
+# never pollute the repo (see e2e/visual.spec.ts header). Generate the -linux set with
+# the `Visual baselines (regenerate)` workflow and commit it.
+# NOTE: `boot-chromium-darwin.png` is tracked despite this rule — it was committed
+# before the rule existed, so the ignore never applied to it. It is NOT a baseline CI
+# uses (CI only ever looks for -linux) and can be removed once -linux is committed.
 e2e/**/*-darwin.png
 
 # Editor directories and files

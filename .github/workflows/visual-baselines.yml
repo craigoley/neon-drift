@@ -1,0 +1,51 @@
+name: Visual baselines (regenerate)
+
+# The `-linux` visual baselines are the committed source of truth for the L2 smoke's
+# screenshot specs, but they can ONLY be generated on the Linux CI runner — a
+# dev-machine (-darwin) baseline never matches, so they can't be authored locally.
+#
+# WHY THIS EXISTS: the previously documented loop was "the first CI run writes the
+# -linux baselines and FAILS (expected); commit those". That was impossible to
+# complete — the e2e job's failure artifact only uploaded `playwright-report/`, which
+# contains the diff images but NOT the written `*-linux.png` baselines. With no way to
+# retrieve them, they were never committed, and every screenshot spec failed on CI with
+# "A snapshot doesn't exist at ...-chromium-linux.png" from the day they were added.
+#
+# This job closes that loop: it regenerates the baselines on Linux and uploads them as
+# a downloadable artifact. It deliberately does NOT push or open a PR — the baselines
+# are a visual source of truth, so a human reviews the images before they land. Extract
+# the artifact over `e2e/` and commit the result.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  regen:
+    name: Regenerate -linux baselines
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # --update-snapshots WRITES baselines instead of comparing, so this succeeds even
+      # when none exist yet. Only these two specs own snapshots (visual.spec.ts covers
+      # the 9 masked DOM screens; smoke.spec.ts owns the unmasked boot.png guard).
+      # Scoped deliberately: running the whole suite would drag in the L3 Zen soak,
+      # whose known timing flake would fail the job for unrelated reasons.
+      - run: npx playwright test e2e/visual.spec.ts e2e/smoke.spec.ts --update-snapshots
+      - uses: actions/upload-artifact@v7
+        with:
+          name: visual-baselines-linux
+          # Paths keep their `e2e/...-snapshots/` prefixes, so the download extracts
+          # straight over the repo root.
+          path: e2e/**/*-snapshots/*-linux.png
+          retention-days: 14
+          # A silent empty artifact would look like success while leaving CI red.
+          if-no-files-found: error

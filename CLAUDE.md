@@ -37,12 +37,19 @@ iterative PRs after review passes.
   fields from optional deps). Run `git checkout -- package-lock.json` before
   committing unless you actually changed dependencies — keep the diff focused.
   *(from #192/#195/#196 — the churn showed up in nearly every PR's diff)*
-- Visual baselines (`e2e/visual.spec.ts`) are per-OS: only `-linux` is committed
-  (regenerated on CI), `-darwin` is gitignored, so you can't author the real
-  baseline locally. Tolerance is `maxDiffPixelRatio: 0.1`, so small localized
-  restyles usually pass without a regen — run `visual.spec` to see which (if any)
-  actually shifted rather than assuming a regen is needed.
-  *(from #194/#195/#196/#200 — restyles stayed under the 0.1 tolerance every time)*
+- Visual baselines (`e2e/visual.spec.ts`) are per-OS: `-linux` is the source of truth,
+  `-darwin` is gitignored, so you can't author the real baseline locally. Tolerance is
+  `maxDiffPixelRatio: 0.1`, so small localized restyles usually pass without a regen —
+  run `visual.spec` to see which (if any) actually shifted rather than assuming a regen
+  is needed. **Correction (2026-07-30):** this lesson used to claim the `-linux`
+  baselines were committed and regenerated on CI. They were NOT — zero `-linux` files
+  were ever tracked (the only tracked snapshot was a stray `boot-chromium-darwin.png`),
+  because the e2e failure artifact uploaded only `playwright-report/` and never the
+  written PNGs, so the "commit those" step was impossible. Every screenshot spec had
+  therefore been failing on CI with "A snapshot doesn't exist" — the 0.1-tolerance
+  reasoning never applied on CI at all, since no comparison ever happened. Regenerate
+  via the `Visual baselines (regenerate)` workflow.
+  *(from #194/#195/#196/#200; corrected in #215)*
 - The Zen layer (`src/zen/`) is rendering-coupled, not pure like `src/game/`. Warp/
   teleport orchestration (`ZenSession` over a `WebGLRenderer`) is NOT headless-
   testable. Test the pure sub-modules (`ZenTunnelPayoff`, `ZenCavernLayout`,

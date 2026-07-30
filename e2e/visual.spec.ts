@@ -10,10 +10,15 @@ import { boot, trackErrors } from './_helpers';
  * clipped text), NOT anything rendered in the scene. Nothing here tests gameplay.
  *
  * PLATFORM BASELINES: snapshots are per-OS. Generate them ON THE LINUX CI RUNNER,
- * not locally — a Mac (-darwin) baseline never matches CI (-linux). The FIRST CI run
- * writes the -linux baselines and FAILS (expected); commit those, green thereafter.
+ * not locally — a Mac (-darwin) baseline never matches CI (-linux). Run the
+ * `Visual baselines (regenerate)` workflow (workflow_dispatch), download its
+ * `visual-baselines-linux` artifact, extract it over `e2e/`, and commit the PNGs.
  * Dev (-darwin) baselines are gitignored and must NOT be the committed source of
  * truth. Locally: `npx playwright test visual.spec.ts --update-snapshots` to author.
+ *
+ * Do NOT rely on a normal failing run to produce them: until the regen workflow
+ * existed there was no way to retrieve the baselines Playwright wrote on CI, so they
+ * were never committed and every spec here failed with "A snapshot doesn't exist".
  *
  * The load-bearing checks remain the machine-independent ones (screen visible, zero
  * console errors); the pixel baseline is the secondary catch for gross breakage.

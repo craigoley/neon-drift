@@ -40,7 +40,13 @@ jobs:
       # Scoped deliberately: running the whole suite would drag in the L3 Zen soak,
       # whose known timing flake would fail the job for unrelated reasons.
       - run: npx playwright test e2e/visual.spec.ts e2e/smoke.spec.ts --update-snapshots
-      - uses: actions/upload-artifact@v7
+      # `if: always()` so a PARTIAL regen is still recoverable: baselines are written
+      # per-test, so if one screen fails to settle the others are already on disk and
+      # worth collecting. Without this the step is skipped and a 4-minute run yields
+      # nothing (observed on run 30541301799, where boot.png HAD been written). The step
+      # failure still surfaces as a red job, so a partial result can't pass for a full one.
+      - if: always()
+        uses: actions/upload-artifact@v7
         with:
           name: visual-baselines-linux
           # Paths keep their `e2e/...-snapshots/` prefixes, so the download extracts

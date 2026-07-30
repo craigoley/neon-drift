@@ -28,6 +28,16 @@ export default defineConfig({
   // parallel workers (a cold start can push a heavy test well past the 30s
   // default). This is a gated/nightly job, so slow-but-stable is the right call.
   timeout: 90_000,
+  // toHaveScreenshot's OWN timeout (default 5s) is separate from `timeout` above, and
+  // 5s is too tight on CI. Before taking a shot it loops until two consecutive captures
+  // are stable; against the cold Vite dev server that first settle regularly overruns
+  // 5s, and in GENERATION mode ("generating new stable screenshot expectation") an
+  // overrun means the baseline is never written at all. Measured on the regen run:
+  // `start menu` failed at 9.0s then passed on retry at 13.2s, while the same specs
+  // settle in 3-7s locally against a warm server. 15s gives the settle room to
+  // converge while staying inside the 90s per-test budget for the 4-screenshot
+  // missions/settings/scores/daily case (4 x 15s = 60s worst case).
+  expect: { toHaveScreenshot: { timeout: 15_000 } },
   reporter: 'list',
   use: {
     baseURL: 'http://localhost:4173',

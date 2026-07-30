@@ -6,6 +6,15 @@ import { defineConfig, devices } from '@playwright/test';
 // the DOM. Run locally: `npx playwright install chromium` once, then `npm run e2e`.
 export default defineConfig({
   testDir: './e2e',
+  // EXCLUDE the L3 soak. `validation.spec.ts` lives in ./e2e (it shares _helpers.ts),
+  // so a bare testDir sweeps it into the smoke — which is NOT intended: its own config
+  // grants it `timeout: 300_000` precisely because a distance-scaled tunnel leg can
+  // reach ~128s, and that budget is "kept OUT of the smoke config so it never relaxes
+  // the smoke timeout" (playwright.validation.config.ts). Run under the smoke's 90s it
+  // fails by construction with "Test timeout of 90000ms exceeded", and the smoke's
+  // `retries: 1` also contradicts the soak's deliberate `retries: 0`. It runs via
+  // `npm run e2e:validation` (weekly / workflow_dispatch), never here.
+  testIgnore: /validation\.spec\.ts/,
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,

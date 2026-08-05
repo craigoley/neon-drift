@@ -3,14 +3,26 @@ name: E2E (smoke)
 # GATED browser smoke (L2). Playwright drives a real Chromium against the app to
 # catch blank-screen / visual-boot bugs that the pure Vitest suite can't see.
 # Browser jobs are slow, so this NEVER blocks the fast per-PR lint/test/build
-# checks (in ci.yml). It runs nightly, on manual dispatch, or on a PR explicitly
-# labelled `e2e`.
+# checks (in ci.yml). It runs nightly, on manual dispatch, on a PR explicitly
+# labelled `e2e`, and on every Dependabot PR.
+#
+# WHY DEPENDABOT ALWAYS GETS THE SMOKE: claude-review.yml used to skip Dependabot
+# PRs entirely, on the reasoning that "a three.js / Vite bump can pass tsc, vitest,
+# CodeQL and OSV yet still break the render and auto-deploy to the public site."
+# That reasoning is correct, but the conclusion — require a human — meant Dependabot
+# (effectively the only PR author on this repo) got zero automation, and bumps piled
+# up unmerged. Rendering breakage is exactly what this smoke detects, so running it
+# on dependency bumps converts that human gate into a mechanical one. See the
+# `workflow_run` trigger in claude-review.yml for the other half.
 on:
   workflow_dispatch:
   schedule:
     - cron: '0 6 * * *' # nightly (06:00 UTC)
   pull_request:
-    types: [labeled, synchronize, reopened]
+    # `opened` matters for the Dependabot path: Dependabot pushes the branch and
+    # opens the PR in one shot, so without it the smoke would only start on a
+    # LATER push — and a bump that is never touched again would never get one.
+    types: [opened, labeled, synchronize, reopened]
 
 permissions:
   contents: read
@@ -22,8 +34,19 @@ concurrency:
 jobs:
   e2e:
     name: Playwright smoke
-    # Non-PR events always run; PR events only when the `e2e` label is present.
-    if: github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'e2e')
+    # Non-PR events always run. PR events run when the `e2e` label is present, or
+    # when the PR is a Dependabot bump (see the rationale in the header).
+    #
+    # KEEP THE JOB NAME AND THIS CONDITION IN SYNC with claude-review.yml: the
+    # auto-merge resolves THIS job by name ("Playwright smoke") out of the run's
+    # job list and requires conclusion == success. It deliberately does NOT trust
+    # the workflow run's own conclusion, because a run whose only job was SKIPPED
+    # still reports the run as successful — which would wave a bump through with
+    # no browser coverage at all.
+    if: >-
+      github.event_name != 'pull_request'
+      || contains(github.event.pull_request.labels.*.name, 'e2e')
+      || github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

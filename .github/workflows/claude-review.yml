@@ -336,7 +336,17 @@ jobs:
           # OAuth via Craig's Max subscription — same auth ClawApp uses.
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           # Force tag mode so the review summary posts as a tracking comment.
-          track_progress: true
+          #
+          # NOT valid on every trigger. The action hard-fails with
+          #   "track_progress is only supported for events: pull_request, issues,
+          #    issue_comment, pull_request_review_comment, pull_request_review.
+          #    Current event: workflow_run"
+          # so it must be off on the Dependabot path. Losing the tracking comment
+          # there costs nothing: the prompt's Merge Phase already posts an explicit
+          # summary via `gh pr comment`, and the PR number reaches Claude through
+          # the prompt rather than through the event payload (the action cannot
+          # infer a PR from a workflow_run event — it leaves PR_NUMBER empty).
+          track_progress: ${{ github.event_name != 'workflow_run' }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ steps.pr-sha.outputs.number }}
@@ -440,6 +450,12 @@ jobs:
             3. Merge with: `gh pr merge <number> --squash --delete-branch`
                (NOT `--auto` — this repo has no auto-merge enabled and no branch
                protection rules, so a plain squash-merge runs immediately.)
+
+            ALWAYS pass the PR NUMBER above explicitly to every `gh` command. On
+            the `workflow_run` trigger there is no ambient PR context to fall back
+            on — the event is about a completed workflow, not a pull request — so a
+            bare `gh pr comment` or `gh pr merge` has nothing to infer from and will
+            fail or act on the wrong thing.
 
             If the PR has fundamental issues that can't be auto-fixed (wrong
             approach, needs architectural discussion, missing tests for complex new

@@ -26,6 +26,31 @@ updates:
     commit-message:
       prefix: "chore"
       include: "scope"
+    # -------------------------------------------------------------------------
+    # HELD BACK: typescript major versions
+    # -------------------------------------------------------------------------
+    # `typescript-eslint` (8.66.0 as of 2026-08-05) declares
+    # `peerDependencies.typescript: ">=4.8.4 <6.1.0"`. When the dev-tooling group
+    # sweeps typescript to a new major (the 7.x native/Go port), `npm ci` dies with
+    # ERESOLVE and every check on the PR goes red — Lint, Test, Build AND the Vercel
+    # preview deploy, since all four start with `npm ci`.
+    #
+    # This has now burned four PRs (#208, #210, #213, #220/#224). Each time the fix
+    # was identical and entirely manual: drop the typescript bump, keep the rest of
+    # the group, regenerate the lockfile. Since the group re-proposes it on the next
+    # weekly run, that manual fix is unbounded work, and it blocks the OTHER bumps in
+    # the group (playwright, vite, globals) behind a break that has nothing to do with
+    # them. Ignoring the major here lets the group stay green and self-service.
+    #
+    # Minor/patch typescript updates still flow normally — only majors are held.
+    #
+    # REMOVE THIS as soon as typescript-eslint's peer range admits the new major:
+    #   npm view typescript-eslint@latest peerDependencies
+    # When the upper bound moves past 6.1.0, delete this `ignore:` block and let the
+    # next dev-tooling PR carry typescript forward.
+    ignore:
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       # Order matters — a package lands in the FIRST matching group.
       # @types/* are dev-deps too, so they must come before dev-tooling.

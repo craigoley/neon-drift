@@ -20,7 +20,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.62.1",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.5.1",
     "@types/three": "^0.185.3",
     "eslint": "^10.8.0",
     "globals": "^17.9.0",

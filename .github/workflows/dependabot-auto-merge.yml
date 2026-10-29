@@ -183,10 +183,11 @@ jobs:
 
       # Wait for the rest of the PR's checks, then require them ALL to be green.
       #
-      # Why a poll instead of `gh pr merge --auto`: repo auto-merge is disabled
-      # AND `protect-main` declares no required status checks, so `--auto` would
-      # merge the instant it was requested — before CI had even reported. This
-      # loop is the gate that `--auto` cannot provide here.
+      # Why a poll instead of `gh pr merge --auto`: `--auto` waits only for the
+      # REQUIRED status checks, and the `protect-main` ruleset requires just
+      # Lint, Test and Build. `Playwright smoke` is not required, so `--auto`
+      # would merge as soon as those three are green — before the render smoke
+      # had reported. This loop is the only gate that covers `Playwright smoke`.
       #
       # Held PRs wait here too (until their review is dispatched), so Claude
       # never reviews — and possibly merges — before the E2E smoke has reported.

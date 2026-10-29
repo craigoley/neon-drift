@@ -32,12 +32,25 @@ Branch from latest main, PR, never commit to main directly.
 Copilot + Claude Code review on PRs. PR pipeline auto-merges
 iterative PRs after review passes.
 
-Dependabot PRs auto-merge too, but on a different path (#226): they are
-excluded from `claude-review.yml`'s `pull_request` trigger and instead run
-the Playwright smoke, which on success fires a `workflow_run` that reviews
-and merges the bump. So a dependency bump is gated on the browser smoke,
-not on a human. Held-back deps live in `.github/dependabot.yml` —
-currently `typescript` majors (see the lessons below).
+Dependabot PRs auto-merge too, but on a different path: they are excluded
+from `claude-review.yml`'s `pull_request` trigger, and every Dependabot PR
+runs the Playwright smoke (`e2e.yml`). `dependabot-auto-merge.yml` then
+merges patch/minor dev, transitive and Actions bumps itself once every check,
+smoke included, is green; HELD bumps (majors, runtime deps like `three`) are
+dispatched to `claude-review.yml` via `workflow_dispatch` once green (#252),
+and `pr-sweeper.yml` dispatches anything stuck > 24h. So a dependency bump is
+gated on the browser smoke, not on a human. (The old #226 path — a
+`workflow_run` on the smoke that reviewed the bump — was removed 2026-10-29:
+every run failed in claude-code-action because Dependabot was the actor.)
+Held-back deps live in `.github/dependabot.yml` — currently `typescript`
+majors (see the lessons below).
+
+The reviewer's prompt lives in `.github/claude-review/prompt.md`, not in
+`claude-review.yml`, and the workflow always reads it from `main`. Edit it in
+a normal PR (it is reviewed and merged automatically); the change applies to
+reviews that run after it merges. Editing `claude-review.yml` itself still
+needs a hand merge, since claude-code-action refuses to run on a PR that
+changes its own workflow file.
 
 ## Lessons from 2026-07-02
 - `npm install` rewrites `package-lock.json` on this toolchain (strips `libc`
@@ -116,7 +129,9 @@ currently `typescript` majors (see the lessons below).
   `Claude <noreply@anthropic.com>`, which resolves to the ordinary `claude` user,
   a different account from `claude[bot]`. Most hand-written work here carries that
   authorship, so matching it would disable review on nearly every human PR.
-  *(from #226 — the first two were caught pre-merge by checking real PRs)*
+  *(from #226 — the first two were caught pre-merge by checking real PRs; the
+  `workflow_run` path itself was removed on 2026-10-29, but the spelling and
+  skipped-job traps apply to any new bot or workflow gate)*
 - Dependabot may SUPERSEDE an open PR mid-session: merging other PRs triggers a
   rebase, and it closes the stale one and opens a replacement with a new branch
   hash (#220 → #224 in one session). Re-list open PRs after each merge rather than

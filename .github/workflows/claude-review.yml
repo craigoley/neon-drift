@@ -33,22 +33,16 @@ on:
         description: 'PR number to review'
         required: true
         type: number
-  # DEPENDABOT PATH. Dependency bumps are excluded from the `pull_request` trigger
-  # above (see the job `if:`) and come in through here instead, once the browser
-  # smoke has actually gone green on the bump. That ordering is the whole point:
-  # a bump can pass tsc, vitest, CodeQL and OSV and still break the render, so the
-  # smoke — not a human — is what clears it to merge and auto-deploy.
-  #
-  # A workflow_run job always runs the DEFAULT-BRANCH copy of this file, whatever
-  # the PR contains. Two consequences worth knowing:
-  #   * the `paths-ignore` above cannot protect this path (paths-ignore applies to
-  #     pull_request only), but it does not need to — a PR editing this workflow
-  #     cannot influence the version that executes here.
-  #   * for the same reason, claude-code-action's "workflow file differs from main"
-  #     self-check is trivially satisfied on this path.
-  workflow_run:
-    workflows: ["E2E (smoke)"]
-    types: [completed]
+  # NO workflow_run TRIGGER. Until 2026-10-29 a `workflow_run` on "E2E (smoke)"
+  # reviewed Dependabot bumps after the browser smoke passed. Every one of those
+  # runs failed inside claude-code-action ("Workflow initiated by non-human
+  # actor: dependabot (type: Bot)", e.g. run 40944696677 for #237), because the
+  # run's actor is Dependabot and `allowed_bots` below admits only
+  # github-actions[bot] on workflow_dispatch. Dependabot bumps now reach this
+  # workflow only through workflow_dispatch: dependabot-auto-merge.yml merges
+  # patch/minor dev, transitive and Actions bumps itself, and dispatches this
+  # workflow for HELD bumps (majors, runtime deps) once every check — including
+  # the Playwright smoke — is green (#252). pr-sweeper.yml covers the rest.
 
 # Workflow-level default: read-only. The review-and-merge job below overrides
 # with the write scopes the action actually needs (contents, pull-requests,
@@ -68,9 +62,6 @@ concurrency:
   # type, cancel-in-progress still supersedes a stale run (a new push cancels an
   # older review of the same PR).
   #
-  # workflow_run payloads carry no PR number, so that path keys on the head branch
-  # instead — same effect (one in-flight review per PR), since a branch maps 1:1 to
-  # its open PR here.
   # Comments that cannot start a review (Claude's own tracking comment,
   # vercel[bot] / dependabot notes, plain chatter) get a throwaway per-run
   # group. Without this, the tracking comment Claude posts at the start of
@@ -79,7 +70,7 @@ concurrency:
   # wild-trails #215 and rogue-descent #173 (2026-10-26), cologne-service #100.
   # Same fix as ClawApp and cologne-service #101.
   group: >-
-    claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.head_branch || inputs.pr_number }}${{
+    claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}${{
     (github.event_name == 'issue_comment' && (github.event.comment.user.type == 'Bot' || !contains(github.event.comment.body, '@claude')))
     && format('-noop-{0}', github.run_id) || '' }}
   cancel-in-progress: true
@@ -113,21 +104,12 @@ jobs:
     # merged. Marking a draft "Ready for review" fires ready_for_review (see the
     # trigger above), flips draft to false, and lets the run proceed.
     #
-    # Dependabot PRs are skipped ON THIS TRIGGER — not skipped outright. They are
-    # handled by the workflow_run branch below, which only fires after the browser
-    # smoke has passed on the bump. The concern that originally excluded them (a
-    # three.js / Vite bump that type-checks and tests clean but breaks the render,
-    # then auto-deploys to the public site) is real; gating on the smoke addresses
-    # that concern directly instead of by requiring a human.
+    # Dependabot PRs are skipped ON THIS TRIGGER — not skipped outright.
+    # Dependabot-triggered `pull_request` runs get no repo secrets, and a three.js
+    # / Vite bump can type-check and test clean yet break the render. They come in
+    # through workflow_dispatch instead (dependabot-auto-merge.yml, after every
+    # check including the Playwright smoke is green; or pr-sweeper.yml).
     # github-actions[bot] is skipped to prevent self-loops on Claude's push-backs.
-    #
-    # THIRD BRANCH (workflow_run): a coarse pre-filter only. It cannot see the PR,
-    # so it can only assert that a same-repo pull_request-triggered E2E run
-    # finished. Everything that actually matters — that the PR is Dependabot's,
-    # open, not a draft, and that the "Playwright smoke" JOB really ran and
-    # succeeded rather than being skipped — is enforced in the "Resolve PR context"
-    # step, which can query the API. Note `workflow_run.conclusion == 'success'` is
-    # NOT sufficient on its own: an all-skipped run also reports success.
     if: |
       (github.event_name == 'pull_request' &&
        github.event.pull_request.draft == false &&
@@ -142,11 +124,6 @@ jobs:
        contains(github.event.comment.body, '@claude'))
       ||
       github.event_name == 'workflow_dispatch'
-      ||
-      (github.event_name == 'workflow_run' &&
-       github.event.workflow_run.event == 'pull_request' &&
-       github.event.workflow_run.conclusion == 'success' &&
-       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -155,64 +132,23 @@ jobs:
       id-token: write
     timeout-minutes: 30
     steps:
-      # Resolve the PR this run is about, and — on the workflow_run path — decide
-      # whether it has actually earned a review. The job-level `if:` above cannot
-      # do this: a workflow_run payload has no PR in it, so every real check lives
-      # here where the API is reachable.
-      #
-      # The head SHA is resolved from the API at trigger time so the subsequent
-      # checkout pins to an immutable commit instead of a mutable branch ref.
-      # Guards against an Untrusted-Checkout TOCTOU: without it, someone who can
-      # push to the PR branch could force-push between the checks below and the
-      # checkout, running their code under privileged context.
+      # Resolve the PR this run is about. The head SHA is resolved from the API at
+      # trigger time so the subsequent checkout pins to an immutable commit
+      # instead of a mutable branch ref. Guards against an Untrusted-Checkout
+      # TOCTOU: without it, someone who can push to the PR branch could
+      # force-push between the checks below and the checkout, running their code
+      # under privileged context.
       - name: Resolve PR context
         id: pr-sha
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          EVENT: ${{ github.event_name }}
-          # Branch names and run ids are payload-controlled. Pass them through env
-          # rather than `${{ }}` interpolation so bash sees literal strings.
-          WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
-          WF_SHA: ${{ github.event.workflow_run.head_sha }}
-          WF_RUN_ID: ${{ github.event.workflow_run.id }}
-          PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         run: |
           set -euo pipefail
-          # `bail` = "nothing to do, exit cleanly" — a green no-op, not a failure.
-          # Only genuinely broken states below exit non-zero. Written exactly once
-          # per run so the result never depends on GITHUB_OUTPUT key precedence.
-          bail() {
-            echo "$1"
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          }
-
-          if [[ "$EVENT" == "workflow_run" ]]; then
-            # The E2E run tells us a branch; find that branch's open PR.
-            PR_NUMBER=$(gh pr list --repo "$REPO" --head "$WF_BRANCH" --state open \
-              --json number --jq '.[0].number // ""')
-            if [[ -z "$PR_NUMBER" ]]; then
-              bail "E2E run for branch '$WF_BRANCH' has no open PR — nothing to review."
-            fi
-
-            # The run's own conclusion is NOT enough: a workflow whose only job was
-            # skipped still reports the RUN as successful. Require the smoke job
-            # itself to exist and to have concluded `success`.
-            SMOKE=$(gh api "repos/$REPO/actions/runs/$WF_RUN_ID/jobs" --paginate \
-              --jq '[.jobs[] | select(.name == "Playwright smoke") | .conclusion] | join(",")')
-            if [[ "$SMOKE" != "success" ]]; then
-              bail "Playwright smoke did not pass (conclusion: '${SMOKE:-<job absent>}') — not merging."
-            fi
-          else
-            PR_NUMBER="$PR_FROM_EVENT"
-          fi
-
-          PR_JSON=$(gh pr view "$PR_NUMBER" --repo "$REPO" \
-            --json headRefOid,headRefName,author,isDraft,state)
+          PR_JSON=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json headRefOid,headRefName)
           SHA=$(echo "$PR_JSON" | jq -r .headRefOid)
           BRANCH=$(echo "$PR_JSON" | jq -r .headRefName)
-          AUTHOR=$(echo "$PR_JSON" | jq -r '.author.login // ""')
           if [[ -z "$SHA" || "$SHA" == "null" ]]; then
             echo "Could not resolve head SHA for PR #$PR_NUMBER" >&2
             exit 1
@@ -220,33 +156,6 @@ jobs:
           if [[ -z "$BRANCH" || "$BRANCH" == "null" ]]; then
             echo "Could not resolve head branch for PR #$PR_NUMBER" >&2
             exit 1
-          fi
-
-          if [[ "$EVENT" == "workflow_run" ]]; then
-            # This path exists ONLY to auto-merge Dependabot. Human PRs are already
-            # reviewed on their `pull_request` trigger; letting them in here too
-            # would double-review every labelled PR.
-            #
-            # MIND THE LOGIN FORMAT. `gh pr view --json author` reports Dependabot
-            # as `app/dependabot` — NOT the `dependabot[bot]` spelling the webhook
-            # payload uses (which is what e2e.yml matches on). Getting this wrong
-            # fails CLOSED and silently blocks every bump, so all three spellings
-            # are accepted.
-            case "$AUTHOR" in
-              app/dependabot|dependabot|'dependabot[bot]') ;;
-              *)
-                bail "PR #$PR_NUMBER is authored by '$AUTHOR', not Dependabot — handled by the pull_request trigger."
-                ;;
-            esac
-            if [[ "$(echo "$PR_JSON" | jq -r .isDraft)" == "true" ]]; then
-              bail "PR #$PR_NUMBER is a draft — skipping."
-            fi
-            # The smoke proves a SPECIFIC commit renders. If the branch moved since
-            # that run started, the green tells us nothing about what we would be
-            # merging. Bail and let the new push's own smoke re-trigger this.
-            if [[ "$SHA" != "$WF_SHA" ]]; then
-              bail "Branch moved since the smoke ran (tested $WF_SHA, head is now $SHA) — waiting for the newer run."
-            fi
           fi
 
           {
@@ -279,10 +188,7 @@ jobs:
             exit 0
           fi
           # THE LOOP BRAKE. If this workflow authored the last commit, stop — so a
-          # push-back does not re-trigger a review of itself, forever. This matters
-          # more than it used to: the Dependabot path is a genuine cycle (push →
-          # CI + smoke → workflow_run → review → push → …), and this step is the
-          # only thing that ends it.
+          # push-back does not re-trigger a review of itself, forever.
           #
           # Match every spelling the push could land under rather than a single
           # one. The action normally commits via ${{ github.token }}, which attributes
@@ -314,17 +220,97 @@ jobs:
         if: steps.check-author.outputs.skip == 'true'
         run: echo "Gate closed (see 'Resolve PR context' / 'Check last commit author') — skipping."
 
-      # Privileged checkout, reachable from the issue_comment and workflow_run
-      # triggers. CodeQL may flag this (actions/untrusted-checkout); the
+      # THE REVIEW PROMPT LIVES IN .github/claude-review/prompt.md, not inline
+      # here. claude-code-action refuses to run on a PR whose copy of this
+      # workflow differs from the default branch's ("Workflow validation
+      # failed"), so while the prompt was inline every prompt edit needed a
+      # hand merge. Moving it out of this file lets prompt edits go through the
+      # normal review + merge.
+      #
+      # SECURITY: the prompt is read from the DEFAULT BRANCH through the API,
+      # never from the PR checkout (which holds the PR's own copy). A PR must
+      # not be able to rewrite its own reviewer's instructions, so a prompt
+      # edit takes effect only for runs after it merges, and the PR making it
+      # is reviewed under main's current prompt. A missing or empty file is a
+      # job error: there is deliberately no fallback to the PR's copy.
+      #
+      # Placeholders ({{REPO}}, {{PR_NUMBER}}, {{BRANCH}}, {{TRIGGER}}) are filled in
+      # one regex pass in Python, so a value containing sed metacharacters or
+      # another placeholder lands verbatim. An unknown placeholder fails the job
+      # rather than reaching the model unrendered. Runs before the checkout,
+      # so the workspace holds no PR code yet.
+      - name: Load review prompt from the default branch
+        id: prompt
+        if: steps.check-author.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          PR_NUMBER: ${{ steps.pr-sha.outputs.number }}
+          BRANCH: ${{ steps.pr-sha.outputs.branch }}
+          TRIGGER: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          PROMPT_PATH=.github/claude-review/prompt.md
+          if [[ -z "$DEFAULT_BRANCH" ]]; then
+            echo "::error::Could not determine the default branch from the event payload."
+            exit 1
+          fi
+          # Pin the read to one commit so the log says exactly which prompt ran.
+          REF_SHA=$(gh api "repos/$REPO/commits/$DEFAULT_BRANCH" --jq .sha)
+          TEMPLATE="$RUNNER_TEMP/review-prompt.template.md"
+          RENDERED="$RUNNER_TEMP/review-prompt.md"
+          if ! gh api "repos/$REPO/contents/$PROMPT_PATH?ref=$REF_SHA" \
+               -H "Accept: application/vnd.github.raw" > "$TEMPLATE"; then
+            echo "::error::Could not read $PROMPT_PATH from $DEFAULT_BRANCH ($REF_SHA). Refusing to review without it."
+            exit 1
+          fi
+          echo "Loaded $PROMPT_PATH from $DEFAULT_BRANCH@$REF_SHA ($(wc -c < "$TEMPLATE") bytes)."
+
+          python3 -I - "$TEMPLATE" "$RENDERED" <<'PY'
+          import os, re, sys
+          src, dst = sys.argv[1], sys.argv[2]
+          with open(src, encoding="utf-8") as f:
+              text = f.read()
+          def fail(msg):
+              print(f"::error::{msg}")
+              sys.exit(1)
+          if not text.strip():
+              fail("prompt.md on the default branch is empty.")
+          values = {k: os.environ.get(k, "") for k in ("REPO", "PR_NUMBER", "BRANCH", "TRIGGER")}
+          missing = [k for k, v in values.items() if not v]
+          if missing:
+              fail(f"No value for placeholder(s): {', '.join(missing)}")
+          pattern = re.compile(r"\{\{([A-Z_]+)\}\}")
+          unknown = sorted({name for name in pattern.findall(text) if name not in values})
+          if unknown:
+              fail(f"prompt.md uses unknown placeholder(s): {', '.join(unknown)}")
+          with open(dst, "w", encoding="utf-8") as f:
+              f.write(pattern.sub(lambda m: values[m.group(1)], text))
+          PY
+
+          # Random delimiter, so no line of the prompt can end the value early.
+          DELIM="PROMPT_$(openssl rand -hex 16)"
+          if grep -qF "$DELIM" "$RENDERED"; then
+            echo "::error::Delimiter collision; re-run the job."
+            exit 1
+          fi
+          {
+            echo "text<<$DELIM"
+            cat "$RENDERED"
+            [[ -z "$(tail -c1 "$RENDERED")" ]] || echo
+            echo "$DELIM"
+          } >> "$GITHUB_OUTPUT"
+
+      # Privileged checkout, reachable from the issue_comment and
+      # workflow_dispatch triggers. CodeQL may flag this (actions/untrusted-checkout); the
       # sanitizers are in place:
       #   1. the job-level `if:` requires author_association in (OWNER, MEMBER)
       #      AND, for comments, an `@claude` body — only the owner can fire it.
       #   2. `ref:` is the resolved-at-trigger-time head SHA, not the mutable
       #      branch ref, so a force-push after the trust check can't swap it out.
-      #   3. for workflow_run, the head must be same-repo (job `if:`) and the PR
-      #      must be Dependabot's ("Resolve PR context") — so the checked-out tree
-      #      is this repo's code plus a machine-generated manifest bump, never an
-      #      outside contributor's branch.
+      #   3. workflow_dispatch can only be fired by an account with write access
+      #      (dependabot-auto-merge.yml / pr-sweeper.yml via GITHUB_TOKEN, or Craig).
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0  # v7.0.0
         if: steps.check-author.outputs.skip != 'true'
         with:
@@ -363,130 +349,17 @@ jobs:
           # NOT valid on every trigger. The action hard-fails with
           #   "track_progress is only supported for events: pull_request, issues,
           #    issue_comment, pull_request_review_comment, pull_request_review.
-          #    Current event: workflow_run"
-          # so it must be off on the Dependabot path. Losing the tracking comment
+          #    Current event: <event>"
+          # so it must be off on workflow_dispatch. Losing the tracking comment
           # there costs nothing: the prompt's Merge Phase already posts an explicit
           # summary via `gh pr comment`, and the PR number reaches Claude through
-          # the prompt rather than through the event payload (the action cannot
-          # infer a PR from a workflow_run event — it leaves PR_NUMBER empty).
-          track_progress: ${{ github.event_name != 'workflow_run' && github.event_name != 'workflow_dispatch' }}
+          # the prompt rather than through the event payload.
+          track_progress: ${{ github.event_name != 'workflow_dispatch' }}
           # pr-sweeper dispatches with GITHUB_TOKEN, so the actor is github-actions[bot].
           allowed_bots: ${{ github.event_name == 'workflow_dispatch' && 'github-actions[bot]' || '' }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ steps.pr-sha.outputs.number }}
-            BRANCH: ${{ steps.pr-sha.outputs.branch }}
-            TRIGGER: ${{ github.event_name }}
-
-            You are the sole code reviewer for Neon Drift, a synthwave endless
-            racing game built with TypeScript + Three.js + Vite and deployed to
-            Vercel as a static site. Your job is to review this pull request, fix
-            any issues you find, and merge it when it meets quality standards.
-
-            ## Review Phase
-
-            Review the full diff. Post findings as inline review comments.
-
-            ### Project hard rules — flag any violation immediately
-
-            **1. Purity of the game layer (THE load-bearing rule)**
-            `src/game/` is pure TypeScript and MUST NOT import 'three' anywhere.
-            Any `import ... from 'three'` (or a transitive import that pulls three
-            in) under `src/game/` is a hard failure — flag it at the top of your
-            review. Game logic must stay runnable and testable in Node with no
-            WebGL. The rendering layer (`src/rendering/`) reads game state and
-            never mutates it; flag renderers that write back into game state.
-
-            **2. No magic numbers outside utils/constants.ts**
-            All tuning values live in `src/utils/constants.ts`. Flag any numeric
-            literal used as a tuning/gameplay/dimension value elsewhere (loop
-            indices, 0/1 identities and obvious math constants are fine).
-
-            **3. No allocations in the requestAnimationFrame hot loop**
-            Flag object/array/vector allocations inside the per-frame render loop
-            (anything reached from `requestAnimationFrame`): `new THREE.Vector3()`,
-            `new THREE.Color()`, array/object literals, `.map`/`.filter` that
-            allocate, closures created per frame. Vectors and scratch objects
-            should be created once and reused.
-
-            **4. Touch input parity with keyboard**
-            Mobile is required. Any new keyboard control must have an equivalent
-            touch path, and vice versa. Flag input changes that add one without the
-            other.
-
-            **5. TypeScript strict — no implicit any**
-            Flag implicit `any`, unsafe casts (`as any`, non-null `!` that hides a
-            real nullable), and types that defeat strict mode.
-
-            ### Also review for
-            - Correctness: logic errors, off-by-one, broken edge cases, regressions
-            - Whether all callers of a changed function/type were updated
-            - Swallowed errors, dead code, duplicated logic
-
-            ### What to ignore
-            - Style/formatting (prettier/eslint territory)
-            - TODO/FIXME comments (intentional)
-            - Lock files, generated files, build artifacts
-            - Test code that intentionally exercises edge cases
-
-            ### Dependency bumps (Dependabot PRs)
-
-            If TRIGGER is `workflow_run`, this is a Dependabot bump that has ALREADY
-            passed the Playwright browser smoke — that is the only reason you are
-            being run on it. The hard rules above are about hand-written game code
-            and mostly will not apply. Review it as a dependency change instead:
-
-            - **Scope.** The diff should touch only `package.json` and
-              `package-lock.json` (or `.github/workflows/*` for an actions bump).
-              Anything else in the diff is unexpected — investigate before merging.
-            - **package.json vs lockfile agreement.** Every range change in
-              `package.json` should be reflected in the lockfile, and the lockfile
-              should not carry unrelated version churn.
-            - **Held-back deps.** `.github/dependabot.yml` documents deliberate
-              holds, currently `typescript` majors (typescript-eslint's peer range
-              stops at `<6.1.0`). If a bump contradicts a documented hold, do NOT
-              merge — comment explaining the conflict and tag @craigoley.
-            - **Major versions of runtime deps** (`three`, and `vite` as the
-              bundler) deserve a look at the upstream changelog for breaking
-              changes, even with the smoke green. Patch and minor bumps of dev
-              tooling do not need that.
-            - Do NOT line-read the lockfile. `npm ci`, lint, test, build and the
-              smoke all passed; that is the evidence. Judge scope and intent.
-
-            ## Fix Phase
-
-            If you find issues:
-            1. Fix them directly in the code.
-            2. Before committing, verify the change is safe:
-               - Run `npx tsc --noEmit` and confirm it's clean.
-               - Run `npm test` and confirm the suite is green.
-               If either fails, iterate on your fix until both pass — do NOT push
-               broken code.
-            3. Commit your fixes to the PR branch with a clear commit message.
-            4. Push the changes.
-            5. Re-review your own fixes to confirm they're correct.
-
-            ## Merge Phase
-
-            After review (and fixes if needed), if the PR meets quality standards:
-            1. Post a brief summary comment on the PR noting what you reviewed and
-               any fixes made.
-            2. Approve the PR.
-            3. Merge with: `gh pr merge <number> --squash --delete-branch`
-               (NOT `--auto` — this repo has no auto-merge enabled and no branch
-               protection rules, so a plain squash-merge runs immediately.)
-
-            ALWAYS pass the PR NUMBER above explicitly to every `gh` command. On
-            the `workflow_run` trigger there is no ambient PR context to fall back
-            on — the event is about a completed workflow, not a pull request — so a
-            bare `gh pr comment` or `gh pr merge` has nothing to infer from and will
-            fail or act on the wrong thing.
-
-            If the PR has fundamental issues that can't be auto-fixed (wrong
-            approach, needs architectural discussion, missing tests for complex new
-            features), post a detailed comment explaining the concerns and do NOT
-            merge. Tag @craigoley in that comment so I see it.
-
+          # Rendered by "Load review prompt from the default branch" above, from
+          # .github/claude-review/prompt.md on the default branch.
+          prompt: ${{ steps.prompt.outputs.text }}
           claude_args: |
             --model claude-opus-4-8
             --max-turns 50

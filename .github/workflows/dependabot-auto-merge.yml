@@ -7,6 +7,11 @@ name: Dependabot auto-merge
 # `workflow_run` trigger after "E2E (smoke)". That path has never fired for a
 # Dependabot PR — its only runs are the nightly `main` E2E (all skipped) — so
 # every bump sat open: #232 (Aug 10) through #246 (Oct 21), all green.
+# (Update 2026-10-29: that path now fires for Dependabot bumps, but every such
+# run fails inside claude-code-action — "Workflow initiated by non-human
+# actor: dependabot (type: Bot)" — because `allowed_bots` only admits
+# github-actions[bot] on workflow_dispatch. e.g. run 40944696677 for #237. So
+# held bumps here also reach review only through the dispatch below.)
 #
 # Two things changed since that exclusion was written:
 #   1. E2E (smoke) runs the Playwright smoke job, which boots the BUILT app in headless
@@ -19,7 +24,7 @@ name: Dependabot auto-merge
 #
 # So this workflow narrows the carve-out instead of removing it: LOW-RISK bumps
 # merge themselves once every check is green; anything that can reach the
-# shipped bundle still waits for a human.
+# shipped bundle still gets reviewed before it merges (see HELD below).
 #
 #   AUTO-MERGED  patch/minor bumps of devDependencies, indirect (transitive)
 #                deps, and GitHub Actions versions.
@@ -27,12 +32,35 @@ name: Dependabot auto-merge
 #                that means `three` and `@upstash/redis`, the two runtime
 #                dependencies.
 #
+# HELD PRs GO TO THE AUTOMATED CLAUDE REVIEW, not to a hand merge. Once their
+# checks are green this workflow dispatches `claude-review.yml` with
+# `pr_number` — the same `gh workflow run` call `pr-sweeper.yml` makes — and
+# that run reviews the diff, then merges or tags Craig and holds. Before this,
+# held PRs waited ~24h for the sweeper to do the same dispatch.
+#   - Waiting for green first matters: the E2E smoke (the render check) is not
+#     a required status check on `main`, so a review dispatched at `opened`
+#     could merge a `three` bump before the smoke had reported. Red checks fail
+#     this job and do NOT dispatch; pr-sweeper.yml picks those up after 24h.
+#   - Exactly one dispatch per PR. State lives in the hold comment (hidden
+#     markers `auto-merge-hold` / `claude-review-dispatched`), so every trigger
+#     — including a `synchronize` rebase that cancels an in-flight wait — can
+#     run this safely and only the first green run dispatches. A dispatch on
+#     every rebase would re-run a full Opus review each time; claude-review's
+#     concurrency (one group per event + PR, cancel-in-progress) would only
+#     cancel the older run mid-review, not dedupe it.
+#   - A `workflow_dispatch` made with GITHUB_TOKEN does start a run — it is one
+#     of the documented exceptions to the no-recursion rule:
+#     https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow
+#
 # SECURITY NOTE: this workflow runs on `pull_request` (NOT
 # `pull_request_target`) and NEVER checks out the PR branch. It only makes API
 # calls with the GITHUB_TOKEN, so the `contents: write` scope below is never
 # exposed to code from the PR. Dependabot-triggered runs get a read-only token
 # by default; the job-level `permissions:` block is the documented way to
-# elevate it, and no repo secrets are needed here.
+# elevate it, and no repo secrets are needed here:
+# https://docs.github.com/en/code-security/reference/supply-chain-security/troubleshoot-dependabot/dependabot-on-actions
+# The dispatched claude-review run executes main's copy of that workflow in
+# its own context, which is where CLAUDE_CODE_OAUTH_TOKEN is available.
 
 on:
   pull_request:
@@ -58,7 +86,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write # squash-merge and delete the branch
-      pull-requests: write # post the "held for review" comment
+      pull-requests: write # post / update the hold comment
+      actions: write # gh workflow run claude-review.yml (held PRs)
     timeout-minutes: 30
     env:
       GH_TOKEN: ${{ github.token }}
@@ -84,14 +113,14 @@ jobs:
           set -euo pipefail
           HOLD_REASON=""
 
-          # 1. Majors always get a human. A major can change API surface in ways
+          # 1. Majors always get a review. A major can change API surface in ways
           #    a green build still hides (removed export used only at runtime).
           case "$UPDATE_TYPE" in
             version-update:semver-patch|version-update:semver-minor) ;;
             *) HOLD_REASON="\`${UPDATE_TYPE:-unknown}\` is not a patch or minor bump" ;;
           esac
 
-          # 2. Anything that reaches the shipped bundle gets a human. Note that
+          # 2. Anything that reaches the shipped bundle gets a review. Note that
           #    GitHub Actions bumps are reported as `direct:production` even
           #    though they only touch CI and can never reach the bundle, so the
           #    ecosystem check has to run before the production verdict sticks.
@@ -115,18 +144,42 @@ jobs:
             echo "eligible=true" >> "$GITHUB_OUTPUT"
           fi
 
-      # Explain the hold once, on `opened` only — a rebase shouldn't re-comment
-      # the same paragraph onto a PR that is already waiting on a human.
-      - name: Explain why the PR is held
-        if: steps.gate.outputs.eligible == 'false' && github.event.action == 'opened'
+      # Explain the hold once per PR, and read back whether the Claude review
+      # was already dispatched. Both facts live in one comment, keyed by hidden
+      # markers, so a rebase never re-comments or re-dispatches. pr-sweeper.yml
+      # ignores comments carrying `auto-merge-hold` — without that it would
+      # take this github-actions[bot] comment for a finished Claude review.
+      - name: Post or find the hold comment
+        id: hold
+        if: steps.gate.outputs.eligible == 'false'
         env:
           REASON: ${{ steps.gate.outputs.reason }}
         run: |
           set -euo pipefail
-          gh pr comment "$PR" --repo "$REPO" --body \
-          "🤖 **Held for human review** — not auto-merged because ${REASON}.
+          found=$(gh api "repos/$REPO/issues/$PR/comments" --paginate --jq '
+            .[] | select(.user.login == "github-actions[bot]" and (.body | contains("<!-- auto-merge-hold -->")))
+                | "\(.id) \(.body | contains("<!-- claude-review-dispatched -->"))"')
+          found=${found%%$'\n'*}
 
-          Auto-merge covers patch/minor bumps of devDependencies, transitive deps and GitHub Actions. Everything else is merged by hand after a look at the diff. See \`.github/workflows/dependabot-auto-merge.yml\`."
+          if [[ -n "$found" ]]; then
+            read -r id dispatched <<<"$found"
+            echo "Hold comment $id already posted (review dispatched: $dispatched)."
+          else
+            # printf, not a multi-line string literal: continuation lines of a
+            # literal inside this indented `run:` block would carry 10 spaces of
+            # indentation, which GitHub renders as a code block.
+            # shellcheck disable=SC2016
+            BODY=$(printf '%s\n' \
+              '<!-- auto-merge-hold -->' \
+              "🤖 **Held for the automated Claude review** — not auto-merged because ${REASON}." \
+              '' \
+              'Auto-merge covers patch/minor bumps of devDependencies, transitive deps and GitHub Actions. Everything else goes to the automated Claude review (`claude-review.yml`) as soon as this PR'"'"'s checks are green: Claude reviews the diff, then merges it or tags Craig and holds it. See `.github/workflows/dependabot-auto-merge.yml`.')
+            id=$(gh api "repos/$REPO/issues/$PR/comments" -f body="$BODY" --jq .id)
+            dispatched=false
+            echo "Posted hold comment $id."
+          fi
+          echo "comment_id=$id" >> "$GITHUB_OUTPUT"
+          echo "dispatched=$dispatched" >> "$GITHUB_OUTPUT"
 
       # Wait for the rest of the PR's checks, then require them ALL to be green.
       #
@@ -134,12 +187,16 @@ jobs:
       # AND `protect-main` declares no required status checks, so `--auto` would
       # merge the instant it was requested — before CI had even reported. This
       # loop is the gate that `--auto` cannot provide here.
+      #
+      # Held PRs wait here too (until their review is dispatched), so Claude
+      # never reviews — and possibly merges — before the E2E smoke has reported.
       - name: Wait for all checks to pass
-        if: steps.gate.outputs.eligible == 'true'
+        if: steps.gate.outputs.eligible == 'true' || steps.hold.outputs.dispatched == 'false'
         env:
           # Our own check run is in this PR's rollup; waiting on it would
           # deadlock, so it is filtered out by workflow name.
           SELF_WORKFLOW: ${{ github.workflow }}
+          NEXT_STEP: ${{ steps.gate.outputs.eligible == 'true' && 'merging' || 'dispatching the Claude review (pr-sweeper.yml retries after 24h)' }}
         run: |
           set -euo pipefail
 
@@ -173,7 +230,7 @@ jobs:
               [ .[] | select(.state | IN("SUCCESS","SKIPPED","NEUTRAL","PENDING","EXPECTED","QUEUED","IN_PROGRESS") | not) ]
               | map("\(.name) [\(.state)]") | join(", ")' checks.json)
             if [[ -n "$FAILED" ]]; then
-              echo "::error::Not merging — failing checks: $FAILED"
+              echo "::error::Not ${NEXT_STEP} — failing checks: $FAILED"
               exit 1
             fi
 
@@ -201,6 +258,24 @@ jobs:
             echo "Waiting… pending: ${PENDING:-none}; required not yet green: ${MISSING:-none}"
             sleep 20
           done
+
+      # Same mechanism and input as pr-sweeper.yml. `gh workflow run` targets
+      # the default branch, so main's claude-review.yml runs, never the PR's.
+      # The marker goes on only after the dispatch call succeeded; if the
+      # dispatch itself fails, this step goes red and no marker is written.
+      - name: Dispatch the Claude review
+        if: steps.gate.outputs.eligible == 'false' && steps.hold.outputs.dispatched == 'false'
+        env:
+          COMMENT_ID: ${{ steps.hold.outputs.comment_id }}
+        run: |
+          set -euo pipefail
+          gh workflow run claude-review.yml --repo "$REPO" -f pr_number="$PR"
+          echo "Dispatched claude-review.yml for PR #$PR."
+
+          body=$(gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body)
+          note="_Checks green — Claude review dispatched $(date -u +'%Y-%m-%d %H:%M UTC') by [this run](${GITHUB_SERVER_URL}/${REPO}/actions/runs/${GITHUB_RUN_ID})._"
+          gh api -X PATCH "repos/$REPO/issues/comments/$COMMENT_ID" \
+            -f body="${body}"$'\n\n<!-- claude-review-dispatched -->\n'"${note}" > /dev/null
 
       # `--delete-branch` is explicit because the repo has
       # `delete_branch_on_merge: false`; squash keeps main's history one commit

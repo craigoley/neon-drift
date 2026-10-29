@@ -1,0 +1,213 @@
+name: Dependabot auto-merge
+
+# WHY THIS WORKFLOW EXISTS
+#
+# Ported from wild-trails / rogue-descent (where it has merged every safe bump
+# since it landed). neon-drift relied on a different path: claude-review.yml's
+# `workflow_run` trigger after "E2E (smoke)". That path has never fired for a
+# Dependabot PR — its only runs are the nightly `main` E2E (all skipped) — so
+# every bump sat open: #232 (Aug 10) through #246 (Oct 21), all green.
+#
+# Two things changed since that exclusion was written:
+#   1. E2E (smoke) runs the Playwright smoke job, which boots the BUILT app in headless
+#      Chromium and asserts the canvas actually renders (not blank) with no
+#      console errors. That is precisely the "it broke the render" failure mode
+#      the human-review carve-out was protecting against, and it is now
+#      machine-checked on every PR.
+#   2. Dependabot groups dev-tooling into one PR, so the volume that needs a
+#      human eye is small and well-identified.
+#
+# So this workflow narrows the carve-out instead of removing it: LOW-RISK bumps
+# merge themselves once every check is green; anything that can reach the
+# shipped bundle still waits for a human.
+#
+#   AUTO-MERGED  patch/minor bumps of devDependencies, indirect (transitive)
+#                deps, and GitHub Actions versions.
+#   HELD         every major bump, and every `direct:production` bump — today
+#                that means `three` and `@upstash/redis`, the two runtime
+#                dependencies.
+#
+# SECURITY NOTE: this workflow runs on `pull_request` (NOT
+# `pull_request_target`) and NEVER checks out the PR branch. It only makes API
+# calls with the GITHUB_TOKEN, so the `contents: write` scope below is never
+# exposed to code from the PR. Dependabot-triggered runs get a read-only token
+# by default; the job-level `permissions:` block is the documented way to
+# elevate it, and no repo secrets are needed here.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Workflow-level default is read-only; the job below elevates only what it needs.
+permissions:
+  contents: read
+
+concurrency:
+  # A Dependabot rebase (synchronize) supersedes the in-flight run for the same
+  # PR — the older run is watching a head SHA that no longer exists.
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    name: Auto-merge
+    # Drafts are never merged, matching the draft gate in claude-review.yml.
+    if: |
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # squash-merge and delete the branch
+      pull-requests: write # post the "held for review" comment
+    timeout-minutes: 30
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: ${{ github.repository }}
+      PR: ${{ github.event.pull_request.number }}
+    steps:
+      # Parses the `updated-dependencies:` YAML block Dependabot writes into the
+      # commit message. For a GROUPED PR the outputs are aggregated to the
+      # highest-risk member (production outranks development, major outranks
+      # minor), so one risky member holds the whole group back — fail-closed,
+      # which is what we want.
+      - name: Fetch Dependabot metadata
+        id: meta
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      - name: Decide eligibility
+        id: gate
+        env:
+          DEP_TYPE: ${{ steps.meta.outputs.dependency-type }}
+          UPDATE_TYPE: ${{ steps.meta.outputs.update-type }}
+          ECOSYSTEM: ${{ steps.meta.outputs.package-ecosystem }}
+        run: |
+          set -euo pipefail
+          HOLD_REASON=""
+
+          # 1. Majors always get a human. A major can change API surface in ways
+          #    a green build still hides (removed export used only at runtime).
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch|version-update:semver-minor) ;;
+            *) HOLD_REASON="\`${UPDATE_TYPE:-unknown}\` is not a patch or minor bump" ;;
+          esac
+
+          # 2. Anything that reaches the shipped bundle gets a human. Note that
+          #    GitHub Actions bumps are reported as `direct:production` even
+          #    though they only touch CI and can never reach the bundle, so the
+          #    ecosystem check has to run before the production verdict sticks.
+          if [[ -z "$HOLD_REASON" ]]; then
+            case "$DEP_TYPE" in
+              direct:development|indirect) ;;
+              *)
+                if [[ "$ECOSYSTEM" != "github_actions" && "$ECOSYSTEM" != "github-actions" ]]; then
+                  HOLD_REASON="\`${DEP_TYPE:-unknown}\` is a runtime dependency — a bump can pass every check and still break the render in the deployed bundle"
+                fi
+                ;;
+            esac
+          fi
+
+          if [[ -n "$HOLD_REASON" ]]; then
+            echo "HELD: $HOLD_REASON"
+            echo "eligible=false" >> "$GITHUB_OUTPUT"
+            echo "reason=$HOLD_REASON" >> "$GITHUB_OUTPUT"
+          else
+            echo "ELIGIBLE: $DEP_TYPE / $UPDATE_TYPE ($ECOSYSTEM)"
+            echo "eligible=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      # Explain the hold once, on `opened` only — a rebase shouldn't re-comment
+      # the same paragraph onto a PR that is already waiting on a human.
+      - name: Explain why the PR is held
+        if: steps.gate.outputs.eligible == 'false' && github.event.action == 'opened'
+        env:
+          REASON: ${{ steps.gate.outputs.reason }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR" --repo "$REPO" --body \
+          "🤖 **Held for human review** — not auto-merged because ${REASON}.
+
+          Auto-merge covers patch/minor bumps of devDependencies, transitive deps and GitHub Actions. Everything else is merged by hand after a look at the diff. See \`.github/workflows/dependabot-auto-merge.yml\`."
+
+      # Wait for the rest of the PR's checks, then require them ALL to be green.
+      #
+      # Why a poll instead of `gh pr merge --auto`: repo auto-merge is disabled
+      # AND `protect-main` declares no required status checks, so `--auto` would
+      # merge the instant it was requested — before CI had even reported. This
+      # loop is the gate that `--auto` cannot provide here.
+      - name: Wait for all checks to pass
+        if: steps.gate.outputs.eligible == 'true'
+        env:
+          # Our own check run is in this PR's rollup; waiting on it would
+          # deadlock, so it is filtered out by workflow name.
+          SELF_WORKFLOW: ${{ github.workflow }}
+        run: |
+          set -euo pipefail
+
+          # These must be PRESENT and successful, not merely "not failing".
+          # Without a presence requirement the loop would see an empty rollup
+          # moments after `opened` and merge before any check had registered.
+          # Names come from the job `name:` fields in ci.yml — keep in sync.
+          REQUIRED=("Lint" "Test" "Build" "Playwright smoke")
+
+          DEADLINE=$(( SECONDS + 20 * 60 ))
+          while :; do
+            gh pr view "$PR" --repo "$REPO" --json statusCheckRollup \
+              | jq --arg self "$SELF_WORKFLOW" '
+                  [ .statusCheckRollup[]
+                    # Commit statuses (Vercel) and check runs (Actions) carry
+                    # their state in different fields — normalise both to one
+                    # {name, state} shape before judging them.
+                    | if .__typename == "StatusContext"
+                      then { name: .context, state: .state, workflow: "" }
+                      else { name: .name,
+                             state: (if .status == "COMPLETED"
+                                     then (.conclusion // "NEUTRAL")
+                                     else "PENDING" end),
+                             workflow: (.workflowName // "") }
+                      end
+                  ]
+                  | map(select(.workflow != $self))
+                ' > checks.json
+
+            FAILED=$(jq -r '
+              [ .[] | select(.state | IN("SUCCESS","SKIPPED","NEUTRAL","PENDING","EXPECTED","QUEUED","IN_PROGRESS") | not) ]
+              | map("\(.name) [\(.state)]") | join(", ")' checks.json)
+            if [[ -n "$FAILED" ]]; then
+              echo "::error::Not merging — failing checks: $FAILED"
+              exit 1
+            fi
+
+            PENDING=$(jq -r '
+              [ .[] | select(.state | IN("PENDING","EXPECTED","QUEUED","IN_PROGRESS")) ]
+              | map(.name) | join(", ")' checks.json)
+
+            MISSING=""
+            for name in "${REQUIRED[@]}"; do
+              found=$(jq -r --arg n "$name" \
+                '[ .[] | select(.name == $n and .state == "SUCCESS") ] | length' checks.json)
+              [[ "$found" == "0" ]] && MISSING="${MISSING:+$MISSING, }$name"
+            done
+
+            if [[ -z "$PENDING" && -z "$MISSING" ]]; then
+              echo "All checks green."
+              break
+            fi
+
+            if (( SECONDS > DEADLINE )); then
+              echo "::error::Timed out after 20m. Pending: ${PENDING:-none}. Required but not yet green: ${MISSING:-none}."
+              exit 1
+            fi
+
+            echo "Waiting… pending: ${PENDING:-none}; required not yet green: ${MISSING:-none}"
+            sleep 20
+          done
+
+      # `--delete-branch` is explicit because the repo has
+      # `delete_branch_on_merge: false`; squash keeps main's history one commit
+      # per PR, matching how these have been merged by hand.
+      - name: Merge
+        if: steps.gate.outputs.eligible == 'true'
+        run: |
+          set -euo pipefail
+          gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
+          echo "Merged PR #$PR."

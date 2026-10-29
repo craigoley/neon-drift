@@ -22,6 +22,17 @@ on:
       - '.github/workflows/claude-review.yml'
   issue_comment:
     types: [created]
+  # Dispatched by pr-sweeper.yml for PRs whose review never finished
+  # (skipped, cancelled, or a Dependabot PR held for review — Dependabot
+  # `pull_request` runs get no repo secrets). workflow_dispatch is one of the
+  # few events GITHUB_TOKEN may trigger; it runs in main's context with full
+  # secrets, and only accounts with write access can dispatch it.
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to review'
+        required: true
+        type: number
   # DEPENDABOT PATH. Dependency bumps are excluded from the `pull_request` trigger
   # above (see the job `if:`) and come in through here instead, once the browser
   # smoke has actually gone green on the bump. That ordering is the whole point:
@@ -60,7 +71,17 @@ concurrency:
   # workflow_run payloads carry no PR number, so that path keys on the head branch
   # instead — same effect (one in-flight review per PR), since a branch maps 1:1 to
   # its open PR here.
-  group: claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.head_branch }}
+  # Comments that cannot start a review (Claude's own tracking comment,
+  # vercel[bot] / dependabot notes, plain chatter) get a throwaway per-run
+  # group. Without this, the tracking comment Claude posts at the start of
+  # every `@claude` run lands in the SAME issue_comment group and
+  # cancel-in-progress kills the live review ~1 min in — observed on
+  # wild-trails #215 and rogue-descent #173 (2026-10-26), cologne-service #100.
+  # Same fix as ClawApp and cologne-service #101.
+  group: >-
+    claude-review-${{ github.event_name }}-${{ github.event.pull_request.number || github.event.issue.number || github.event.workflow_run.head_branch || inputs.pr_number }}${{
+    (github.event_name == 'issue_comment' && (github.event.comment.user.type == 'Bot' || !contains(github.event.comment.body, '@claude')))
+    && format('-noop-{0}', github.run_id) || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -120,6 +141,8 @@ jobs:
        (github.event.comment.author_association == 'OWNER' || github.event.comment.author_association == 'MEMBER') &&
        contains(github.event.comment.body, '@claude'))
       ||
+      github.event_name == 'workflow_dispatch'
+      ||
       (github.event_name == 'workflow_run' &&
        github.event.workflow_run.event == 'pull_request' &&
        github.event.workflow_run.conclusion == 'success' &&
@@ -153,7 +176,7 @@ jobs:
           WF_BRANCH: ${{ github.event.workflow_run.head_branch }}
           WF_SHA: ${{ github.event.workflow_run.head_sha }}
           WF_RUN_ID: ${{ github.event.workflow_run.id }}
-          PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number }}
+          PR_FROM_EVENT: ${{ github.event.pull_request.number || github.event.issue.number || inputs.pr_number }}
         run: |
           set -euo pipefail
           # `bail` = "nothing to do, exit cleanly" — a green no-op, not a failure.
@@ -346,7 +369,9 @@ jobs:
           # summary via `gh pr comment`, and the PR number reaches Claude through
           # the prompt rather than through the event payload (the action cannot
           # infer a PR from a workflow_run event — it leaves PR_NUMBER empty).
-          track_progress: ${{ github.event_name != 'workflow_run' }}
+          track_progress: ${{ github.event_name != 'workflow_run' && github.event_name != 'workflow_dispatch' }}
+          # pr-sweeper dispatches with GITHUB_TOKEN, so the actor is github-actions[bot].
+          allowed_bots: ${{ github.event_name == 'workflow_dispatch' && 'github-actions[bot]' || '' }}
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ steps.pr-sha.outputs.number }}

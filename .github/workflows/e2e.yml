@@ -12,8 +12,9 @@ name: E2E (smoke)
 # That reasoning is correct, but the conclusion — require a human — meant Dependabot
 # (effectively the only PR author on this repo) got zero automation, and bumps piled
 # up unmerged. Rendering breakage is exactly what this smoke detects, so running it
-# on dependency bumps converts that human gate into a mechanical one. See the
-# `workflow_run` trigger in claude-review.yml for the other half.
+# on dependency bumps converts that human gate into a mechanical one.
+# dependabot-auto-merge.yml is the other half: it waits for this job (by name)
+# to pass before it merges a bump or dispatches the Claude review for a held one.
 on:
   workflow_dispatch:
   schedule:
@@ -37,12 +38,10 @@ jobs:
     # Non-PR events always run. PR events run when the `e2e` label is present, or
     # when the PR is a Dependabot bump (see the rationale in the header).
     #
-    # KEEP THE JOB NAME AND THIS CONDITION IN SYNC with claude-review.yml: the
-    # auto-merge resolves THIS job by name ("Playwright smoke") out of the run's
-    # job list and requires conclusion == success. It deliberately does NOT trust
-    # the workflow run's own conclusion, because a run whose only job was SKIPPED
-    # still reports the run as successful — which would wave a bump through with
-    # no browser coverage at all.
+    # KEEP THE JOB NAME AND THIS CONDITION IN SYNC with dependabot-auto-merge.yml:
+    # its wait loop requires a check named "Playwright smoke" to be PRESENT and
+    # SUCCESS on the PR, not merely "not failing". A skipped job would never
+    # satisfy it, so a bump cannot slip through with no browser coverage.
     if: >-
       github.event_name != 'pull_request'
       || contains(github.event.pull_request.labels.*.name, 'e2e')

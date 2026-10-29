@@ -10,8 +10,9 @@ name: Dependabot auto-merge
 # (Update 2026-10-29: that path now fires for Dependabot bumps, but every such
 # run fails inside claude-code-action — "Workflow initiated by non-human
 # actor: dependabot (type: Bot)" — because `allowed_bots` only admits
-# github-actions[bot] on workflow_dispatch. e.g. run 40944696677 for #237. So
-# held bumps here also reach review only through the dispatch below.)
+# github-actions[bot] on workflow_dispatch. e.g. run 40944696677 for #237.
+# Update 2026-10-29, later: #254 removed that `workflow_run` trigger from
+# claude-review.yml, so held bumps reach review only through the dispatch below.)
 #
 # Two things changed since that exclusion was written:
 #   1. E2E (smoke) runs the Playwright smoke job, which boots the BUILT app in headless
